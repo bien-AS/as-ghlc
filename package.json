@@ -9,7 +9,10 @@
     "start": "next start",
     "lint": "biome check",
     "format": "biome format --write",
-    "test": "vitest"
+    "format:check": "biome format",
+    "test": "vitest",
+    "test:run": "vitest run --passWithNoTests",
+    "prepare": "husky"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
@@ -22,6 +25,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.2",
+    "@commitlint/cli": "^21.2.3",
+    "@commitlint/config-conventional": "^21.2.3",
     "@tailwindcss/postcss": "^4",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
@@ -30,12 +35,17 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.1.1",
+    "husky": "^9.1.7",
     "jsdom": "^30.1.2",
+    "lint-staged": "^17.6.0",
     "prisma": "^7.10.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^5.0.3"
   },
-  "packageManager": "pnpm@11.10.0"
+  "packageManager": "pnpm@11.10.0",
+  "lint-staged": {
+    "*": "biome check --no-errors-on-unmatched --files-ignore-unknown=true"
+  }
 }
