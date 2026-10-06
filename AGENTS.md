@@ -12,11 +12,18 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - **Commits/PRs:** never add `Co-authored-by` trailers or "Generated with" attribution. Conventional commits, lines ≤ 120 chars (commitlint enforces both).
 - **Parallel work:** one git worktree per parallel task; never share a working tree between agents.
-- **Frontend design:** invoke the `impeccable` and `design-taste-frontend` skills for direction before designing new UI.
-- **UI/UX implementation:** invoke `emil-design-eng` for design advice and follow `apple-design` principles. Afterwards, always review the resulting UX against both.
 - **API:** every handler checks authentication, then ownership of the resource, via the shared guards in the data-access layer (not inline). Validate all input with zod.
 - **Data fetching:** client calls live in custom TanStack Query hooks, never inline in components. See `docs/adr/`.
 - **Database:** Prisma 7.
+
+## Design workflow
+
+For any UI work, invoke these skills in order:
+
+1. **Direction:** `impeccable` to design the interface, with `design-taste-frontend` for inspiration.
+2. **Principles:** `emil-design-eng` for design advice and `apple-design` for principles, while building.
+3. **Motion:** `find-animation-opportunities` to decide what should animate, then `animate` to build each animation from scratch.
+4. **Review:** check the finished UX against `emil-design-eng` and `apple-design` before calling it done.
 
 ## Agent skills
 
