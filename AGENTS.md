@@ -15,6 +15,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - **API:** every handler checks authentication, then ownership of the resource, via the shared guards in the data-access layer (not inline). Validate all input with zod.
 - **Data fetching:** client calls live in custom TanStack Query hooks, never inline in components. See `docs/adr/`.
 - **Database:** Prisma 7.
+- **Components:** always look for opportunities to extract reusable components (sidebars, navbars, and the like) into `src/components/ui` rather than leaving them inline in a page.
 
 ## Design workflow
 
