@@ -54,6 +54,39 @@ Nothing past this line is specified: not generation timing or retries, slide con
 
 The deck presenter is a placeholder at `/dashboard/deck-presenter` (spec 04). Lead detail's Open deck action leads to it. No deck is generated.
 
+## As built (mockup)
+
+> **This is a mockup.** It runs on sample data, connects to nothing outside the app, and is built on the assumptions listed here. This spec's status and its open questions are unchanged.
+
+Question 2 has **no assumed answer**, so every choice below is a mock choice made to show the idea. None of them answers question 2.
+
+**What the mockup shows**
+
+- The deck presenter at `/dashboard/deck-presenter`. With no lead in the address it lists the leads that have a deck. With `?lead=…` it presents that lead's deck; the slide number is in the address too, so a reload or a shared link lands on the same slide.
+- Slides drawn in the app at 16:9, with Previous and Next, the arrow keys and a counter.
+- **Present full screen** (the browser's full screen, with a full-window fallback), **edit text** (the current slide's heading and text, with Save and Cancel), **switch template** (Discovery or Review), and **download PDF**.
+- A stand-in for the booking calendar on the last slide: sample call times that cannot be chosen, with the line "Sample data: this stands in for the booking calendar. Nothing is booked."
+- Lead detail's Open deck action and Deck panel lead here. A lead with no deck says decks generate on their own; there is no generate button, as the spec requires.
+
+**Assumptions and mock choices**
+
+| Where                                                                                    | Question                      | What is assumed                                                                                                        |
+| ---------------------------------------------------------------------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `generateSlides` in `src/lib/services/deck-service.ts`                                   | 2, part 1 (mock choice)       | The deck service runs nowhere. Slides are sample content built from the lead's name, company, form answers and budget. |
+| `DECK_EDITOR` in `src/lib/decks/rules.ts`                                                | 2, part 2 (mock choice)       | Our own light text editing over slides drawn in the app (the owner's choice for the mockup).                           |
+| `BookingCalendarStandIn` in the deck screen                                              | 2, part 3 (mock choice)       | The last slide shows sample call times. Whether a CRM calendar can embed there is untested.                            |
+| `DECK_TEMPLATE_LABEL` in `src/lib/decks/rules.ts`, `TEMPLATE_SLIDES` in the deck service | None (templates not supplied) | Two templates, "Discovery" and "Review", seven invented slides each, three of them shared.                             |
+
+**What is faked**
+
+- The slides and both templates. Nothing is generated and no deck service is contacted.
+- Edits are kept in server memory. An edit to a slide both templates share survives a template switch.
+- The PDF is a real file written by the app (one page per slide), marked as a sample on every page. It is not the deck service's export.
+- The booking times, which book nothing.
+- Known limits: below about tablet width a full slide grows taller than 16:9 so its text stays readable, and the full-window fallback does not trap focus.
+
+**To go live** (function bodies only): in `src/lib/data/decks.ts`, `listDecks`, `getDeck`, `updateSlide`, `switchTemplate`, `getBookingSlots` and `getDeckPdf`; in `src/lib/services/deck-service.ts`, `generateSlides` and `exportPdf`; `listCallSlots` in `src/lib/services/booking-calendar.ts`, which the CRM adapter will supply (spec 11).
+
 ## When unblocked
 
 Once question 2 is answered and the templates arrive, this file is rewritten as a full spec. The handoff's work order places it ninth.

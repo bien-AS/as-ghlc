@@ -158,6 +158,43 @@ _Seams confirmed by the owner._
 - The suites from specs 04 to 07 gain role and Workspace cases; their existing cases still pass.
 - No end-to-end browser suite yet.
 
+## As built (mockup)
+
+> **This is a mockup.** It runs on sample data, connects to nothing outside the app, and is built on the assumptions listed here. This spec's status and its open questions are unchanged.
+
+**What the mockup shows**
+
+- The Users and roles screen at `/dashboard/users`: who has access (you first, then users, then pending invites), each with a role control. A pending invite says "Pending" and when it was sent and expires.
+- **Invite** (an address and a role), **change role**, **remove**, and for an invite **send again** and **revoke**. Remove and revoke ask for confirmation.
+- The last owner cannot be removed or demoted, and you cannot remove yourself or change your own role; the row says why, and the server refuses independently.
+- A panel saying what each role sees, built from the one roles table, with the line that these are proposed and not decided.
+- **The role preview** ("Viewing as", spec 04): Owner, Admin or Staff. Viewed as Staff, this screen says "You do not have access to this screen" and every route behind it answers 403 `forbidden`. The Pipeline, Lead detail, Suspect review, decks, proposals and notifications show Staff only one sample rep's leads.
+- States from the table above: loading, "You are the only person here", error, invite pending, not allowed, last owner.
+
+**Assumptions and mock choices**
+
+| Where                                                                     | Question                   | What is assumed                                                                                                                                                         |
+| ------------------------------------------------------------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ALLOWED` and `can` in `src/lib/roles.ts`                                 | 7 (proposed)               | The roles table above. Staff have none of the admin capabilities; Admin and Owner have all, because no owner-only setting is defined.                                   |
+| `getViewer` and `canSeeLead` in `src/lib/data/viewer.ts`                  | 7 (assumed)                | The viewer's role, and the rule that staff see and act on only the leads they own. Today the role is the previewed one.                                                 |
+| `PREVIEW_STAFF_REP` in `src/lib/data/viewer.ts`                           | None (mock choice)         | A Staff preview is shown one fixed sample rep's leads, because the signed-in person owns no sample lead.                                                                |
+| A staff request for another rep's lead answers "not found"                | 7 (mock choice)            | Acceptance check 1 says "refused". The mockup answers as if the lead did not exist, so its existence is not disclosed. One function: `find` in `src/lib/data/leads.ts`. |
+| `workspaceRecords` in `src/lib/data/members.ts`                           | 9 (assumed)                | A User belongs to exactly one Workspace: one list of people, no Workspace key.                                                                                          |
+| `INVITING_IS_OFFERED` in `src/lib/members/schemas.ts`                     | None (follows the handoff) | Inviting is offered to admins and owners. The architecture review does not list it.                                                                                     |
+| `INVITE_EXPIRES_AFTER_DAYS` in `src/lib/members/schemas.ts`               | None (mock choice)         | An invite is a row that expires seven days after it was last sent. The expiry is shown, not enforced. Invite storage is still to be designed.                           |
+| `memberLock` in `src/lib/members/rules.ts`                                | None (mock choice)         | An invited owner does not count as an owner until they join; any admin may make someone an owner.                                                                       |
+| `JOIN_RULE` in `src/lib/workspace/rules.ts` (shown on Workspace settings) | 7 (proposed)               | Allowed domain **or** invite, following the handoff.                                                                                                                    |
+
+**What is faked**
+
+- **The role.** It is a cookie set by the "Viewing as" control, honoured only on sample data. It is a preview, not access control: the real guard is still "authenticated, with a profile", and anyone can switch to Owner.
+- The people and the invites, which are invented. Your own row is built from your session with the previewed role.
+- No email is sent for an invite, and there is no invite link or join flow. The screen says "Sample data: no email is sent."
+- Removing someone or changing a role changes only the sample list. Nobody is signed out and no lead changes owner.
+- Not built, because they need real membership: "Signed in, no Workspace", "Removed while signed in", "No matching CRM user", the join rule itself, and matching a user to a CRM user.
+
+**To go live** (function bodies only): `resolveRole` in `src/lib/data/viewer.ts` (read the membership; delete the preview); in `src/lib/data/members.ts`, `listMembers`, `inviteMember`, `changeMemberRole`, `removeMember`, `revokeInvite` and `resendInvite`; `sendInviteEmail` in `src/lib/services/invite-email.ts`.
+
 ## Out of Scope
 
 - Anything in the current build, where there are no roles and the screen is a placeholder.

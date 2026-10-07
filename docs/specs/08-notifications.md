@@ -132,6 +132,49 @@ _Seams confirmed by the owner._
 - The channel policy (own topic only, no browser publish) is verified by hand against the Supabase project using acceptance checks 7 and 8.
 - No end-to-end browser suite yet.
 
+## As built (mockup)
+
+> **This is a mockup.** It runs on sample data, connects to nothing outside the app, and is built on the assumptions listed here. This spec's status and its open questions are unchanged.
+
+**What the mockup shows**
+
+- The Notifications screen at `/dashboard/notifications`: the list, newest first, ten at a time with "Load more". Each row says what happened, the lead's name and company, and when. Unread rows are heavier and say "Unread".
+- Selecting a row opens its lead and marks it read. "Mark read" marks one read without opening it; the row changes at once and returns to unread with a brief message if the request fails.
+- The unread count on the bell in the navbar and on the Notifications item in the sidebar (spec 04). No count is shown at zero or when it is unavailable.
+- The three agreed types only. The wording for each comes from one function (`notificationText` in `src/lib/notifications/rules.ts`) and names no CRM or service.
+- Signing a proposal in the proposal builder mockup (spec 14) raises "Proposal signed" and "Invoice draft ready" for that lead, through `createNotification`.
+- The states in the table above, except "New notification arrives" and "Live connection down", which need the live channel.
+
+**Assumptions and mock choices**
+
+| Where                                                                          | Question           | What is assumed                                                                                                                             |
+| ------------------------------------------------------------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ADMINS_AND_OWNERS_NOTIFIED_FOR_EVERY_LEAD` in `src/lib/data/notifications.ts` | 7 (assumed)        | Staff see notifications for the leads they own; admins and owners see every lead's. The other answer is this one value.                     |
+| The "Suspect to review" type                                                   | 4 (assumed)        | A rep reviews suspects.                                                                                                                     |
+| The "Invoice draft ready" type                                                 | 3 (assumed)        | Invoicing stops at a draft.                                                                                                                 |
+| The "Proposal signed" type                                                     | 6 (assumed)        | The app learns of a signature by polling; in the mockup a "simulate" action stands in for it (spec 14).                                     |
+| `mutedNotificationTypes` in `src/lib/data/account.ts`                          | None (mock choice) | A user can switch a type off in Account settings; it is then left out of their list and count. This spec lists preferences as out of scope. |
+| `NOTIFICATIONS_PAGE_SIZE` in `src/lib/notifications/schemas.ts`                | None (mock choice) | Ten to a page, so "Load more" shows on the sample.                                                                                          |
+
+**What is faked**
+
+- The notifications. They are derived from the sample leads (a suspect awaiting review, a won lead with a signed proposal, a lead with an invoice draft), timed from each lead's timeline. Two in three start unread.
+- **There is no realtime channel.** The decided transport, Supabase Realtime Broadcast, stays as written under Implementation Decisions and is not built. The list and the count are read again when the person returns to the window. The screen says so in one line.
+- Read state is one flag per notification, held in server memory. Every role in the role preview is the same signed-in person, so a notification marked read as Owner is read as Staff.
+- No channel policy exists, so acceptance checks 5 to 8 cannot be run yet.
+
+**To go live** (function bodies only): in `src/lib/data/notifications.ts`, `listNotifications`, `getUnreadCount`, `markNotificationRead` and `createNotification`, which then also sends the broadcast; in `src/lib/data/account.ts`, `getAccountPreferences` and `updateAccountPreferences`. Add the channel subscription to `src/hooks/use-notifications.ts`, where a comment marks the place.
+
+### Account settings (new screen)
+
+A person's own settings, at `/dashboard/account`, reached from **Settings** in the user menu and never from the sidebar (owner decision). It is recorded here because its one mocked part is notification preferences.
+
+| Panel                    | What it does                                                        | Real or sample                                                                               |
+| ------------------------ | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Profile                  | First name and last name; the email is shown and cannot be changed. | **Real.** It updates the signed-in person's User row, the one real table. The panel says so. |
+| Theme                    | System, Light or Dark (spec 03).                                    | Real, kept in the browser.                                                                   |
+| Notification preferences | One switch per notification type, in the app only.                  | Sample: kept in server memory, reset on restart. A mock addition, not in any spec.           |
+
 ## Out of Scope
 
 - Email, SMS, push or desktop notifications.
