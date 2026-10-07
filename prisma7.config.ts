@@ -9,6 +9,7 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    // The CLI (migrations) uses the session-mode pooler; the app connects with DATABASE_URL (src/lib/prisma.ts).
+    url: process.env["DIRECT_URL"],
   },
 });
