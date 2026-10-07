@@ -1,0 +1,198 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-07T00:00:00Z",
+  "title": "Design System: Dealwright",
+  "extensions": {
+    "colorMeta": {
+      "brand": { "role": "primary", "displayName": "Brand red (fills only)" },
+      "brand-hover": { "role": "primary", "displayName": "Brand hover fill" },
+      "brand-ink": { "role": "primary", "displayName": "Text on brand" },
+      "brand-text": { "role": "primary", "displayName": "Red text and links" },
+      "brand-soft": { "role": "primary", "displayName": "Brand tint" },
+      "ok": { "role": "tertiary", "displayName": "Status: ok" },
+      "ok-soft": { "role": "tertiary", "displayName": "Behind ok" },
+      "warn": { "role": "tertiary", "displayName": "Status: warn" },
+      "warn-soft": { "role": "tertiary", "displayName": "Behind warn" },
+      "crit": { "role": "tertiary", "displayName": "Status: crit" },
+      "crit-soft": { "role": "tertiary", "displayName": "Behind crit" },
+      "ground": { "role": "neutral", "displayName": "Page background" },
+      "surface": { "role": "neutral", "displayName": "Panels" },
+      "surface-2": { "role": "neutral", "displayName": "Muted fill" },
+      "line": { "role": "neutral", "displayName": "Borders" },
+      "ink": { "role": "neutral", "displayName": "Main text, focus ring" },
+      "ink-2": { "role": "neutral", "displayName": "Secondary text" },
+      "ink-3": { "role": "neutral", "displayName": "Not used as text" }
+    },
+    "typographyMeta": {
+      "heading": {
+        "displayName": "Heading",
+        "purpose": "h1 to h3 and the wordmark. Size set per use."
+      },
+      "title": { "displayName": "Title", "purpose": "Panel titles." },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Running text and controls. Emphasis is weight 600."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "The label-caps utility: uppercase panel and section headings."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.23, 1, 0.32, 1)",
+        "purpose": "Easing for button state transitions; replaces Tailwind's ease-out."
+      },
+      {
+        "name": "duration-control",
+        "value": "150ms",
+        "purpose": "Button and theme-switch state transitions."
+      },
+      {
+        "name": "press-scale",
+        "value": "0.97",
+        "purpose": "Scale of a pressed button."
+      },
+      {
+        "name": "tooltip-delay",
+        "value": "300ms",
+        "purpose": "Delay before a tooltip opens."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "0.01ms",
+        "purpose": "Every animation and transition duration when the device asks for reduced motion."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one main action on a screen.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">Save</button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; height: 2rem; padding: 0 0.625rem; border: 1px solid transparent; border-radius: 9px; font-family: var(--font-source-sans), ui-sans-serif, system-ui, sans-serif; font-size: 0.9375rem; line-height: 1.5; font-weight: 600; white-space: nowrap; cursor: pointer; transition: color 150ms cubic-bezier(0.23, 1, 0.32, 1), background-color 150ms cubic-bezier(0.23, 1, 0.32, 1), border-color 150ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 150ms cubic-bezier(0.23, 1, 0.32, 1), scale 150ms cubic-bezier(0.23, 1, 0.32, 1); } .ds-btn:focus-visible { outline: none; border-color: var(--ink); box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink) 50%, transparent); } .ds-btn:active { scale: 0.97; } .ds-btn:disabled { opacity: 0.4; pointer-events: none; } .ds-btn-primary { background: var(--brand); color: var(--brand-ink); } .ds-btn-primary:hover { background: var(--brand-hover); }"
+    },
+    {
+      "name": "Default Button",
+      "kind": "button",
+      "refersTo": "button-default",
+      "description": "The neutral button; what a Button with no variant renders.",
+      "html": "<button class=\"ds-btn ds-btn-default\">Cancel</button>",
+      "css": ".ds-btn-default { background: var(--surface-2); color: var(--ink); border-color: var(--line); } .ds-btn-default:hover { background: color-mix(in oklch, var(--surface-2), var(--ink) 6%); }"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Destructive action: crit outline, no fill.",
+      "html": "<button class=\"ds-btn ds-btn-danger\">Remove lead</button>",
+      "css": ".ds-btn-danger { background: transparent; color: var(--crit); border-color: var(--crit); } .ds-btn-danger:hover { background: var(--crit-soft); }"
+    },
+    {
+      "name": "Chip",
+      "kind": "chip",
+      "refersTo": "chip-ok",
+      "description": "Full-pill status label; the tone's text colour on its soft background, always with its word.",
+      "html": "<span class=\"ds-chip ds-chip-neutral\">Sample data</span> <span class=\"ds-chip ds-chip-brand\">Brand</span> <span class=\"ds-chip ds-chip-ok\">Valid</span> <span class=\"ds-chip ds-chip-warn\">Awaiting</span> <span class=\"ds-chip ds-chip-crit\">Suspect</span>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; height: 1.25rem; padding: 0.125rem 0.5rem; border-radius: 9999px; font-family: var(--font-source-sans), ui-sans-serif, system-ui, sans-serif; font-size: 0.75rem; font-weight: 600; white-space: nowrap; } .ds-chip-neutral { background: var(--surface-2); color: var(--ink-2); } .ds-chip-brand { background: var(--brand-soft); color: var(--brand-text); } .ds-chip-ok { background: var(--ok-soft); color: var(--ok); } .ds-chip-warn { background: var(--warn-soft); color: var(--warn); } .ds-chip-crit { background: var(--crit-soft); color: var(--crit); }"
+    },
+    {
+      "name": "Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "Flat surface with a 1px line edge and a 13px corner.",
+      "html": "<div class=\"ds-panel\"><div class=\"ds-panel-title\">Panel title</div><p class=\"ds-panel-desc\">Surface background, line border, 13px radius.</p><p class=\"ds-label-caps\">Panel heading</p><p>Panel body text in ink on surface.</p></div>",
+      "css": ".ds-panel { display: flex; flex-direction: column; gap: 0.5rem; padding: 1rem; border-radius: 13px; background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); font-family: var(--font-source-sans), ui-sans-serif, system-ui, sans-serif; font-size: 0.9375rem; line-height: 1.5; } .ds-panel p { margin: 0; } .ds-panel-title { font-family: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif; font-size: 1rem; font-weight: 600; line-height: 1.375; } .ds-panel-desc { color: var(--ink-2); } .ds-label-caps { font-family: var(--font-plex-mono), ui-monospace, monospace; font-size: 0.75rem; line-height: 1.4; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Label, input and hint; focus is an ink border and ring.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Email</span><input class=\"ds-input\" type=\"email\" placeholder=\"rep@example.com\"><span class=\"ds-field-hint\">The hint sits under the input.</span></label>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: 0.5rem; font-family: var(--font-source-sans), ui-sans-serif, system-ui, sans-serif; font-size: 0.9375rem; color: var(--ink); } .ds-field-label { font-weight: 600; } .ds-field-hint { color: var(--ink-2); } .ds-input { height: 2rem; padding: 0.25rem 0.625rem; border: 1px solid var(--line); border-radius: 9px; background: transparent; color: var(--ink); font: inherit; caret-color: var(--brand-text); } .ds-input::placeholder { color: var(--ink-2); } .ds-input:focus-visible { outline: none; border-color: var(--ink); box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink) 50%, transparent); } .ds-input[aria-invalid=\"true\"] { border-color: var(--crit); }"
+    }
+  ],
+  "narrative": {
+    "overview": "Dealwright (\"Dealwright by Authority Solutions\") is a sales workspace that takes a lead from web form to signed deal. The design system gives every screen one set of colours, type, shapes and base components, in a light and a dark theme of equal standing. The look is a quiet, warm working surface: warm off-white and warm grey neutrals, one red for the brand, three status colours, and a monospaced label face for panel headings. The palette is provisional until open question 12 is answered.",
+    "keyCharacteristics": [
+      "Two themes, light and dark, switched by one class on <html>; every colour is a token with a value in each.",
+      "Warm neutrals, one red, three status colours, each status with a soft background partner.",
+      "Three type families with fixed jobs: headings, body and controls, labels.",
+      "Compact controls, 9px control corners, 13px panel corners, full-pill chips.",
+      "Flat surfaces with line borders; shadow is nearly absent.",
+      "Screens use tokens and components only. No screen contains a raw colour value."
+    ],
+    "rules": [
+      {
+        "name": "The Fill-Only Brand Rule",
+        "body": "brand is a fill, never a text colour. On the dark ground it reaches only 2.9 to 1. Red text and links use brand-text.",
+        "section": "colors"
+      },
+      {
+        "name": "The Ink-2 Floor Rule",
+        "body": "Muted and secondary text, placeholders and labels use ink-2. Do not set text in ink-3.",
+        "section": "colors"
+      },
+      {
+        "name": "The Word Beside Colour Rule",
+        "body": "A status colour never carries meaning alone. A chip always contains its word.",
+        "section": "colors"
+      },
+      {
+        "name": "The No Raw Colour Rule",
+        "body": "Screens and components name tokens. A hex value appears only in the two theme blocks of globals.css.",
+        "section": "colors"
+      },
+      {
+        "name": "The Three Jobs Rule",
+        "body": "Headings and names are Bricolage Grotesque. Everything read or pressed is Source Sans 3. IBM Plex Mono is for small labels only.",
+        "section": "typography"
+      },
+      {
+        "name": "The Loaded Weights Rule",
+        "body": "Use only loaded weights: 600 and 700 for headings, 400 and 600 for body, 400 and 500 for the label font.",
+        "section": "typography"
+      },
+      {
+        "name": "The Label Is A Heading Rule",
+        "body": "label-caps names a panel or a section. It is not a decorative line above a larger headline.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Panel Rule",
+        "body": "A panel is surface, a 1px line edge and a 13px corner. Do not add a shadow to make it stand out.",
+        "section": "elevation"
+      },
+      {
+        "name": "The One Primary Rule",
+        "body": "A Button with no variant is the neutral button. The main action must ask for variant primary, and a screen has one.",
+        "section": "components"
+      },
+      {
+        "name": "The Height-Only Logo Rule",
+        "body": "Screens never place as-logo.png themselves. They use Wordmark or AuthoritySolutionsLogo, pass a height, and never a width.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "Do name a token for every colour: bg-surface, text-ink-2, border-line.",
+      "Do use brand-text for links and any red text, in both themes.",
+      "Do ask for variant primary on the one main action; leave other buttons on the default.",
+      "Do pass a tone to every chip and put the status word inside it.",
+      "Do place the endorsement through Wordmark endorsed and size the logo by height."
+    ],
+    "donts": [
+      "Don't write a hex or other raw colour outside the two theme blocks in globals.css.",
+      "Don't set text in brand or primary. On the dark ground it is 2.9 to 1.",
+      "Don't set text in ink-3. On the light ground it is 3.5 to 1.",
+      "Don't let colour carry a status alone.",
+      "Don't add a shadow to a panel.",
+      "Don't show the logo on a dark surface without the plate."
+    ]
+  }
+}

@@ -20,3 +20,6 @@ prisma/migrations
 .agents
 .claude
 .windsurf
+
+# rewritten by the impeccable design hook on every edit
+.impeccable/hook.cache.json
