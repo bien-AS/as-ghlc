@@ -1,0 +1,986 @@
+/*
+ * Layout and motion for the public site's components (site-nav, in-view,
+ * marquee, feature-switcher, sticky-narrative, site-footer) and the landing
+ * page's pictures. Imported by globals.css. Colours are tokens only.
+ *
+ * Motion rules for this file (DESIGN.md, "Marketing motion"):
+ *  - The resting state of every rule is the finished, still composition.
+ *    Movement is added inside `prefers-reduced-motion: no-preference`, so
+ *    reduced motion, no JavaScript and old browsers all get the same complete
+ *    page instead of a half-played one.
+ *  - Transform, opacity and filter only, except the feature switcher's track
+ *    sizes, which are contained in a fixed-height box.
+ *  - Scroll-linked effects are CSS scroll-driven animations behind @supports.
+ */
+
+/* ---------- Site nav: settles onto its surface once the page scrolls ---------- */
+
+@supports (animation-timeline: scroll()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .site-nav-material,
+    .site-nav-row {
+      animation: site-nav-material auto linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 6rem;
+    }
+    .site-nav-row {
+      animation-name: site-nav-settle;
+    }
+  }
+}
+
+@keyframes site-nav-material {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes site-nav-settle {
+  from {
+    transform: translateY(0.625rem);
+  }
+}
+
+/* ---------- InView reveals: [data-reveal] inside an InView ---------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-inview] [data-reveal] {
+    transition:
+      opacity 700ms var(--ease-out),
+      transform 700ms var(--ease-out),
+      filter 700ms var(--ease-out);
+    transition-delay: calc(var(--i, 0) * 80ms);
+  }
+  /* Set while the content is still below the fold, so the hiding is instant and unseen. */
+  [data-inview="false"] [data-reveal] {
+    opacity: 0;
+    transform: translateY(0.875rem);
+    transition-duration: 0s;
+    transition-delay: 0s;
+  }
+
+  /* "settle": a numeral drops into place and comes into focus. */
+  [data-inview] [data-reveal="settle"] {
+    transition-duration: 900ms;
+    transition-delay: calc(var(--i, 0) * 120ms);
+  }
+  [data-inview="false"] [data-reveal="settle"] {
+    transform: translateY(45%);
+    filter: blur(8px);
+    transition-duration: 0s;
+    transition-delay: 0s;
+  }
+}
+
+/* ---------- Pictures: two planes on a softly tinted ground ---------- */
+
+.picture[data-wash] {
+  background-image:
+    radial-gradient(
+      75% 65% at 100% 0%,
+      color-mix(in oklch, var(--wash) 90%, transparent),
+      transparent 75%
+    ),
+    radial-gradient(
+      60% 55% at 0% 100%,
+      color-mix(in oklch, var(--wash) 55%, transparent),
+      transparent 75%
+    );
+}
+.picture[data-wash="brand"] {
+  --wash: var(--brand-soft);
+}
+.picture[data-wash="ok"] {
+  --wash: var(--ok-soft);
+}
+.picture[data-wash="warn"] {
+  --wash: var(--warn-soft);
+}
+.picture[data-wash="crit"] {
+  --wash: var(--crit-soft);
+}
+
+/* The front plane keeps a band of the ground around it where it overlaps the plane behind. */
+.picture-front {
+  box-shadow:
+    0 0 0 1px var(--line),
+    0 0 0 7px var(--surface-2);
+}
+
+/* A row that runs on past its edge, as the app's stage tabs do: it fades out instead of being cut. */
+.fade-right {
+  mask-image: linear-gradient(to right, black calc(100% - 4.5rem), transparent);
+}
+
+/* ---------- Hero ---------- */
+
+.hero-wash {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(
+      55% 50% at 88% 4%,
+      color-mix(in oklch, var(--brand-soft) 85%, transparent),
+      transparent 72%
+    ),
+    radial-gradient(
+      45% 42% at 4% 52%,
+      color-mix(in oklch, var(--warn-soft) 75%, transparent),
+      transparent 72%
+    );
+}
+
+/* Small screens: copy, then the two planes, the second tucked under the first. */
+.hero-picture {
+  position: relative;
+  display: block;
+  margin-top: 2.5rem;
+}
+.hero-plane {
+  display: none;
+}
+.hero-verdict {
+  margin-top: 0.75rem;
+  box-shadow:
+    0 0 0 1px var(--line),
+    0 0 0 7px var(--ground);
+}
+
+@media (min-width: 40rem) {
+  .hero-line-2 {
+    padding-left: 24%;
+  }
+  .hero-list {
+    width: 86%;
+  }
+  .hero-verdict {
+    width: min(26rem, 62%);
+    margin-top: -3.5rem;
+    margin-left: auto;
+  }
+}
+
+/*
+ * Wide screens: one twelve-column grid for the copy and the picture. Column
+ * line 8 is the left edge of the second headline line, the paragraph and the
+ * button. The list of leads fills columns 1 to 7 from the top of the row; the
+ * verdict sits in front of it, under the button.
+ */
+@media (min-width: 64rem) {
+  .hero-stage {
+    --gap: 1.5rem;
+    --line-8: calc((100% - 11 * var(--gap)) / 12 * 7 + 7 * var(--gap));
+    display: grid;
+    grid-template-rows: auto auto;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 2rem var(--gap);
+  }
+  .hero-line-2 {
+    /* The same column line, less the side bearing of the first letter. */
+    padding-left: calc((100% - 11 * 1.5rem) / 12 * 7 + 7 * 1.5rem - 0.04em);
+  }
+  .hero-copy {
+    z-index: 1;
+    grid-row: 1;
+    grid-column: 8 / -1;
+  }
+  .hero-picture {
+    display: grid;
+    grid-template-rows: subgrid;
+    grid-template-columns: subgrid;
+    grid-row: 1 / span 2;
+    grid-column: 1 / -1;
+    margin-top: 0;
+  }
+  /* A tinted plane behind the list, a little larger than it and set off down and left. */
+  .hero-plane {
+    display: block;
+    grid-row: 1 / span 2;
+    grid-column: 1 / span 7;
+    margin: 1.5rem 1.5rem -1.5rem -1.5rem;
+    border-radius: 1.5rem;
+    background-color: color-mix(in oklch, var(--brand-soft) 70%, transparent);
+  }
+  .hero-list {
+    grid-row: 1 / span 2;
+    grid-column: 1 / span 7;
+    align-self: start;
+    width: auto;
+  }
+  .hero-verdict {
+    grid-row: 2;
+    grid-column: 7 / -1;
+    align-self: start;
+    width: auto;
+    margin: 0;
+  }
+}
+
+/* The verdict swap's resting state: the earlier state is gone. */
+.swap-out {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* The picture assembles once on load. The headline and the button never wait for it. */
+  .hero-rise {
+    animation: hero-rise 800ms var(--ease-out) both;
+    animation-delay: calc(120ms + var(--i, 0) * 70ms);
+  }
+  /*
+   * Then one lead receives its verdict. On screen at load (no data-inview),
+   * it happens once the picture has assembled; below the fold it waits in its
+   * earlier state and happens when the picture is scrolled into view.
+   */
+  [data-slot="in-view"]:not([data-inview]) .swap-out {
+    animation: swap-out 450ms var(--ease-out) 2100ms both;
+  }
+  [data-slot="in-view"]:not([data-inview]) .swap-in {
+    animation: swap-in 650ms var(--ease-out) 2250ms both;
+  }
+  [data-slot="in-view"]:not([data-inview]) .swap-out svg {
+    animation: swap-research 2100ms linear both;
+  }
+  [data-inview="false"] .swap-out {
+    opacity: 1;
+  }
+  [data-inview="false"] .swap-in {
+    opacity: 0;
+  }
+  [data-inview="true"] .swap-out {
+    animation: swap-out 450ms var(--ease-out) 900ms both;
+  }
+  [data-inview="true"] .swap-in {
+    animation: swap-in 650ms var(--ease-out) 1050ms both;
+  }
+  [data-inview="true"] .swap-out svg {
+    animation: swap-research 900ms linear both;
+  }
+}
+
+@keyframes hero-rise {
+  from {
+    opacity: 0;
+    transform: translateY(1.125rem);
+  }
+}
+
+@keyframes swap-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    filter: blur(3px);
+  }
+}
+
+@keyframes swap-in {
+  from {
+    opacity: 0;
+    filter: blur(3px);
+    transform: scale(0.98);
+  }
+}
+
+@keyframes swap-research {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- Pipeline strip ---------- */
+
+/* Resting layout: stages two or three to a row, the exits under a rule. */
+.stage-track {
+  position: relative;
+}
+.stage-line,
+.stage-marker,
+.stage-bracket {
+  display: none;
+}
+.stage-rail {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2rem 1rem;
+}
+.stage {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.stage-node {
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  place-items: center;
+  border-radius: 9999px;
+  background-color: var(--ink);
+  color: var(--ground);
+  font-family: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.stage-label {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.375;
+  text-wrap: balance;
+}
+.stage-exits {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+}
+
+@media (min-width: 40rem) {
+  .stage-rail {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/*
+ * Wide: one rail from edge to edge. The six numbers sit at equal steps, the
+ * first at the left edge and the last at the right; a sample lead rests above
+ * the last; a bracket under stages one to five leads down to the exits.
+ */
+@media (min-width: 64rem) {
+  .stage-track {
+    --node: 2.25rem;
+    --step: calc((100% - var(--node)) / 5);
+    padding-top: 3rem;
+    container-type: inline-size;
+  }
+  .stage-line {
+    position: absolute;
+    top: calc(3rem + var(--node) / 2);
+    right: calc(var(--node) / 2);
+    left: calc(var(--node) / 2);
+    display: block;
+    height: 1px;
+    background-color: var(--ink-3);
+    transform-origin: left;
+  }
+  .stage-marker {
+    position: absolute;
+    top: 0;
+    left: calc((var(--node) - 2rem) / 2);
+    display: block;
+    /* At rest above the last stage. */
+    transform: translateX(calc(100cqw - var(--node)));
+  }
+  /* A stem from the lead down to the rail. */
+  .stage-marker::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    width: 1px;
+    height: 0.75rem;
+    background-color: var(--ink-3);
+  }
+  .stage-rail {
+    position: relative;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) var(--node);
+    gap: 0;
+  }
+  .stage {
+    padding-right: 1rem;
+  }
+  .stage:last-child {
+    position: relative;
+    padding-right: 0;
+  }
+  .stage:last-child .stage-label {
+    position: absolute;
+    top: calc(var(--node) + 0.75rem);
+    right: 0;
+    white-space: nowrap;
+  }
+  .stage-bracket {
+    display: block;
+    width: calc(var(--step) * 4);
+    height: 1.25rem;
+    margin-top: 1.25rem;
+    margin-left: calc(var(--node) / 2);
+    border: 1px dashed var(--ink-3);
+    border-top: 0;
+    border-radius: 0 0 0.8125rem 0.8125rem;
+  }
+  .stage-exits {
+    margin-top: 1rem;
+    padding-top: 0;
+    padding-left: calc(var(--node) / 2);
+    border-top: 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Stages light up in their turn, in step with the lead that travels the rail. */
+  [data-inview] [data-reveal="light"] {
+    transition-delay: calc(200ms + var(--i, 0) * 380ms);
+  }
+  [data-inview="false"] [data-reveal="light"] {
+    opacity: 0.28;
+    transform: none;
+  }
+  [data-inview] .stage-node {
+    transition: transform 600ms var(--ease-out);
+    transition-delay: calc(200ms + var(--i, 0) * 380ms);
+  }
+  [data-inview="false"] .stage-node {
+    transform: scale(0.8);
+    transition: none;
+  }
+  [data-inview] .stage-line {
+    transition: transform 2100ms cubic-bezier(0.45, 0, 0.55, 1) 200ms;
+  }
+  [data-inview="false"] .stage-line {
+    transform: scaleX(0);
+    transition: none;
+  }
+  [data-inview] .stage-marker {
+    transition:
+      transform 2100ms cubic-bezier(0.45, 0, 0.55, 1) 200ms,
+      opacity 300ms ease;
+  }
+  [data-inview="false"] .stage-marker {
+    opacity: 0;
+    transform: translateX(0);
+    transition: none;
+  }
+  [data-inview] .stage-bracket {
+    transition: opacity 500ms ease 2300ms;
+  }
+  [data-inview="false"] .stage-bracket {
+    opacity: 0;
+    transition: none;
+  }
+}
+
+/* ---------- Sticky narrative ---------- */
+
+/* Resting form: a plain list, each step followed by its picture. */
+.narrative-zones {
+  display: none;
+}
+
+.narrative-steps {
+  display: grid;
+  gap: 3.5rem;
+  margin-top: 2.5rem;
+}
+
+.narrative-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 1rem;
+  row-gap: 1.5rem;
+}
+
+.narrative-number {
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  place-items: center;
+  border-radius: 9999px;
+  background-color: var(--ink);
+  color: var(--ground);
+  font-family: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.narrative-copy h3 {
+  font-size: 1.5rem;
+  line-height: 2.25rem;
+  letter-spacing: -0.015em;
+}
+
+.narrative-copy p {
+  margin-top: 0.375rem;
+  max-width: 28rem;
+  color: var(--ink-2);
+  font-size: 1.0625rem;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.narrative-visual {
+  grid-column: 1 / -1;
+  max-width: 44rem;
+}
+
+/* The verdict option a step's picture rests on. */
+.step-lit {
+  border-color: color-mix(in oklch, var(--ok) 30%, transparent);
+  background-color: var(--ok-soft);
+  color: var(--ok);
+}
+.step-out {
+  opacity: 0;
+}
+
+/* Wide, but not pinned (reduced motion, or a short window): each step's picture sits beside its text. */
+@media (min-width: 64rem) {
+  .narrative-steps {
+    gap: 4rem;
+    margin-top: 3.5rem;
+  }
+  .narrative-step {
+    grid-template-columns: auto minmax(0, 5fr) minmax(0, 7fr);
+    align-items: start;
+    column-gap: 1rem;
+  }
+  .narrative-visual {
+    grid-column: 3;
+    max-width: none;
+    margin-left: 2rem;
+  }
+}
+
+/*
+ * Pinned form: wide and tall enough, and motion allowed. The block is taller
+ * than the viewport; the pin holds while the page scrolls through it, and the
+ * zones tell the component which step the middle of the viewport is in. Each
+ * step holds for the same 60vh of scroll: the first zone also covers the way
+ * in, and the last the way out.
+ */
+@media (min-width: 64rem) and (min-height: 42rem) and (prefers-reduced-motion: no-preference) {
+  .narrative {
+    position: relative;
+    height: calc(100dvh - 4rem + var(--narrative-steps) * 60vh);
+  }
+  .narrative-zones {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    pointer-events: none;
+  }
+  .narrative-zones > * {
+    flex: 0 0 60vh;
+  }
+  /* The middle of the viewport is 50vh - 4rem into the block when the pin starts. */
+  .narrative-zones > :first-child {
+    flex-basis: calc(110vh - 4rem);
+  }
+  .narrative-zones > :last-child {
+    flex: 1 0 60vh;
+  }
+  .narrative-pin {
+    position: sticky;
+    top: 4rem;
+    display: flex;
+    height: calc(100dvh - 4rem);
+    align-items: center;
+  }
+  .narrative-text {
+    width: calc(100% * 5 / 12 - 2rem);
+  }
+  .narrative-steps {
+    gap: 1.75rem;
+    margin-top: 3rem;
+  }
+  .narrative-step {
+    grid-template-columns: auto minmax(0, 1fr);
+    row-gap: 0;
+  }
+  .narrative-number,
+  .narrative-copy h3,
+  .narrative-copy p {
+    transition:
+      color 300ms ease,
+      background-color 300ms ease,
+      box-shadow 300ms ease;
+  }
+  .narrative-step:not([data-state="current"]) .narrative-number {
+    background-color: transparent;
+    box-shadow: inset 0 0 0 1px var(--ink-3);
+    color: var(--ink-2);
+  }
+  .narrative-step:not([data-state="current"]) h3 {
+    color: var(--ink-2);
+  }
+  .narrative-step[data-state="current"] p {
+    color: var(--ink);
+  }
+
+  /* Each step's picture takes the same place; only the current one shows. */
+  .narrative-visual {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    width: calc(100% * 7 / 12);
+    margin-left: 0;
+    align-items: center;
+    transition:
+      opacity 500ms var(--ease-out),
+      transform 600ms var(--ease-out);
+  }
+  /* The next picture waits below and the last one leaves upwards, the way the page is moving. */
+  .narrative-step:not([data-state="current"]) .narrative-visual {
+    opacity: 0;
+    transform: translateY(1.25rem) scale(0.985);
+    transition-duration: 220ms;
+  }
+  .narrative-step[data-state="past"] .narrative-visual {
+    transform: translateY(-1.25rem) scale(0.985);
+  }
+  .narrative-visual > * {
+    display: flex;
+    min-height: min(34rem, 100%);
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  /* Parts of the current picture arrive in order. */
+  .narrative-visual [data-step] {
+    transition:
+      opacity 500ms var(--ease-out),
+      transform 500ms var(--ease-out);
+    transition-delay: calc(150ms + var(--i, 0) * 80ms);
+  }
+  .narrative-step:not([data-state="current"]) [data-step] {
+    opacity: 0;
+    transform: translateY(0.5rem);
+    transition: none;
+  }
+
+  /*
+   * Then the picture's one change of state plays: the verdict resolves, the
+   * stage advances and the next-step line changes with it. Not current, the
+   * earlier state waits; current, it gives way after the parts have arrived.
+   */
+  .narrative-visual .step-out {
+    transition:
+      opacity 400ms var(--ease-out) 1300ms,
+      filter 400ms var(--ease-out) 1300ms;
+    filter: blur(3px);
+  }
+  .narrative-visual .step-in {
+    transition:
+      opacity 600ms var(--ease-out) 1450ms,
+      transform 600ms var(--ease-out) 1450ms;
+  }
+  .narrative-visual .step-lit {
+    transition:
+      color 400ms ease 1450ms,
+      background-color 400ms ease 1450ms,
+      border-color 400ms ease 1450ms;
+  }
+  .narrative-step:not([data-state="current"]) .step-out {
+    opacity: 1;
+    filter: none;
+    transition: none;
+  }
+  .narrative-step:not([data-state="current"]) .step-in {
+    opacity: 0;
+    transform: scale(0.98);
+    transition: none;
+  }
+  .narrative-step:not([data-state="current"]) .step-lit {
+    border-color: var(--line);
+    background-color: transparent;
+    color: var(--ink-2);
+    transition: none;
+  }
+}
+
+/* ---------- Feature switcher ---------- */
+
+/* Resting layout: a stack, the open item showing its picture underneath. */
+.feature-switcher {
+  border-top: 1px solid var(--line);
+}
+
+.feature-item {
+  position: relative;
+  border-bottom: 1px solid var(--line);
+}
+
+.feature-heading {
+  font-size: 1.375rem;
+  line-height: 1.75rem;
+  letter-spacing: -0.015em;
+}
+
+.feature-header {
+  display: flex;
+  width: 100%;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 1.25rem;
+  border-radius: 7px;
+  text-align: left;
+  cursor: pointer;
+  transform-origin: left center;
+  transition: transform 160ms var(--ease-out);
+}
+
+/* Press feedback: the header gives a little under the pointer. */
+.feature-header:active {
+  transform: scale(0.98);
+}
+
+/* The whole of a closed item opens it, not only its title. */
+.feature-item[data-open="false"] .feature-header::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.feature-plus {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+  color: var(--ink-2);
+  transition:
+    opacity 200ms ease,
+    transform 300ms var(--ease-out);
+}
+
+.feature-item[data-open="true"] .feature-plus {
+  opacity: 0;
+  transform: rotate(90deg);
+}
+
+.feature-summary {
+  max-width: 34rem;
+  padding-top: 0.375rem;
+  padding-bottom: 1.25rem;
+  color: var(--ink-2);
+  font-size: 1.0625rem;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.feature-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 320ms var(--ease-out);
+}
+
+.feature-item[data-open="true"] > .feature-panel {
+  grid-template-rows: 1fr;
+}
+
+.feature-visual {
+  min-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.feature-item[data-open="true"] .feature-visual {
+  opacity: 1;
+  transition: opacity 280ms ease 100ms;
+}
+
+.feature-visual > * {
+  max-width: 34rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .feature-item[data-open="false"]:hover .feature-plus {
+    color: var(--ink);
+    transform: rotate(90deg);
+  }
+}
+
+/*
+ * Row layout: the open item is wider and shows its picture in the room it
+ * gained. Every text block and picture has a fixed width taken from the
+ * container, so nothing re-wraps while the tracks change size; the item's
+ * edge simply uncovers the picture. Titles are one line each, so every
+ * summary starts on the same line; a closed item's plus sits at its foot.
+ */
+@media (min-width: 80rem) {
+  .feature-switcher {
+    --grow: 3.4;
+    --closed: calc(100cqw / (var(--feature-count) - 1 + var(--grow)));
+    container-type: inline-size;
+    display: flex;
+    height: 27rem;
+    contain: layout;
+    border-bottom: 1px solid var(--line);
+  }
+  .feature-item {
+    min-width: 0;
+    flex: 1 1 0;
+    overflow: hidden;
+    /* No padding here: it would not shrink with the track, and the fixed widths below assume it does. */
+    border-bottom: 0;
+    transition: flex-grow 420ms var(--ease-out);
+  }
+  .feature-item + .feature-item {
+    border-left: 1px solid var(--line);
+  }
+  .feature-item[data-open="true"] {
+    flex-grow: var(--grow);
+  }
+  /* A rule along the top marks the open item. */
+  .feature-item::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 2px;
+    background-color: var(--ink);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 420ms var(--ease-out);
+  }
+  .feature-item[data-open="true"]::before {
+    transform: scaleX(1);
+  }
+  .feature-heading,
+  .feature-summary {
+    width: calc(var(--closed) - 2.5rem);
+    margin-left: 1.25rem;
+  }
+  .feature-heading {
+    margin-top: 1.5rem;
+    font-size: 1.1875rem;
+    white-space: nowrap;
+  }
+  .feature-header {
+    min-height: 1.75rem;
+    padding-top: 0;
+  }
+  .feature-plus {
+    position: absolute;
+    bottom: 1.5rem;
+    left: 1.25rem;
+  }
+  .feature-summary {
+    padding-top: 0.625rem;
+    padding-bottom: 0;
+    font-size: 1rem;
+  }
+  .feature-panel {
+    position: absolute;
+    top: 1.25rem;
+    bottom: 1.25rem;
+    left: var(--closed);
+    display: block;
+    width: calc(var(--closed) * (var(--grow) - 1) - 1.25rem);
+  }
+  .feature-visual {
+    height: 100%;
+  }
+  .feature-visual > * {
+    max-width: none;
+    height: 100%;
+    margin-bottom: 0;
+  }
+}
+
+/* ---------- Marquee ---------- */
+
+/* The focusable element is the outer one; the clipping and the edge fade are on the inner. */
+.marquee {
+  padding-block: 1rem;
+}
+
+.marquee:focus-visible {
+  outline-offset: -3px;
+}
+
+.marquee-viewport {
+  overflow: hidden;
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 8%,
+    black 92%,
+    transparent
+  );
+}
+
+.marquee-track {
+  display: flex;
+  width: max-content;
+}
+
+.marquee-group {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 3.5rem;
+  padding-right: 3.5rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Four copies in the track, so moving it by a quarter lands on an identical frame. */
+  .marquee-track {
+    animation: marquee 44s linear infinite;
+  }
+  .marquee:hover .marquee-track,
+  .marquee:focus-visible .marquee-track,
+  .marquee[data-inview="false"] .marquee-track {
+    animation-play-state: paused;
+  }
+}
+
+/* Reduced motion: the one real list, wrapped, with nothing moving. */
+@media (prefers-reduced-motion: reduce) {
+  .marquee-viewport {
+    mask-image: none;
+  }
+  .marquee-track {
+    width: auto;
+    justify-content: center;
+  }
+  .marquee-group {
+    flex-shrink: 1;
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 1.25rem;
+    padding-inline: 1.25rem;
+  }
+  .marquee-copy {
+    display: none;
+  }
+}
+
+@keyframes marquee {
+  to {
+    transform: translateX(-25%);
+  }
+}
+
+/* ---------- Footer: the wordmark comes up as the page ends ---------- */
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    /* Timed by the footer, whose last pixel is the page's: the wordmark is cropped, so it never fully enters on its own. */
+    [data-slot="site-footer"] {
+      view-timeline: --site-footer block;
+    }
+    .site-footer-wordmark {
+      animation: site-footer-wordmark auto linear both;
+      animation-timeline: --site-footer;
+      animation-range: entry 35% entry 100%;
+    }
+  }
+}
+
+@keyframes site-footer-wordmark {
+  from {
+    opacity: 0.2;
+    transform: translateY(45%);
+  }
+}
