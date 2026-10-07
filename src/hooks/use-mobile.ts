@@ -1,6 +1,7 @@
 import * as React from "react";
 
-const MOBILE_BREAKPOINT = 768;
+// The `nav` breakpoint in globals.css (spec 04): below it the sidebar is a sheet.
+const MOBILE_BREAKPOINT = 720;
 
 export function useIsMobile() {
   const [isMobile, setIsMobile] = React.useState<boolean | undefined>(
