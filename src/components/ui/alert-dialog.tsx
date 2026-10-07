@@ -148,6 +148,7 @@ function AlertDialogAction({
   return (
     <Button
       data-slot="alert-dialog-action"
+      variant="primary"
       className={cn(className)}
       {...props}
     />
