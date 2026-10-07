@@ -107,6 +107,7 @@ export type LeadAction =
   | "not_qualify"
   | "start_proposal"
   | "finish_proposal"
+  | "open_proposal"
   | "check_invoice";
 
 export type NextStep = {
@@ -195,15 +196,14 @@ export function nextStep(lead: ActionInput): NextStep {
         "A review call is booked. Have the proposal ready to send.",
       );
     case "proposal_sent":
+      // Nothing to do but wait, so no main action; the proposal can be opened.
       return step(
         null,
         "Proposal sent. Waiting for the lead to view and sign it.",
+        { secondary: "open_proposal" },
       );
     case "won":
-      return step(
-        "check_invoice",
-        "Signed. Check the invoice draft. Invoice drafts are not available yet.",
-      );
+      return step("check_invoice", "Signed. Check the invoice draft.");
   }
 }
 
@@ -214,5 +214,6 @@ export const ACTION_LABEL: Record<LeadAction, string> = {
   not_qualify: "Not qualified",
   start_proposal: "Start proposal",
   finish_proposal: "Finish proposal",
+  open_proposal: "Open proposal",
   check_invoice: "Check invoice draft",
 };
