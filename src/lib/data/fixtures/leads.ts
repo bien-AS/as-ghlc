@@ -988,7 +988,7 @@ function build(seed: Seed, index: number, now: number): LeadRecord {
     })),
     deck: seed.deck
       ? {
-          templateName: "Growth plan",
+          templateName: "Discovery",
           viewUrl: `https://decks.example/${id}`,
           pdfUrl: `https://decks.example/${id}.pdf`,
         }
