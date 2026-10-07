@@ -125,6 +125,21 @@ export function useCreateProfile() {
   });
 }
 
+/** Changes the person's own name; the user menu reads the same `me` query. */
+export function useUpdateProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ProfileInput) =>
+      apiFetch<CurrentUser>("/api/profile", {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: (user) => {
+      queryClient.setQueryData(meQueryOptions.queryKey, user);
+    },
+  });
+}
+
 /**
  * Asks the server to create the profile from what the verified session already
  * knows (the silent path). Sends nothing. Rejects when the form must be shown,

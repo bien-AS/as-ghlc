@@ -10,6 +10,11 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { AuthoritySolutionsLogo } from "@/components/ui/authority-solutions-logo";
 import { getPipelineSummary } from "@/lib/data/leads";
+import {
+  getUnreadCount,
+  listNotifications,
+  markNotificationRead,
+} from "@/lib/data/notifications";
 import { leadOptions } from "@/lib/queries/leads";
 import {
   api,
@@ -23,6 +28,7 @@ import { address, resetNavigation } from "@/test/navigation";
 import { auth, navigate, resetClientFakes } from "@/test/render";
 import { fake } from "@/test/server-fakes";
 import { DashboardShell } from "./_components/dashboard-shell";
+import { NotificationsScreen } from "./_components/notifications-screen";
 import PlaceholderPage from "./[...rest]/page";
 import { NAV_ITEMS } from "./navigation";
 import DashboardNotFound from "./not-found";
@@ -171,8 +177,90 @@ test("the suspect count matches the queue, and is left out rather than shown as 
   await screen.findByRole("link", {
     name: `Suspect review, ${needs.suspects} waiting`,
   });
-  // Notifications shows no count in this build.
-  expect(navLinks()[2].textContent).not.toMatch(/\d/);
+});
+
+test("the unread count is on the Notifications item and on the bell, and is left out rather than shown as zero when it is unavailable", async () => {
+  api.fail("GET", /^\/api\/notifications\/unread-count$/);
+  open();
+  await screen.findByText("Ada Lovelace");
+  await screen.findByRole("link", { name: /Suspect review, / });
+  const bell = () =>
+    within(screen.getByRole("banner")).getByRole("link", {
+      name: /^Notifications/,
+    });
+  expect(navLinks()[2].textContent).toBe("Notifications");
+  expect(bell().getAttribute("aria-label")).toBe("Notifications");
+  expect(bell().textContent).toBe("");
+
+  cleanup();
+  api.restore();
+  open();
+  const { count } = await getUnreadCount();
+  expect(count).toBeGreaterThan(0);
+  const item = await within(mainNav()).findByRole("link", {
+    name: `Notifications, ${count} unread`,
+  });
+  expect(item.getAttribute("href")).toBe("/dashboard/notifications");
+  expect(bell().getAttribute("aria-label")).toBe(
+    `Notifications, ${count} unread`,
+  );
+  expect(bell().textContent).toBe(String(count));
+});
+
+test("with everything read, neither the Notifications item nor the bell shows a count", async () => {
+  for (const item of (await listNotifications({ limit: 100 })).items) {
+    await markNotificationRead(item.id);
+  }
+  open();
+  await screen.findByRole("link", { name: /Suspect review, / });
+  expect(api.calls()).toContain("GET /api/notifications/unread-count");
+  await waitFor(() => expect(navLinks()[2].textContent).toBe("Notifications"));
+  expect(
+    within(screen.getByRole("banner")).getByRole("link", {
+      name: "Notifications",
+    }).textContent,
+  ).toBe("");
+});
+
+test("marking a notification read lowers the count in the navigation by one, without leaving the screen", async () => {
+  resetNavigation("/dashboard/notifications");
+  renderScreen(
+    <DashboardShell sidebarOpen timeZone="UTC" sampleData>
+      <NotificationsScreen />
+    </DashboardShell>,
+  );
+  const { count } = await getUnreadCount();
+  await within(mainNav()).findByRole("link", {
+    name: `Notifications, ${count} unread`,
+  });
+
+  const [markRead] = await screen.findAllByRole("button", {
+    name: /^Mark read/,
+  });
+  fireEvent.click(markRead);
+
+  await within(mainNav()).findByRole("link", {
+    name: `Notifications, ${count - 1} unread`,
+  });
+  // The screen's own heading is a <header> too, so the bar is found by its slot.
+  expect(
+    within(
+      document.querySelector('[data-slot="top-navbar"]') as HTMLElement,
+    ).getByRole("link", { name: `Notifications, ${count - 1} unread` }),
+  ).toBeDefined();
+  expect(address()).toBe("/dashboard/notifications");
+});
+
+test("viewed as Staff, the unread count is for that rep's own leads", async () => {
+  const everyone = (await getUnreadCount()).count;
+  viewAs("staff");
+  const { count } = await getUnreadCount();
+  expect(count).toBeLessThan(everyone);
+  open();
+  await screen.findByRole("button", { name: "Viewing as Staff (preview)" });
+  await within(mainNav()).findByRole("link", {
+    name: count ? `Notifications, ${count} unread` : "Notifications",
+  });
 });
 
 test("the collapse control says whether the navigation is expanded, and the choice is remembered", async () => {
@@ -300,10 +388,9 @@ test("typing in the navbar search and pressing Enter opens the Pipeline with tha
 test("the navbar carries the notifications entry, the Sample data label with its explanation, and the role preview", async () => {
   open();
   const bell = within(screen.getByRole("banner")).getByRole("link", {
-    name: "Notifications",
+    name: /^Notifications/,
   });
   expect(bell.getAttribute("href")).toBe("/dashboard/notifications");
-  expect(bell.textContent).toBe("");
 
   const label = screen.getByRole("button", { name: "Sample data" });
   fireEvent.focus(label);

@@ -13,6 +13,7 @@ import { type Crumb, TopNavbar } from "@/components/ui/top-navbar";
 import { UserMenu } from "@/components/ui/user-menu";
 import { useCurrentUser, useSignOut } from "@/hooks/use-auth";
 import { useLoadedLeadName, usePipelineSummary } from "@/hooks/use-leads";
+import { useUnreadCount } from "@/hooks/use-notifications";
 import { usePipelineHref } from "@/hooks/use-pipeline-href";
 import { TimeZoneProvider } from "@/hooks/use-time-zone";
 import { useSetPreviewRole, useViewer } from "@/hooks/use-viewer";
@@ -82,6 +83,8 @@ function Frame({
   const { isMobile } = useSidebar();
   const me = useCurrentUser();
   const summary = usePipelineSummary();
+  // No count rather than a zero or an error when it is unavailable.
+  const unread = useUnreadCount() || undefined;
   const signOut = useSignOut();
   const viewer = useViewer();
   const setRole = useSetPreviewRole();
@@ -133,7 +136,11 @@ function Frame({
       icon,
       built,
       // No count rather than a zero or an error when it is unavailable.
-      count: href === SUSPECTS_HREF ? summary.data?.needs.suspects : undefined,
+      ...(href === SUSPECTS_HREF && { count: summary.data?.needs.suspects }),
+      ...(href === NOTIFICATIONS_HREF && {
+        count: unread,
+        countLabel: "unread",
+      }),
     }));
 
   // The role preview exists only while the dashboard runs on sample data.
@@ -184,6 +191,7 @@ function Frame({
             )
           }
           notificationsHref={NOTIFICATIONS_HREF}
+          unreadCount={unread}
           sampleDataNote={sampleData ? SAMPLE_DATA_NOTE : undefined}
           rolePreview={rolePreview && <RolePreview {...rolePreview} />}
           userMenu={

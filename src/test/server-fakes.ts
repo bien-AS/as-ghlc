@@ -86,6 +86,19 @@ export const prismaModule = {
         fake.users.set(data.id, { ...data });
         return { ...data };
       },
+      update: async ({
+        where,
+        data,
+      }: {
+        where: { id: string };
+        data: Partial<CurrentUser>;
+      }) => {
+        const user = fake.users.get(where.id);
+        if (!user) throw new Error("Record to update not found");
+        const updated = { ...user, ...data };
+        fake.users.set(where.id, updated);
+        return { ...updated };
+      },
     },
   },
 };

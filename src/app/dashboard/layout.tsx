@@ -3,10 +3,12 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { getPipelineSummary, SAMPLE_DATA } from "@/lib/data/leads";
+import { getUnreadCount } from "@/lib/data/notifications";
 import { enforceRoute } from "@/lib/data/users";
 import { getViewerSummary } from "@/lib/data/viewer";
 import { pipelineSummaryOptions } from "@/lib/queries/leads";
 import { meQueryOptions } from "@/lib/queries/me";
+import { unreadCountOptions } from "@/lib/queries/notifications";
 import { viewerOptions } from "@/lib/queries/viewer";
 import { getQueryClient } from "@/lib/query-client";
 import { getViewerTimeZone } from "@/lib/viewer-time-zone";
@@ -33,8 +35,8 @@ export default async function DashboardLayout({
   // Written by the sidebar when the person collapses or expands it.
   const remembered = (await cookies()).get("sidebar_state")?.value;
 
-  // ADR-0001: what the shell shows on first paint (the user menu, the role
-  // and the suspect count) is prefetched through the data-access layer, never over HTTP.
+  // ADR-0001: what the shell shows on first paint (the user menu, the role,
+  // the suspect count and the unread count) is prefetched through the data-access layer, never over HTTP.
   const queryClient = getQueryClient();
   queryClient.setQueryData(meQueryOptions.queryKey, current.user);
   await Promise.all([
@@ -46,6 +48,11 @@ export default async function DashboardLayout({
     queryClient.prefetchQuery({
       ...viewerOptions,
       queryFn: getViewerSummary,
+    }),
+    // A failure leaves the shell with no count, not a zero (spec 08).
+    queryClient.prefetchQuery({
+      ...unreadCountOptions,
+      queryFn: getUnreadCount,
     }),
   ]);
 

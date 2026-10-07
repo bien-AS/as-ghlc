@@ -188,6 +188,19 @@ export async function createProfile(input: ProfileInput): Promise<CurrentUser> {
 }
 
 /**
+ * Changes the signed-in person's own name (Account settings). The row is found
+ * by the verified session's id and nowhere else; `input` supplies the two
+ * names only, so the email and the id cannot be changed here.
+ */
+export async function updateProfile(input: ProfileInput): Promise<CurrentUser> {
+  const user = await requireUser();
+  return prisma.user.update({
+    where: { id: user.id },
+    data: { firstName: input.firstName, lastName: input.lastName },
+  });
+}
+
+/**
  * The silent-path rule (spec 02): the names for a profile that may be created
  * without showing the form, or null when the form must be shown. Only for a
  * session established by an emailed link or by email and password, never one
