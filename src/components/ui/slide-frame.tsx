@@ -68,8 +68,10 @@ function SlideFrame({
           )}
           {bullets.length > 0 && (
             <ul className="flex max-w-[60ch] list-disc flex-col gap-[max(0.25rem,1.2cqw)] pl-[1.2em] wrap-break-word">
-              {bullets.map((bullet) => (
-                <li key={bullet}>{bullet}</li>
+              {bullets.map((bullet, index) => (
+                // A rep can type the same line twice, so the text alone is not a key.
+                // biome-ignore lint/suspicious/noArrayIndexKey: the points are an ordered list that is only ever re-rendered whole
+                <li key={`${index}-${bullet}`}>{bullet}</li>
               ))}
             </ul>
           )}

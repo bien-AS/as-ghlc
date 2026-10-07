@@ -15,7 +15,9 @@ import {
 import { Button } from "@/components/ui/button";
 
 /**
- * The confirmation for an action that cannot be undone (specs 06 and 07). A
+ * The confirmation for an action that cannot be undone (specs 06 and 07), or,
+ * with `tone="neutral"`, the last look before one that is not destructive but
+ * leaves the app, such as sending a proposal. A
  * modal dialog: focus is trapped, Escape and Cancel change nothing, and focus
  * returns to the button that opened it. `title` names the lead and
  * `description` says what will happen.
@@ -26,6 +28,7 @@ function ConfirmDialog({
   description,
   confirmLabel,
   onConfirm,
+  tone = "danger",
   children,
 }: {
   /** The button that opens the dialog. */
@@ -34,6 +37,8 @@ function ConfirmDialog({
   description: React.ReactNode;
   confirmLabel: string;
   onConfirm: () => void;
+  /** "danger" for something destroyed or removed; "neutral" otherwise. Never a second primary. */
+  tone?: "danger" | "neutral";
   /** Extra fields, for example an optional reason. */
   children?: React.ReactNode;
 }) {
@@ -50,7 +55,7 @@ function ConfirmDialog({
         <AlertDialogFooter>
           <AlertDialogCancel variant="default">Cancel</AlertDialogCancel>
           <Button
-            variant="danger"
+            variant={tone === "danger" ? "danger" : "default"}
             onClick={() => {
               setOpen(false);
               onConfirm();

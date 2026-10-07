@@ -10,6 +10,7 @@ import type {
 } from "@/lib/proposals/schemas";
 import { invoiceOptions } from "@/lib/queries/invoices";
 import { leadKeys, leadOptions } from "@/lib/queries/leads";
+import { notificationKeys } from "@/lib/queries/notifications";
 import {
   proposalLeadsOptions,
   proposalOptions,
@@ -85,6 +86,8 @@ export function useProposalWrite(leadId: string) {
         invoiceOptions(leadId).queryKey,
         leadKeys.lists,
         leadKeys.summaries,
+        // Signing raises "Proposal signed" and "Invoice draft ready" (spec 08).
+        notificationKeys.all,
       ]) {
         void queryClient.invalidateQueries({ queryKey });
       }

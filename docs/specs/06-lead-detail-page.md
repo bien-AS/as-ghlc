@@ -37,11 +37,11 @@ One **main action** that depends on where the lead is, up to one secondary actio
 | Discovery Call Booked, call completed         | **Qualified**                      | Not qualified | The call is done. Record whether this lead is a fit.                           |
 | Qualified                                     | **Start proposal**                 | None          | Qualified. Build the proposal next.                                            |
 | Proposal Review Booked                        | **Finish proposal**                | None          | A review call is booked. Have the proposal ready to send.                      |
-| Proposal Sent                                 | None                               | None          | Proposal sent. Waiting for the lead to view and sign it.                       |
+| Proposal Sent                                 | None                               | Open proposal | Proposal sent. Waiting for the lead to view and sign it.                       |
 | Lead Won                                      | **Check invoice draft**            | None          | Signed. Check the invoice draft.                                               |
 | Any exit (Spam, Nurture, Lead Lost)           | None                               | None          | Says which exit, when and why. No actions are offered.                         |
 
-In this build, **Open deck**, **Start proposal**, **Finish proposal** and **Check invoice draft** lead to parts of the product that are not built. Open deck goes to the deck presenter placeholder; Start proposal and Finish proposal go to the proposal builder placeholder (spec 04). Check invoice draft has no destination yet: the button is shown disabled and the hint line says invoice drafts are not available yet.
+**Open deck** goes to the deck presenter and **Start proposal**, **Finish proposal** and **Open proposal** to the proposal builder, each opened on this lead (`?lead=…`). **Check invoice draft** goes to the Invoice panel further down this page. All three destinations are mockups on sample data (specs 13, 14 and 15). _In the first build these led to placeholders, and Check invoice draft was shown disabled._
 
 **Actions that change the lead in this build:**
 
@@ -68,11 +68,11 @@ Toned by verdict (spec 03). Shows the verdict word, the AI's summary and its lis
 
 Three small status panels.
 
-- **Deck:** "Not generated yet", or the template name with links to view and to the PDF.
-- **Proposal:** "Not started", or its status: draft, sent, viewed, signed, lost.
-- **Invoice:** "No invoice yet", or its status.
+- **Deck:** "Not generated yet", or the template name with an Open deck link into the deck presenter (spec 13).
+- **Proposal:** "Not started", or its status (draft, sent, viewed, signed, lost) as a word in a chip, with a link into the proposal builder (spec 14).
+- **Invoice:** "No invoice yet. A draft is created when the proposal is signed.", or the draft: its status, its lines, the total and when it was drafted (spec 15). This is where the invoice draft is shown; there is no invoice screen.
 
-In this build these show whatever the sample lead carries. Each panel that depends on an unbuilt part of the product carries a short "Not available yet" note instead of dead buttons.
+These panels are mockups on sample data (specs 13, 14 and 15). Each says in a plain line what is not real. A lead that has left the pipeline is offered no way to start a deck or a proposal.
 
 ### 7. Activity timeline
 
@@ -147,7 +147,7 @@ Reads go through `GET /api/leads/{leadId}`; writes through the qualification, lo
 7. An exited lead shows its name struck through, its exit, an explanatory hint line and no actions.
 8. After any action, returning to the Pipeline shows the lead under its new stage or exit and the counts changed to match.
 9. The page contains no "Generate presentation" and no "Get proposal link" control, and no text naming a CRM or "Atomic Slides".
-10. Open deck leads to the deck presenter placeholder; Start proposal and Finish proposal lead to the proposal builder placeholder; Check invoice draft is disabled with an explanation.
+10. Open deck leads to the deck presenter on this lead; Start proposal, Finish proposal and Open proposal lead to the proposal builder on this lead; Check invoice draft leads to the Invoice panel on this page.
 11. An address with an unknown lead id shows the not-found panel inside the shell.
 12. Forcing an action request to fail leaves chips, actions and timeline unchanged and shows a retry.
 13. While an action is in progress, no other action can be pressed.
@@ -200,7 +200,7 @@ Reads go through `GET /api/leads/{leadId}`; writes through the qualification, lo
 - Each write adds an activity with the current user as actor. Writes are applied in the data-access layer, in memory, in this build (spec 04).
 - Confirmations are accessible modal dialogs.
 - Chips and the verdict box take their tone from spec 03's single mapping.
-- Links to the deck presenter and proposal builder placeholders carry no lead-specific behaviour in this build.
+- Links to the deck presenter and the proposal builder carry the lead in the address (`?lead=…`).
 - Times are shown in the viewer's time zone, with the exact time available on hover and focus.
 
 ## Testing Decisions

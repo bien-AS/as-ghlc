@@ -720,6 +720,7 @@ function DraftEditor({
         <section aria-label="Actions" className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-3">
             <ConfirmDialog
+              tone="neutral"
               trigger={
                 <Button
                   variant="primary"

@@ -34,6 +34,7 @@ import {
 import { PanelSection } from "@/components/ui/panel-section";
 import { PlaceholderPanel } from "@/components/ui/placeholder-panel";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SlideFrame } from "@/components/ui/slide-frame";
 import {
   EmptyState,
   ErrorState,
@@ -370,6 +371,19 @@ export default function DevUiPage() {
             </p>
           </PanelSection>
           <NotAllowedState />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <SlideFrame
+            variant="title"
+            heading="A deck's opening slide"
+            body="Sized from its own width, so it reads the same small and full screen."
+            footer="Discovery · 1 of 7"
+          />
+          <SlideFrame
+            heading="A content slide"
+            bullets={["A point on the slide.", "A second point."]}
+            footer="Discovery · 2 of 7"
+          />
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <RolePreviewDemo />

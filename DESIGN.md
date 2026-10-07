@@ -301,7 +301,7 @@ Corners are soft and step with the size of the thing: small on controls, larger 
 | `rounded-sm`                     | 5px   | Smallest step; nested details                                                   |
 | `rounded-md`                     | 7px   | Tooltip, skeleton, small and extra-small buttons, tab and theme-switch segments |
 | `rounded-lg` / `rounded-control` | 9px   | Buttons, inputs, selects, the theme switch, tab list                            |
-| `rounded-box`                    | 11px  | The verdict box. Reserved for deck boxes, which are not built                   |
+| `rounded-box`                    | 11px  | The verdict box and the deck's slide (`SlideFrame`)                             |
 | `rounded-xl` / `rounded-panel`   | 13px  | Panels, dialogs                                                                 |
 | `rounded-2xl`                    | 16px  | Defined; no reviewed component uses it                                          |
 | `rounded-3xl`                    | 20px  | Defined; no reviewed component uses it                                          |
@@ -336,7 +336,7 @@ Everything below lives in `src/components/ui`. Components are presentational, ho
 
 **The One Primary Rule.** A `Button` with no variant is the neutral button. The main action must ask for `variant="primary"`, and a screen has one.
 
-**The 44px Touch Rule.** Controls keep the compact sizes above on a desktop. On a small screen (below `nav`, 720px) or a coarse pointer, the auth screens' buttons and inputs are at least 44px tall and the show-password control is 44px wide (one rule in `globals.css`, keyed on the auth shell, so no screen sets it), every theme-switch segment is 44px square, and the landing page's calls to action are 44 to 48px. Inline text links are exempt.
+**The 44px Touch Rule.** Dashboard forms on the mockup screens meet it with `max-nav:min-h-11 pointer-coarse:min-h-11` on their buttons, inputs and selects. Controls keep the compact sizes above on a desktop. On a small screen (below `nav`, 720px) or a coarse pointer, the auth screens' buttons and inputs are at least 44px tall and the show-password control is 44px wide (one rule in `globals.css`, keyed on the auth shell, so no screen sets it), every theme-switch segment is 44px square, and the landing page's calls to action are 44 to 48px. Inline text links are exempt.
 
 ### Chips
 
@@ -448,13 +448,14 @@ It is a `fieldset` of native radios with a visually hidden legend "Theme" and a 
 - **Empty state and error state (`state-panel.tsx`):** a centred heading at 16px weight 600 in the heading font, one sentence in `ink-2` and an optional action, inside a 1px `line` edge with a 13px corner and no fill. The error state is announced (`role="alert"`) and its action is "Try again". `NotAllowedState` is the empty state with fixed words for a role that cannot use a screen: "You do not have access to this screen".
 - **Panel section (`panel-section.tsx`):** the titled panel every dashboard screen is made of: a `label-caps` heading over its content on `surface`, a 1px `line` ring, a 13px corner, 16px padding and 12px between its parts. `actions` puts a control on the heading's line. Lists inside it are rows with dividers, not panels of their own.
 - **Placeholder panel (`placeholder-panel.tsx`):** a panel with the screen's name as the `h1`, a neutral "Not built yet" chip, one sentence in `ink-2`, then a `label-caps` "Waiting on" heading over a bulleted list. No controls.
-- **Confirm dialog (`confirm-dialog.tsx`):** the alert dialog for an action that cannot be undone. The title names the lead, the description says what will happen, Cancel is the default button and the confirming action is a `danger` button, so the dialog adds no second `primary` to the screen.
+- **Confirm dialog (`confirm-dialog.tsx`):** the alert dialog for an action that cannot be undone. The title names the lead, the description says what will happen, Cancel is the default button and the confirming action is a `danger` button, so the dialog adds no second `primary` to the screen. With `tone="neutral"` the confirming action is a default button: for a last look before something that is not destructive but leaves the app, such as sending a proposal.
 - **Link button (`link-button.tsx`):** a link with the button's look. Use it, not `Button render={<Link />}`, when the control goes somewhere: it stays a link to assistive technology.
+- **Slide frame (`slide-frame.tsx`):** one slide of a deck: `surface`, a 1px `line` ring, the 11px box corner, 16:9. The heading is in the heading font; an optional body, bullet points and a footer line follow. `variant="title"` is the opening slide, with a larger heading centred in the box. Type and padding are sized from the box's own width (container units), each with a floor, so a slide reads the same in a narrow column and in full screen. Below about tablet width the floor wins and a full slide grows taller than 16:9 instead of shrinking its text.
 - **Local time (`local-time.tsx`):** a `<time>` in the viewer's time zone ("Wed, Oct 7, 2:30 PM"), with the full date and zone as its title. The locale is fixed to `en-US` so server and browser print the same text.
 - **Needs-you tiles (Pipeline):** four 56px-tall buttons with a 9px corner, `surface` and a `line` border: the count in the heading font at `text-xl` with tabular numerals, the label in `ink-2`. The pressed one has an `ink` border and `surface-2`. A zero is inactive at 40%.
 - **Stage tabs (Pipeline):** the library's line tabs with each count in `ink-2` after its label. The three exits follow a short vertical `line` rule. The row scrolls sideways on narrow screens.
 
-**The Verdict And Status Tone Rule.** A verdict or status takes its tone from the one mapping in `src/lib/leads/rules.ts` (`VERDICT_META`, `STATUS_META`). No screen chooses a tone for one itself. The same holds for every other status the mockups added (a proposal, an invoice, a connection, an invite, a notification): each has one mapping in its own `src/lib/<entity>/rules.ts`.
+**The Verdict And Status Tone Rule.** A verdict or status takes its tone from the one mapping in `src/lib/leads/rules.ts` (`VERDICT_META`, `STATUS_META`). No screen chooses a tone for one itself. The same holds for every other status the mockups added, each with one mapping in its own `rules.ts`: `PROPOSAL_STATUS_META` (`src/lib/proposals`), `INVOICE_STATUS_META` (`src/lib/invoices`), `CONNECTION_STATUS_META` (`src/lib/connections`), `MEMBER_STATUS_META` (`src/lib/members`) and `UNREAD_META` (`src/lib/notifications`).
 
 **The Workspace Below The Line Rule.** In the sidebar, a person's work sits above the divider and the Workspace's own screens below it. Settings in the sidebar are the Workspace's. A person's own settings are reached from the user menu and never appear in the sidebar.
 
@@ -593,6 +594,7 @@ Per `AGENTS.md` and spec 03: a piece of interface used, or likely to be used, by
 
 These are named in spec 03 or implied by the product, but nothing in the code defines them yet. Do not treat any of them as settled.
 
+- The mockup screens (Notifications, Deck presenter, Proposal builder, the invoice draft, Users and roles, Workspace settings, Integrations, Account settings) and the role preview were built to this file and are covered by tests, but have not been looked at in a signed-in browser.
 - The dashboard has not been looked at by a person in a signed-in browser. Its shell and screens are built to this file and the specs and are covered by tests, but spacing, the sidebar's collapsed and sheet forms, and both themes still need a visual pass.
 - A fixed size for each heading level. Headings take the heading font and weight globally; sizes are set per use.
 - A spacing scale of our own. Tailwind's default is in use.

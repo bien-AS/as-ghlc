@@ -51,7 +51,36 @@ Nothing past this line is specified: not the draft's contents, the field mapping
 
 ## In the current build
 
-Nothing is built. There is no invoice screen and no placeholder for one.
+In the first build nothing was built: no invoice screen and no placeholder for one. A mockup of the draft now shows on Lead detail; see below.
+
+## As built (mockup)
+
+> **This is a mockup.** It runs on sample data, connects to nothing outside the app, and is built on the assumptions listed here. This spec's status and its open questions are unchanged.
+
+This spec defines no screen, so the mockup adds none. The draft is shown where the spec places it: on **Lead detail** (spec 06).
+
+**What the mockup shows**
+
+- On a won lead, the Invoice panel shows the draft: its status ("Draft") as a word in a chip, one line per service with its amount, the total, and when it was drafted, with the line "Finish and send it in the invoice service. Sample data: there is nothing to open."
+- A lead with no invoice says a draft is created when the proposal is signed.
+- Lead detail's **Check invoice draft** action, which the first build showed disabled, now goes to that panel.
+- Signing a proposal in the proposal builder mockup (spec 14) creates the draft and raises "Invoice draft ready" (spec 08).
+
+**Assumptions and mock choices**
+
+| Where                                                       | Question           | What is assumed                                                                                                   |
+| ----------------------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `INVOICE_STATUS_WHEN_CREATED` in `src/lib/data/invoices.ts` | 3 (assumed)        | Draft only. It is the one status the app gives an invoice; the rep finishes it in the invoice service.            |
+| `invoiceLinesFrom` in `src/lib/data/invoices.ts`            | None (mock choice) | One invoice line per line of the signed proposal's snapshot. The real mapping is one of the things still missing. |
+| `INVOICE_STATUS_META` in `src/lib/invoices/rules.ts`        | None (mock choice) | The status words and tones. The status values are not listed in the data model sketch.                            |
+
+**What is faked**
+
+- The draft. It exists only in server memory and in no invoice service; there is nothing to open.
+- One sample lead already carries the status "sent", so that word is in the contract. The app never produces it.
+- Failure handling, and anything about sending or managing invoices, is not built.
+
+**To go live** (function bodies only): in `src/lib/data/invoices.ts`, `getInvoice`, `createInvoiceDraft` and `invoiceLinesFrom`; `createInvoiceDraft` in `src/lib/services/invoice-service.ts`, the one place the invoice service's client will live.
 
 ## When unblocked
 
