@@ -1,5 +1,7 @@
 import { buildSampleLeads, type LeadRecord } from "@/lib/data/fixtures/leads";
-import { AccessError, requireUser } from "@/lib/data/users";
+import { SAMPLE_DATA } from "@/lib/data/sample";
+import { AccessError } from "@/lib/data/users";
+import { canSeeLead, getViewer, type Viewer } from "@/lib/data/viewer";
 import { effectiveVerdict, nextStep } from "@/lib/leads/rules";
 import {
   EXITS,
@@ -19,18 +21,17 @@ import {
 /*
  * Data access for leads (spec 04, "The sample-data seam"; ADR-0006).
  *
- * THE SEAM. Every exported function starts with the current-user guard and
- * then reads or changes the sample store. Going live means replacing the
- * bodies of the exported functions below with database queries (and adding the
- * Workspace ownership check beside `requireUser`, spec 12), deleting
- * `fixtures/`, and setting SAMPLE_DATA to false. Schemas, Route Handlers,
- * query options, hooks and components do not change.
+ * THE SEAM. Every exported function starts with the guard (`getViewer`: the
+ * current user, then their role) and then reads or changes the sample store.
+ * Going live means replacing the bodies of the exported functions below with
+ * database queries (the Workspace ownership check goes in `getViewer`, spec
+ * 12), deleting `fixtures/`, and setting SAMPLE_DATA to false. Schemas, Route
+ * Handlers, query options, hooks and components do not change.
  *
  * This is the only module, with its tests, that imports the fixtures.
  */
 
-/** Drives the "Sample data" label. False once the bodies below query the database. */
-export const SAMPLE_DATA = true;
+export { SAMPLE_DATA };
 
 /**
  * Question 4 (assumed): a suspect's booking is kept until a rep reviews it.
@@ -136,23 +137,31 @@ function needsOf(lead: LeadDetail, today: string, timeZone: string): Need[] {
   return needs;
 }
 
-function find(leadId: string): LeadRecord {
-  const record = records().find((lead) => lead.id === leadId);
+/** The leads this viewer may see (spec 12: staff see only their own). */
+const visible = (viewer: Viewer) =>
+  records().filter((lead) => canSeeLead(viewer, lead));
+
+/** A lead the viewer may not see answers as if it did not exist. */
+function find(leadId: string, viewer: Viewer): LeadRecord {
+  const record = visible(viewer).find((lead) => lead.id === leadId);
   if (!record) throw new AccessError("not_found");
   return record;
 }
 
+const SYSTEM = { kind: "system", name: "System" } as const;
+
 /** One entry at the top of the timeline; the timeline is append-only (spec 09). */
 function addActivity(
   record: LeadRecord,
-  actorName: string,
+  /** A user's name, or the system. */
+  actor: string | typeof SYSTEM,
   type: string,
   detail: string,
   time: string,
 ) {
   record.activities.unshift({
     id: `${record.id}-a${record.activities.length + 1}`,
-    actor: { kind: "user", name: actorName },
+    actor: typeof actor === "string" ? { kind: "user", name: actor } : actor,
     type,
     detail,
     time,
@@ -172,11 +181,11 @@ function cancelUpcomingBookings(record: LeadRecord) {
 
 /** A page of list items for the Pipeline and the suspect queue. */
 export async function listLeads(query: ListLeadsQuery): Promise<LeadPage> {
-  await requireUser();
+  const viewer = await getViewer();
 
   const today = localDay(Date.now(), query.tz);
   const text = query.q?.toLowerCase();
-  const matches = records()
+  const matches = visible(viewer)
     .map(toDetail)
     .map((lead) => ({ lead, needs: needsOf(lead, today, query.tz) }))
     .filter(({ lead, needs }) => {
@@ -226,7 +235,7 @@ export async function listLeads(query: ListLeadsQuery): Promise<LeadPage> {
 export async function getPipelineSummary(query: {
   tz: string;
 }): Promise<PipelineSummary> {
-  await requireUser();
+  const viewer = await getViewer();
 
   const today = localDay(Date.now(), query.tz);
   const zero = <K extends string>(keys: readonly K[]) =>
@@ -240,7 +249,7 @@ export async function getPipelineSummary(query: {
   };
   const owners = new Map<string, string>();
 
-  for (const lead of records().map(toDetail)) {
+  for (const lead of visible(viewer).map(toDetail)) {
     owners.set(lead.owner.id, lead.owner.name);
     if (lead.exit) {
       summary.exits[lead.exit] += 1;
@@ -258,8 +267,7 @@ export async function getPipelineSummary(query: {
 
 /** One lead in detail. */
 export async function getLead(leadId: string): Promise<LeadDetail> {
-  await requireUser();
-  return toDetail(find(leadId));
+  return toDetail(find(leadId, await getViewer()));
 }
 
 /** Records a rep's decision on a suspect (spec 07). */
@@ -267,8 +275,9 @@ export async function reviewSuspect(
   leadId: string,
   input: ReviewInput,
 ): Promise<LeadDetail> {
-  const user = await requireUser();
-  const record = find(leadId);
+  const viewer = await getViewer();
+  const { user } = viewer;
+  const record = find(leadId, viewer);
   if (!nextStep(toDetail(record)).canReview || !record.verdictRecord) {
     throw new AccessError("conflict");
   }
@@ -308,8 +317,9 @@ export async function setQualification(
   leadId: string,
   input: QualificationInput,
 ): Promise<LeadDetail> {
-  const user = await requireUser();
-  const record = find(leadId);
+  const viewer = await getViewer();
+  const { user } = viewer;
+  const record = find(leadId, viewer);
   if (!nextStep(toDetail(record)).canQualify) throw new AccessError("conflict");
 
   const actor = `${user.firstName} ${user.lastName}`;
@@ -343,8 +353,9 @@ export async function markLost(
   leadId: string,
   input: LostInput,
 ): Promise<LeadDetail> {
-  const user = await requireUser();
-  const record = find(leadId);
+  const viewer = await getViewer();
+  const { user } = viewer;
+  const record = find(leadId, viewer);
   if (!nextStep(toDetail(record)).canMarkLost)
     throw new AccessError("conflict");
 
@@ -362,8 +373,9 @@ export async function markLost(
 
 /** Marks a lead spam and cancels its upcoming booking (spec 06; question 5, assumed). */
 export async function markSpam(leadId: string): Promise<LeadDetail> {
-  const user = await requireUser();
-  const record = find(leadId);
+  const viewer = await getViewer();
+  const { user } = viewer;
+  const record = find(leadId, viewer);
   if (!nextStep(toDetail(record)).canMarkSpam)
     throw new AccessError("conflict");
 
@@ -375,6 +387,110 @@ export async function markSpam(leadId: string): Promise<LeadDetail> {
     `${user.firstName} ${user.lastName}`,
     "Marked spam",
     "Removed from the pipeline as spam.",
+    new Date().toISOString(),
+  );
+  return toDetail(record);
+}
+
+// ---------------------------------------------------------------------------
+// For the other data-access modules (decks, proposals, invoices,
+// notifications): the blocks of spec 09 that read leads and change them. Not
+// called by Route Handlers. With real data these become queries and writes on
+// the same rows, inside one transaction with the caller's own write.
+// ---------------------------------------------------------------------------
+
+/** Every lead the viewer may see, in detail, in no particular order. */
+export async function listVisibleLeads(): Promise<LeadDetail[]> {
+  return visible(await getViewer()).map(toDetail);
+}
+
+/**
+ * Records where a lead's proposal stands, and what follows from it (spec 14,
+ * "Hands on to"): sending moves the lead to Proposal Sent; signing moves it to
+ * Lead Won. Which change is allowed when is the proposals module's rule; this
+ * only refuses a lead that has left the pipeline.
+ */
+export async function recordProposalStatus(
+  leadId: string,
+  status: NonNullable<LeadDetail["proposal"]>["status"],
+): Promise<LeadDetail> {
+  const viewer = await getViewer();
+  const record = find(leadId, viewer);
+  if (record.exit) throw new AccessError("conflict");
+
+  const actor = `${viewer.user.firstName} ${viewer.user.lastName}`;
+  const time = new Date().toISOString();
+  record.proposal = { status };
+  if (status === "draft") {
+    record.status = "proposal_ready";
+    addActivity(record, actor, "Proposal drafted", "A draft is ready.", time);
+  } else if (status === "sent") {
+    record.stage = "proposal_sent";
+    record.status = "proposal_ready";
+    addActivity(
+      record,
+      actor,
+      "Proposal sent",
+      "The proposal was sent to the lead.",
+      time,
+    );
+  } else if (status === "viewed") {
+    addActivity(
+      record,
+      SYSTEM,
+      "Proposal viewed",
+      "The lead opened the proposal.",
+      time,
+    );
+  } else if (status === "signed") {
+    record.stage = "won";
+    record.status = "qualified";
+    addActivity(
+      record,
+      SYSTEM,
+      "Proposal signed",
+      "The lead signed the proposal.",
+      time,
+    );
+  } else {
+    record.exit = "lost";
+    record.status = "removed";
+    addActivity(record, actor, "Proposal lost", "The proposal was lost.", time);
+  }
+  return toDetail(record);
+}
+
+/** Records that an invoice draft now exists for a won lead (spec 15). */
+export async function recordInvoiceDraft(leadId: string): Promise<LeadDetail> {
+  const record = find(leadId, await getViewer());
+  if (record.stage !== "won" || record.exit) throw new AccessError("conflict");
+
+  record.invoice = { status: "draft" };
+  addActivity(
+    record,
+    SYSTEM,
+    "Invoice drafted",
+    "An invoice draft was created from the signed proposal.",
+    new Date().toISOString(),
+  );
+  return toDetail(record);
+}
+
+/** Records which template a lead's deck now uses (spec 13). */
+export async function recordDeckTemplate(
+  leadId: string,
+  templateName: string,
+): Promise<LeadDetail> {
+  const viewer = await getViewer();
+  const record = find(leadId, viewer);
+  if (!record.deck) throw new AccessError("not_found");
+
+  record.deck.templateName = templateName;
+  addActivity(
+    record,
+    `${viewer.user.firstName} ${viewer.user.lastName}`,
+    "Deck template changed",
+    `The deck now uses the ${templateName} template.`,
     new Date().toISOString(),
   );
   return toDetail(record);

@@ -17,6 +17,7 @@ import {
   renderScreen,
   startDashboard,
   stopDashboard,
+  viewAs,
 } from "@/test/dashboard";
 import { address, resetNavigation } from "@/test/navigation";
 import { auth, navigate, resetClientFakes } from "@/test/render";
@@ -93,9 +94,10 @@ const mainNav = () => screen.getByRole("navigation", { name: "Main" });
 const navLinks = () => within(mainNav()).getAllByRole("link");
 const toggle = () => screen.getByRole("button", { name: "Navigation" });
 
-test("the sidebar lists all seven screens in order, built ones first, each resolving to its route", async () => {
+test("the sidebar lists every screen in order: a rep's work, a divider, then the Workspace's own screens", async () => {
   open();
   await screen.findByRole("link", { name: /Suspect review, 6 waiting/ });
+  await screen.findByRole("link", { name: "Integrations" });
 
   expect(navLinks().map((link) => link.getAttribute("href"))).toEqual([
     "/dashboard",
@@ -105,25 +107,25 @@ test("the sidebar lists all seven screens in order, built ones first, each resol
     "/dashboard/proposal-builder",
     "/dashboard/users",
     "/dashboard/settings",
+    "/dashboard/integrations",
   ]);
-  // The five unbuilt screens come after a divider, each marked Soon and said
-  // to be not built yet; they are still links.
-  const names = navLinks().map((link) => link.textContent);
-  expect(names.slice(0, 2).some((name) => name?.includes("Soon"))).toBe(false);
-  for (const name of names.slice(2)) {
-    expect(name).toContain("Soon");
-    expect(name).toContain("not built yet");
-  }
+  // Every screen is built: nothing is marked Soon.
+  expect(mainNav().textContent).not.toContain("Soon");
+  expect(mainNav().textContent).not.toContain("not built yet");
+  // Personal settings are not in the sidebar; they are in the user menu.
+  expect(mainNav().textContent).not.toContain("Account");
+
   const separator = mainNav().querySelector('[data-slot="sidebar-separator"]');
   expect(separator).not.toBeNull();
   expect(
-    navLinks()[1].compareDocumentPosition(separator as Element) &
+    navLinks()[4].compareDocumentPosition(separator as Element) &
       Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
   expect(
-    navLinks()[2].compareDocumentPosition(separator as Element) &
+    navLinks()[5].compareDocumentPosition(separator as Element) &
       Node.DOCUMENT_POSITION_PRECEDING,
   ).toBeTruthy();
+  expect(within(mainNav()).getByText("Workspace")).toBeDefined();
 
   // The wordmark leads home, and the shell never uses the internal name.
   expect(
@@ -140,7 +142,8 @@ test.each([
   ["/dashboard/leads/lead-09", "Pipeline"],
   ["/dashboard/suspects", "Suspect review"],
   ["/dashboard/suspects/lead-03", "Suspect review"],
-  ["/dashboard/settings", "Settings and integrations"],
+  ["/dashboard/settings", "Workspace settings"],
+  ["/dashboard/integrations", "Integrations"],
 ])(
   "at %s the current screen is %s, and only it is marked current",
   async (at, label) => {
@@ -223,7 +226,7 @@ test("on a small screen the sidebar is hidden until the menu button opens it as 
 
   fireEvent.click(toggle());
   const sheet = await screen.findByRole("dialog", { name: "Navigation" });
-  expect(within(sheet).getAllByRole("link").length).toBeGreaterThanOrEqual(7);
+  expect(within(sheet).getAllByRole("link").length).toBeGreaterThanOrEqual(8);
 
   fireEvent.click(within(sheet).getByRole("link", { name: /Suspect review/ }));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
@@ -237,7 +240,15 @@ test("on a small screen the sidebar is hidden until the menu button opens it as 
 test("the navbar shows where you are; inside a lead it is Pipeline, then the lead's name, with Pipeline a link", async () => {
   open("/dashboard/settings");
   const crumbs = () => screen.getByRole("navigation", { name: "breadcrumb" });
-  expect(crumbs().textContent).toBe("Settings and integrations");
+  expect(crumbs().textContent).toBe("Workspace settings");
+
+  // A screen with no sidebar entry still has its title.
+  cleanup();
+  open("/dashboard/account");
+  expect(crumbs().textContent).toBe("Account settings");
+  expect(
+    navLinks().filter((link) => link.getAttribute("aria-current") === "page"),
+  ).toEqual([]);
 
   cleanup();
   resetNavigation("/dashboard/leads/lead-09");
@@ -286,9 +297,11 @@ test("typing in the navbar search and pressing Enter opens the Pipeline with tha
   expect(address()).toBe("/dashboard?q=Bellweather%20%26%20Sons");
 });
 
-test("the navbar carries the notifications entry, the Sample data label with its explanation, and the theme switch", async () => {
+test("the navbar carries the notifications entry, the Sample data label with its explanation, and the role preview", async () => {
   open();
-  const bell = screen.getByRole("link", { name: "Notifications" });
+  const bell = within(screen.getByRole("banner")).getByRole("link", {
+    name: "Notifications",
+  });
   expect(bell.getAttribute("href")).toBe("/dashboard/notifications");
   expect(bell.textContent).toBe("");
 
@@ -299,10 +312,14 @@ test("the navbar carries the notifications entry, the Sample data label with its
       "The leads shown are examples. Changes are not kept: they reset when the server restarts.",
     ),
   ).toBeDefined();
-  expect(screen.getByRole("group", { name: "Theme" })).toBeDefined();
+  // The theme is chosen in the user menu; the navbar has no switch of its own.
+  expect(screen.queryByRole("group", { name: "Theme" })).toBeNull();
+  expect(
+    await screen.findByRole("button", { name: "Viewing as Owner (preview)" }),
+  ).toBeDefined();
 });
 
-test("the user menu shows the signed-in user's name and email, and Sign out ends the session", async () => {
+test("the user menu shows the signed-in user's name and email, Settings, the theme, and Sign out ends the session", async () => {
   open();
   const trigger = await screen.findByRole("button", {
     name: "Account: Ada Lovelace",
@@ -311,36 +328,111 @@ test("the user menu shows the signed-in user's name and email, and Sign out ends
   const menu = await screen.findByRole("menu");
   expect(within(menu).getByText("Ada Lovelace")).toBeDefined();
   expect(within(menu).getByText("ada@example.com")).toBeDefined();
-  // On a wide screen the theme switch is in the navbar, not repeated here.
-  expect(within(menu).queryByRole("menuitemradio")).toBeNull();
-
-  fireEvent.click(within(menu).getByRole("menuitem", { name: "Sign out" }));
-  await waitFor(() => expect(auth.signOut).toHaveBeenCalledTimes(1));
-  await waitFor(() => expect(navigate).toHaveBeenCalledWith("/"));
-});
-
-test("on a small screen the theme and the Sample data note move into the user menu", async () => {
-  narrowScreen();
-  open();
-  // The navbar's own switch is not displayed below the `nav` breakpoint.
-  expect(screen.getByRole("group", { name: "Theme" }).className).toMatch(
-    /(^| )hidden( |$)/,
-  );
-
-  fireEvent.click(await screen.findByRole("button", { name: /Account/ }));
-  const menu = await screen.findByRole("menu");
+  // Settings here are the person's own; the Workspace's are in the sidebar.
+  expect(
+    within(menu)
+      .getByRole("menuitem", { name: "Settings" })
+      .getAttribute("href"),
+  ).toBe("/dashboard/account");
   expect(
     within(menu)
       .getAllByRole("menuitemradio")
       .map((item) => item.textContent),
   ).toEqual(["System", "Light", "Dark"]);
-  expect(within(menu).getByText(/The leads shown are examples/)).toBeDefined();
 
   fireEvent.click(within(menu).getByRole("menuitemradio", { name: "Dark" }));
   expect(document.documentElement.classList.contains("dark")).toBe(true);
   expect(localStorage.getItem("theme")).toBe("dark");
   localStorage.clear();
   document.documentElement.className = "";
+
+  fireEvent.click(within(menu).getByRole("menuitem", { name: "Sign out" }));
+  await waitFor(() => expect(auth.signOut).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith("/"));
+});
+
+test("on a small screen the role preview and the Sample data note move into the user menu", async () => {
+  narrowScreen();
+  open();
+  fireEvent.click(await screen.findByRole("button", { name: /Account/ }));
+  const menu = await screen.findByRole("menu");
+  expect(within(menu).getByText(/The leads shown are examples/)).toBeDefined();
+  expect(within(menu).getByText("Viewing as (preview)")).toBeDefined();
+  expect(
+    within(menu)
+      .getAllByRole("menuitemradio")
+      .map((item) => item.textContent),
+  ).toEqual(expect.arrayContaining([expect.stringMatching(/^Staff/)]));
+});
+
+// --- the role preview (spec 12, question 7: proposed roles) -------------------
+
+test("the role preview says it is a preview, lists the three roles with what each sees, and marks the current one", async () => {
+  open();
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Viewing as Owner (preview)" }),
+  );
+  const menu = await screen.findByRole("menu");
+  const roles = within(menu).getAllByRole("menuitemradio");
+  expect(roles.map((role) => role.textContent)).toEqual([
+    "OwnerEverything in the Workspace",
+    "AdminEvery lead, plus users and connections",
+    "StaffOnly the leads assigned to them",
+  ]);
+  expect(roles.map((role) => role.getAttribute("aria-checked"))).toEqual([
+    "true",
+    "false",
+    "false",
+  ]);
+  expect(within(menu).getByText(/not who has access/)).toBeDefined();
+});
+
+test("choosing another role saves it on the server and loads the page again, so the server decides what that role sees", async () => {
+  open("/dashboard/users");
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Viewing as Owner (preview)" }),
+  );
+  fireEvent.click(
+    within(await screen.findByRole("menu")).getByRole("menuitemradio", {
+      name: /Staff/,
+    }),
+  );
+
+  // A full load of the page the person is on (jsdom's own address is "/").
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith("/"));
+  expect(api.calls()).toContain("POST /api/viewer/role");
+  expect(fake.cookies.get("dw_preview_role")).toBe("staff");
+});
+
+test("viewed as Staff, the Workspace's screens leave the sidebar and the preview says whose leads are shown", async () => {
+  viewAs("staff");
+  open();
+  const control = await screen.findByRole("button", {
+    name: "Viewing as Staff (preview)",
+  });
+  expect(navLinks().map((link) => link.getAttribute("href"))).toEqual([
+    "/dashboard",
+    "/dashboard/suspects",
+    "/dashboard/notifications",
+    "/dashboard/deck-presenter",
+    "/dashboard/proposal-builder",
+  ]);
+  expect(mainNav().textContent).not.toContain("Workspace");
+  expect(mainNav().querySelector('[data-slot="sidebar-separator"]')).toBeNull();
+
+  fireEvent.click(control);
+  expect(
+    within(await screen.findByRole("menu")).getByText(
+      /Staff is shown Maya Okafor's leads\./,
+    ),
+  ).toBeDefined();
+});
+
+test("viewed as Admin, the sidebar is the same as the Owner's", async () => {
+  viewAs("admin");
+  open();
+  await screen.findByRole("button", { name: "Viewing as Admin (preview)" });
+  expect(navLinks()).toHaveLength(8);
 });
 
 test("Skip to content is the first thing focus reaches and points at the main area, which holds the screen", () => {
@@ -375,47 +467,8 @@ const placeholder = async (rest: string[]) =>
     }),
   );
 
-test.each(
-  NAV_ITEMS.filter((item) => !item.built).map(
-    (item) => [item.label, item] as const,
-  ),
-)(
-  "the %s placeholder names the screen, says Not built yet, what it will do and what it waits on, and offers no control",
-  async (label, item) => {
-    if (item.built) throw new Error("unreachable");
-    await placeholder(item.href.split("/").slice(2));
-
-    expect(
-      screen.getByRole("heading", { level: 1, name: label }),
-    ).toBeDefined();
-    expect(screen.getByText("Not built yet")).toBeDefined();
-    expect(screen.getByText(item.willDo)).toBeDefined();
-    expect(screen.getByRole("heading", { name: "Waiting on" })).toBeDefined();
-    expect(
-      screen.getAllByRole("listitem").map((entry) => entry.textContent),
-    ).toEqual(item.waitingOn);
-    expect(item.waitingOn.length).toBeGreaterThan(0);
-    // Nothing that looks like a working control, and no brand names.
-    expect(
-      document.querySelectorAll("button, a, input, select, textarea"),
-    ).toHaveLength(0);
-    expect(document.body.textContent).not.toMatch(FORBIDDEN);
-  },
-);
-
-test("there are exactly five placeholders, and each sidebar entry is a built screen or one of them", () => {
-  expect(
-    NAV_ITEMS.filter((item) => !item.built).map((item) => item.label),
-  ).toEqual([
-    "Notifications",
-    "Deck presenter",
-    "Proposal builder",
-    "Users and roles",
-    "Settings and integrations",
-  ]);
-  expect(
-    NAV_ITEMS.filter((item) => item.built).map((item) => item.href),
-  ).toEqual(["/dashboard", "/dashboard/suspects"]);
+test("no placeholder remains: every sidebar entry is a built screen", () => {
+  expect(NAV_ITEMS.filter((item) => !item.built)).toEqual([]);
 });
 
 test("an unknown dashboard address is page not found, with a link to the Pipeline", async () => {
@@ -435,14 +488,14 @@ test("an unknown dashboard address is page not found, with a link to the Pipelin
   ).toBe("/dashboard");
 });
 
-test("a placeholder page applies the who-is-sent-where table itself: signed out and profile-less visitors are redirected", async () => {
+test("the catch-all page applies the who-is-sent-where table itself: signed out and profile-less visitors are redirected", async () => {
   fake.users.clear();
-  await expect(placeholder(["settings"])).rejects.toThrow(
+  await expect(placeholder(["nowhere"])).rejects.toThrow(
     "redirect:/profile-setup",
   );
   fake.claims = null;
-  await expect(placeholder(["settings"])).rejects.toThrow(
-    "redirect:/sign-in?next=%2Fdashboard%2Fsettings",
+  await expect(placeholder(["nowhere"])).rejects.toThrow(
+    "redirect:/sign-in?next=%2Fdashboard%2Fnowhere",
   );
 });
 

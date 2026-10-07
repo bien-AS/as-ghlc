@@ -4,6 +4,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { AppSidebar } from "@/components/ui/app-sidebar";
+import {
+  RolePreview,
+  type RolePreviewProps,
+} from "@/components/ui/role-preview";
 import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { type Crumb, TopNavbar } from "@/components/ui/top-navbar";
 import { UserMenu } from "@/components/ui/user-menu";
@@ -11,13 +15,17 @@ import { useCurrentUser, useSignOut } from "@/hooks/use-auth";
 import { useLoadedLeadName, usePipelineSummary } from "@/hooks/use-leads";
 import { usePipelineHref } from "@/hooks/use-pipeline-href";
 import { TimeZoneProvider } from "@/hooks/use-time-zone";
+import { useSetPreviewRole, useViewer } from "@/hooks/use-viewer";
+import { can, ROLE_LABEL, ROLE_SEES, ROLES, type Role } from "@/lib/roles";
 
 import {
+  ACCOUNT_HREF,
   NAV_ITEMS,
   NOTIFICATIONS_HREF,
   navItemFor,
   PIPELINE_HREF,
   SUSPECTS_HREF,
+  titleFor,
 } from "../navigation";
 
 const SAMPLE_DATA_NOTE =
@@ -75,6 +83,8 @@ function Frame({
   const me = useCurrentUser();
   const summary = usePipelineSummary();
   const signOut = useSignOut();
+  const viewer = useViewer();
+  const setRole = useSetPreviewRole();
   const pipelineHref = usePipelineHref();
   const main = useRef<HTMLElement>(null);
 
@@ -94,7 +104,8 @@ function Frame({
   const leadName = useLoadedLeadName(
     section === "leads" || section === "suspects" ? leadId : undefined,
   );
-  const crumbs: Crumb[] = !item
+  const title = titleFor(pathname);
+  const crumbs: Crumb[] = !title
     ? [{ label: "Page not found" }]
     : section === "leads"
       ? [
@@ -106,7 +117,42 @@ function Frame({
             { label: "Suspect review", href: SUSPECTS_HREF },
             { label: leadName ?? "Lead" },
           ]
-        : [{ label: item.label }];
+        : [{ label: title }];
+
+  // Hiding is not the control (spec 12): the server refuses a role that types
+  // the address. Until the role is known, only what every role has is listed.
+  const role = viewer.data?.role;
+  const group = (name: "work" | "workspace") =>
+    NAV_ITEMS.filter(
+      (entry) =>
+        entry.group === name &&
+        (!entry.requires || (role !== undefined && can(role, entry.requires))),
+    ).map(({ label, href, icon, built }) => ({
+      label,
+      href,
+      icon,
+      built,
+      // No count rather than a zero or an error when it is unavailable.
+      count: href === SUSPECTS_HREF ? summary.data?.needs.suspects : undefined,
+    }));
+
+  // The role preview exists only while the dashboard runs on sample data.
+  const rolePreview: RolePreviewProps | undefined =
+    sampleData && viewer.data?.preview
+      ? {
+          value: viewer.data.role,
+          options: ROLES.map((value) => ({
+            value,
+            label: ROLE_LABEL[value],
+            sees: ROLE_SEES[value],
+          })),
+          pending: setRole.isPending || setRole.isSuccess,
+          onChange: (value) => setRole.mutate(value as Role),
+          detail: viewer.data.staffRep
+            ? `Staff is shown ${viewer.data.staffRep.name}'s leads.`
+            : undefined,
+        }
+      : undefined;
 
   const name = me.data ? `${me.data.firstName} ${me.data.lastName}` : "Account";
 
@@ -121,15 +167,10 @@ function Frame({
       <AppSidebar
         homeHref={PIPELINE_HREF}
         currentHref={item?.href}
-        items={NAV_ITEMS.map(({ label, href, icon, built }) => ({
-          label,
-          href,
-          icon,
-          built,
-          // No count rather than a zero or an error when it is unavailable.
-          count:
-            href === SUSPECTS_HREF ? summary.data?.needs.suspects : undefined,
-        }))}
+        groups={[
+          { items: group("work") },
+          { label: "Workspace", items: group("workspace") },
+        ]}
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopNavbar
@@ -144,11 +185,14 @@ function Frame({
           }
           notificationsHref={NOTIFICATIONS_HREF}
           sampleDataNote={sampleData ? SAMPLE_DATA_NOTE : undefined}
+          rolePreview={rolePreview && <RolePreview {...rolePreview} />}
           userMenu={
             <UserMenu
               name={name}
               email={me.data?.email ?? ""}
+              settingsHref={ACCOUNT_HREF}
               compact={isMobile}
+              rolePreview={rolePreview}
               sampleDataNote={sampleData ? SAMPLE_DATA_NOTE : undefined}
               signingOut={signOut.isPending || signOut.isSuccess}
               onSignOut={() => signOut.mutate()}

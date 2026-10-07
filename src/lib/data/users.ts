@@ -48,7 +48,9 @@ export type AccessErrorCode =
   | "email_conflict"
   // The resource does not exist, or its current state does not allow the write.
   | "not_found"
-  | "conflict";
+  | "conflict"
+  // Signed in, but the role does not allow this resource (spec 12).
+  | "forbidden";
 
 /** A data-access function refused. Route Handlers turn the code into 401 / 403 / 404 / 409. */
 export class AccessError extends Error {

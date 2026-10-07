@@ -12,6 +12,7 @@ import { HintLine } from "@/components/ui/hint-line";
 import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
 import { LocalTime } from "@/components/ui/local-time";
+import { PanelSection } from "@/components/ui/panel-section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/state-panel";
 import { Textarea } from "@/components/ui/textarea";
@@ -37,13 +38,8 @@ import {
   STATUS_META,
   VERDICT_META,
 } from "@/lib/leads/rules";
-import { cn } from "@/lib/utils";
 
-import {
-  DECK_PRESENTER_HREF,
-  PROPOSAL_BUILDER_HREF,
-  suspectHref,
-} from "../navigation";
+import { deckHref, proposalHref, suspectHref } from "../navigation";
 
 /** How many timeline entries show before "Show earlier" (spec 06, "Long content"). */
 const TIMELINE_FIRST = 20;
@@ -51,9 +47,9 @@ const TIMELINE_FIRST = 20;
 /** The actions that only lead somewhere else. Check invoice draft has nowhere to go yet. */
 const DESTINATION: Partial<Record<LeadAction, (leadId: string) => string>> = {
   review: suspectHref,
-  open_deck: () => DECK_PRESENTER_HREF,
-  start_proposal: () => PROPOSAL_BUILDER_HREF,
-  finish_proposal: () => PROPOSAL_BUILDER_HREF,
+  open_deck: deckHref,
+  start_proposal: proposalHref,
+  finish_proposal: proposalHref,
 };
 
 type Write = "qualify" | "not_qualify" | "lost" | "spam";
@@ -64,28 +60,6 @@ const DONE: Record<Write, string> = {
   lost: "Marked lost",
   spam: "Marked as spam",
 };
-
-function PanelSection({
-  title,
-  className,
-  children,
-}: {
-  title: string;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section
-      className={cn(
-        "flex flex-col gap-3 rounded-panel bg-card p-4 ring-1 ring-border",
-        className,
-      )}
-    >
-      <h2 className="label-caps">{title}</h2>
-      {children}
-    </section>
-  );
-}
 
 const Missing = () => (
   <>

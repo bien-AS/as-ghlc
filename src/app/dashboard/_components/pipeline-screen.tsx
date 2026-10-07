@@ -352,19 +352,23 @@ function Filters({
             </NativeSelectOption>
           ))}
         </NativeSelect>
-        <NativeSelect
-          aria-label="Rep"
-          value={owner}
-          onChange={(event) => onChange({ owner: event.target.value })}
-          className="flex-1 nav:flex-none"
-        >
-          <NativeSelectOption value="">Any rep</NativeSelectOption>
-          {owners.map(({ id, name }) => (
-            <NativeSelectOption key={id} value={id}>
-              {name}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+        {/* Spec 12: the rep filter is for a role that sees more than one
+            rep's leads. Staff are sent only their own rep, so it is left out. */}
+        {owners.length > 1 && (
+          <NativeSelect
+            aria-label="Rep"
+            value={owner}
+            onChange={(event) => onChange({ owner: event.target.value })}
+            className="flex-1 nav:flex-none"
+          >
+            <NativeSelectOption value="">Any rep</NativeSelectOption>
+            {owners.map(({ id, name }) => (
+              <NativeSelectOption key={id} value={id}>
+                {name}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        )}
       </div>
     </div>
   );

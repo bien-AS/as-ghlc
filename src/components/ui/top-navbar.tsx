@@ -17,7 +17,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSidebar } from "@/components/ui/sidebar";
-import { ThemeSwitch } from "@/components/ui/theme-switch";
 import {
   Tooltip,
   TooltipContent,
@@ -93,16 +92,19 @@ function SearchField({
 
 /**
  * The dashboard's top bar (spec 04): where you are, the lead search, the
- * notifications entry, the Sample data label, the theme switch and the user
- * menu. Below the `nav` breakpoint the search becomes an icon that opens the
- * field, and the theme switch and Sample data label live in the user menu.
+ * Sample data label, the notifications entry with its unread count, the role
+ * preview and the user menu. Below the `nav` breakpoint the search becomes an
+ * icon that opens the field, and the role preview and Sample data label live
+ * in the user menu. The theme is chosen in the user menu at every width.
  */
 function TopNavbar({
   crumbs,
   searchAction,
   onSearch,
   notificationsHref,
+  unreadCount,
   sampleDataNote,
+  rolePreview,
   userMenu,
 }: {
   /** The current screen last; earlier entries with an `href` are links. */
@@ -111,11 +113,18 @@ function TopNavbar({
   searchAction: string;
   onSearch: (text: string) => void;
   notificationsHref: string;
+  /** Unread notifications. Left out when unknown; zero shows no mark. */
+  unreadCount?: number;
+  /** The "Viewing as" control, while a role can be previewed. Hidden below `nav`. */
+  rolePreview?: React.ReactNode;
   /** Set while the dashboard runs on sample data: what the label explains. */
   sampleDataNote?: string;
   userMenu: React.ReactNode;
 }) {
   const [searching, setSearching] = useState(false);
+  const bellName = unreadCount
+    ? `Notifications, ${unreadCount} unread`
+    : "Notifications";
   const submit = (text: string) => {
     setSearching(false);
     onSearch(text);
@@ -218,17 +227,26 @@ function TopNavbar({
                 <LinkButton
                   variant="ghost"
                   size="icon"
-                  aria-label="Notifications"
+                  aria-label={bellName}
                   href={notificationsHref}
+                  className="relative"
                 />
               }
             >
               <BellIcon aria-hidden="true" />
+              {Boolean(unreadCount) && (
+                <span
+                  aria-hidden="true"
+                  className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[0.6875rem] leading-none font-semibold text-brand-ink tabular-nums"
+                >
+                  {(unreadCount ?? 0) > 99 ? "99+" : unreadCount}
+                </span>
+              )}
             </TooltipTrigger>
-            <TooltipContent side="bottom">Notifications</TooltipContent>
+            <TooltipContent side="bottom">{bellName}</TooltipContent>
           </Tooltip>
 
-          <ThemeSwitch className="hidden nav:inline-flex" />
+          {rolePreview && <div className="hidden nav:block">{rolePreview}</div>}
           {userMenu}
         </>
       )}

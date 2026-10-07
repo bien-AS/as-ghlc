@@ -14,6 +14,8 @@ type Claims = Record<string, unknown> | null;
 export const fake = {
   claims: null as Claims,
   users: new Map<string, CurrentUser>(),
+  /** The request's cookies, as `cookies()` from next/headers reads and writes them. */
+  cookies: new Map<string, string>(),
   verifyOtp: vi.fn(),
   exchangeCodeForSession: vi.fn(),
 };
@@ -21,6 +23,7 @@ export const fake = {
 export function resetFakes() {
   fake.claims = null;
   fake.users.clear();
+  fake.cookies.clear();
   fake.verifyOtp.mockReset().mockResolvedValue({ data: {}, error: null });
   fake.exchangeCodeForSession
     .mockReset()
@@ -47,6 +50,22 @@ export const supabaseServerModule = {
           : { data: null, error: null },
       verifyOtp: fake.verifyOtp,
       exchangeCodeForSession: fake.exchangeCodeForSession,
+    },
+  }),
+};
+
+/** Wired in for every test by src/test/setup.ts. */
+export const headersModule = {
+  cookies: async () => ({
+    get: (name: string) => {
+      const value = fake.cookies.get(name);
+      return value === undefined ? undefined : { name, value };
+    },
+    set: (name: string, value: string) => {
+      fake.cookies.set(name, value);
+    },
+    delete: (name: string) => {
+      fake.cookies.delete(name);
     },
   }),
 };

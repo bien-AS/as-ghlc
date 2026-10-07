@@ -7,10 +7,10 @@ import { enforceRoute } from "@/lib/data/users";
 import { NAV_ITEMS } from "../navigation";
 
 /*
- * Every dashboard address that no other route claims. The unbuilt screens in
- * the navigation table get the shared placeholder panel (spec 04, "Placeholder
- * convention"), so the five placeholder routes cannot diverge; anything else
- * is "page not found" inside the shell.
+ * Every dashboard address that no other route claims. A screen in the
+ * navigation table marked `built: false` gets the shared placeholder panel
+ * (spec 04, "Placeholder convention"); none is at present. Anything else is
+ * "page not found" inside the shell.
  */
 const placeholderFor = (rest: string[]) => {
   const path = `/dashboard/${rest.join("/")}`;

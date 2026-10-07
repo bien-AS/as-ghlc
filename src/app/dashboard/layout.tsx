@@ -4,8 +4,10 @@ import { redirect } from "next/navigation";
 
 import { getPipelineSummary, SAMPLE_DATA } from "@/lib/data/leads";
 import { enforceRoute } from "@/lib/data/users";
+import { getViewerSummary } from "@/lib/data/viewer";
 import { pipelineSummaryOptions } from "@/lib/queries/leads";
 import { meQueryOptions } from "@/lib/queries/me";
+import { viewerOptions } from "@/lib/queries/viewer";
 import { getQueryClient } from "@/lib/query-client";
 import { getViewerTimeZone } from "@/lib/viewer-time-zone";
 
@@ -31,14 +33,21 @@ export default async function DashboardLayout({
   // Written by the sidebar when the person collapses or expands it.
   const remembered = (await cookies()).get("sidebar_state")?.value;
 
-  // ADR-0001: what the shell shows on first paint (the user menu and the
-  // suspect count) is prefetched through the data-access layer, never over HTTP.
+  // ADR-0001: what the shell shows on first paint (the user menu, the role
+  // and the suspect count) is prefetched through the data-access layer, never over HTTP.
   const queryClient = getQueryClient();
   queryClient.setQueryData(meQueryOptions.queryKey, current.user);
-  await queryClient.prefetchQuery({
-    ...pipelineSummaryOptions(timeZone),
-    queryFn: () => getPipelineSummary({ tz: timeZone }),
-  });
+  await Promise.all([
+    queryClient.prefetchQuery({
+      ...pipelineSummaryOptions(timeZone),
+      queryFn: () => getPipelineSummary({ tz: timeZone }),
+    }),
+    // The role decides which sidebar entries exist, so it is known on first paint.
+    queryClient.prefetchQuery({
+      ...viewerOptions,
+      queryFn: getViewerSummary,
+    }),
+  ]);
 
   return (
     <HydrationBoundary state={dehydrate(queryClient)}>

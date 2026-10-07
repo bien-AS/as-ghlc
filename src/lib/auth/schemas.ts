@@ -69,4 +69,5 @@ export type ApiErrorCode =
   | "profile_form_required"
   | "invalid_input"
   | "not_found"
-  | "conflict";
+  | "conflict"
+  | "forbidden";

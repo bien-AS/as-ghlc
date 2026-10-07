@@ -9,6 +9,7 @@ const STATUS: Record<AccessErrorCode, number> = {
   email_conflict: 409,
   not_found: 404,
   conflict: 409,
+  forbidden: 403,
 };
 
 export function apiError(

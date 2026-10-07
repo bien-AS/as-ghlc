@@ -191,12 +191,12 @@ test.each([
       main ? [main] : [],
     );
 
-    // Where the actions that are not built yet lead.
+    // Where the actions that open another screen lead: its mock, for this lead.
     const destination: Record<string, string> = {
       "Review suspect": `/dashboard/suspects/${leadId}`,
-      "Open deck": "/dashboard/deck-presenter",
-      "Start proposal": "/dashboard/proposal-builder",
-      "Finish proposal": "/dashboard/proposal-builder",
+      "Open deck": `/dashboard/deck-presenter?lead=${leadId}`,
+      "Start proposal": `/dashboard/proposal-builder?lead=${leadId}`,
+      "Finish proposal": `/dashboard/proposal-builder?lead=${leadId}`,
     };
     if (main && destination[main]) {
       expect(primary[0].getAttribute("href")).toBe(destination[main]);

@@ -78,4 +78,25 @@ function ErrorState({
   );
 }
 
-export { EmptyState, ErrorState };
+/**
+ * Not allowed (spec 12): the viewer's role cannot use this screen. The server
+ * has already refused; this only says so, and offers the way back.
+ */
+function NotAllowedState({
+  action,
+  className,
+}: {
+  action?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <EmptyState
+      title="You do not have access to this screen"
+      description="It is for admins and owners of the Workspace. Ask one of them if you need something changed here."
+      action={action}
+      className={className}
+    />
+  );
+}
+
+export { EmptyState, ErrorState, NotAllowedState };

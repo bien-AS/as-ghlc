@@ -7,9 +7,13 @@ import { POST as postSpam } from "@/app/api/leads/[leadId]/spam/route";
 import { GET as getLeads } from "@/app/api/leads/route";
 import { GET as getMe } from "@/app/api/me/route";
 import { GET as getSummary } from "@/app/api/pipeline/summary/route";
+import { POST as postViewerRole } from "@/app/api/viewer/role/route";
+import { GET as getViewer } from "@/app/api/viewer/route";
 import { Toaster } from "@/components/ui/toast";
 import { listLeads, resetSampleLeads } from "@/lib/data/leads";
+import { PREVIEW_ROLE_COOKIE } from "@/lib/data/viewer";
 import { listLeadsQuerySchema } from "@/lib/leads/schemas";
+import type { Role } from "@/lib/roles";
 import { resetNavigation } from "@/test/navigation";
 import { renderPage } from "@/test/render";
 import { fake, resetFakes, signIn } from "@/test/server-fakes";
@@ -37,20 +41,25 @@ export const ada = {
 
 // --- the API -----------------------------------------------------------------
 
-type Handler = (
-  request: Request,
-  context: { params: Promise<{ leadId: string }> },
-) => Promise<Response>;
+// biome-ignore lint/suspicious/noExplicitAny: each handler names its own params; the table only passes them through
+type Handler = (request: Request, context: any) => Promise<Response>;
 
+/** Route params are the path's named groups, e.g. `(?<leadId>[^/]+)`. */
 const ROUTES: [method: string, path: RegExp, handler: Handler][] = [
   ["GET", /^\/api\/me$/, getMe],
+  ["GET", /^\/api\/viewer$/, getViewer],
+  ["POST", /^\/api\/viewer\/role$/, postViewerRole],
   ["GET", /^\/api\/leads$/, getLeads],
   ["GET", /^\/api\/pipeline\/summary$/, getSummary],
-  ["GET", /^\/api\/leads\/([^/]+)$/, getLead],
-  ["POST", /^\/api\/leads\/([^/]+)\/review$/, postReview],
-  ["POST", /^\/api\/leads\/([^/]+)\/qualification$/, postQualification],
-  ["POST", /^\/api\/leads\/([^/]+)\/lost$/, postLost],
-  ["POST", /^\/api\/leads\/([^/]+)\/spam$/, postSpam],
+  ["GET", /^\/api\/leads\/(?<leadId>[^/]+)$/, getLead],
+  ["POST", /^\/api\/leads\/(?<leadId>[^/]+)\/review$/, postReview],
+  [
+    "POST",
+    /^\/api\/leads\/(?<leadId>[^/]+)\/qualification$/,
+    postQualification,
+  ],
+  ["POST", /^\/api\/leads\/(?<leadId>[^/]+)\/lost$/, postLost],
+  ["POST", /^\/api\/leads\/(?<leadId>[^/]+)\/spam$/, postSpam],
 ];
 
 type Override = {
@@ -67,9 +76,13 @@ async function route(request: Request) {
   for (const [method, path, handler] of ROUTES) {
     const match = request.method === method && path.exec(pathname);
     if (match) {
-      return handler(request, {
-        params: Promise.resolve({ leadId: decodeURIComponent(match[1] ?? "") }),
-      });
+      const params = Object.fromEntries(
+        Object.entries(match.groups ?? {}).map(([name, value]) => [
+          name,
+          decodeURIComponent(value),
+        ]),
+      );
+      return handler(request, { params: Promise.resolve(params) });
     }
   }
   return new Response(null, { status: 404 });
@@ -137,6 +150,11 @@ export const api = {
     overrides = [];
   },
 };
+
+/** Previews a role, as the "Viewing as" control would have left it. Call after `startDashboard`. */
+export function viewAs(role: Role) {
+  fake.cookies.set(PREVIEW_ROLE_COOKIE, role);
+}
 
 /** Call in `beforeEach`: a signed-in user with a profile, fresh sample leads, a clean address. */
 export function startDashboard(at = "/dashboard") {

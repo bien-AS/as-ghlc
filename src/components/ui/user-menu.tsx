@@ -1,6 +1,7 @@
 "use client";
 
-import { ChevronDownIcon, LogOutIcon } from "lucide-react";
+import { ChevronDownIcon, LogOutIcon, SettingsIcon } from "lucide-react";
+import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +15,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  RolePreviewGroup,
+  type RolePreviewProps,
+} from "@/components/ui/role-preview";
 import { setTheme, type Theme, useTheme } from "@/hooks/use-theme";
 
 const initials = (name: string) =>
@@ -25,25 +30,32 @@ const initials = (name: string) =>
     .join("");
 
 /**
- * The signed-in user's menu (spec 04): their name and email, and Sign out.
- * `compact` is the small-screen form, where the navbar has no room for the
- * theme switch and the Sample data label, so both move in here.
+ * The signed-in user's menu (spec 04): their name and email, Settings (their
+ * own account settings), the theme, and Sign out. `compact` is the
+ * small-screen form, where the navbar has no room for the role preview and the
+ * Sample data label, so both move in here.
  */
 function UserMenu({
   name,
   email,
+  settingsHref,
   onSignOut,
   signingOut = false,
   compact = false,
   sampleDataNote,
+  rolePreview,
 }: {
   name: string;
   email: string;
+  /** The person's own account settings. */
+  settingsHref: string;
   onSignOut: () => void;
   signingOut?: boolean;
   compact?: boolean;
   /** Shown in the compact menu while the dashboard runs on sample data. */
   sampleDataNote?: string;
+  /** Shown in the compact menu while a role can be previewed. */
+  rolePreview?: RolePreviewProps;
 }) {
   const theme = useTheme();
   return (
@@ -80,37 +92,44 @@ function UserMenu({
             {email}
           </span>
         </div>
-        {compact && (
+        <DropdownMenuSeparator />
+        <DropdownMenuItem render={<Link href={settingsHref} />}>
+          <SettingsIcon aria-hidden="true" />
+          Settings
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Theme</DropdownMenuLabel>
+          <DropdownMenuRadioGroup
+            value={theme}
+            onValueChange={(value) => setTheme(value as Theme)}
+          >
+            <DropdownMenuRadioItem value="system" closeOnClick={false}>
+              System
+            </DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="light" closeOnClick={false}>
+              Light
+            </DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="dark" closeOnClick={false}>
+              Dark
+            </DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+        </DropdownMenuGroup>
+        {compact && rolePreview && (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuLabel>Theme</DropdownMenuLabel>
-              <DropdownMenuRadioGroup
-                value={theme}
-                onValueChange={(value) => setTheme(value as Theme)}
-              >
-                <DropdownMenuRadioItem value="system" closeOnClick={false}>
-                  System
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="light" closeOnClick={false}>
-                  Light
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="dark" closeOnClick={false}>
-                  Dark
-                </DropdownMenuRadioItem>
-              </DropdownMenuRadioGroup>
-            </DropdownMenuGroup>
-            {sampleDataNote && (
-              <>
-                <DropdownMenuSeparator />
-                <p className="px-1.5 py-1 text-pretty text-muted-foreground">
-                  <span className="font-semibold text-foreground">
-                    Sample data.
-                  </span>{" "}
-                  {sampleDataNote}
-                </p>
-              </>
-            )}
+            <RolePreviewGroup {...rolePreview} />
+          </>
+        )}
+        {compact && sampleDataNote && (
+          <>
+            <DropdownMenuSeparator />
+            <p className="px-1.5 py-1 text-pretty text-muted-foreground">
+              <span className="font-semibold text-foreground">
+                Sample data.
+              </span>{" "}
+              {sampleDataNote}
+            </p>
           </>
         )}
         <DropdownMenuSeparator />
