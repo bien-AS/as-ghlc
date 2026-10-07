@@ -7,8 +7,6 @@ import { POST as postSpam } from "@/app/api/leads/[leadId]/spam/route";
 import { GET as getLeads } from "@/app/api/leads/route";
 import { GET as getMe } from "@/app/api/me/route";
 import { GET as getSummary } from "@/app/api/pipeline/summary/route";
-import { POST as postViewerRole } from "@/app/api/viewer/role/route";
-import { GET as getViewer } from "@/app/api/viewer/route";
 import { Toaster } from "@/components/ui/toast";
 import { listLeads, resetSampleLeads } from "@/lib/data/leads";
 import { PREVIEW_ROLE_COOKIE } from "@/lib/data/viewer";
@@ -45,10 +43,9 @@ export const ada = {
 type Handler = (request: Request, context: any) => Promise<Response>;
 
 /** Route params are the path's named groups, e.g. `(?<leadId>[^/]+)`. */
-const ROUTES: [method: string, path: RegExp, handler: Handler][] = [
+export type TestRoute = [method: string, path: RegExp, handler: Handler];
+const ROUTES: TestRoute[] = [
   ["GET", /^\/api\/me$/, getMe],
-  ["GET", /^\/api\/viewer$/, getViewer],
-  ["POST", /^\/api\/viewer\/role$/, postViewerRole],
   ["GET", /^\/api\/leads$/, getLeads],
   ["GET", /^\/api\/pipeline\/summary$/, getSummary],
   ["GET", /^\/api\/leads\/(?<leadId>[^/]+)$/, getLead],
@@ -60,6 +57,15 @@ const ROUTES: [method: string, path: RegExp, handler: Handler][] = [
   ],
   ["POST", /^\/api\/leads\/(?<leadId>[^/]+)\/lost$/, postLost],
   ["POST", /^\/api\/leads\/(?<leadId>[^/]+)\/spam$/, postSpam],
+  // Each other resource lists its own routes in src/test/routes/<resource>.ts,
+  // as `export const routes: TestRoute[]`.
+  ...Object.values(
+    // Vite's glob import, as Vitest runs it; the cast gives it the modules' shape.
+    import.meta.glob("./routes/*.ts", { eager: true }) as unknown as Record<
+      string,
+      { routes: TestRoute[] }
+    >,
+  ).flatMap((module) => module.routes),
 ];
 
 type Override = {

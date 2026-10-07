@@ -1,5 +1,5 @@
 import { buildSampleLeads, type LeadRecord } from "@/lib/data/fixtures/leads";
-import { SAMPLE_DATA } from "@/lib/data/sample";
+import { resetSampleData, SAMPLE_DATA, sampleStore } from "@/lib/data/sample";
 import { AccessError } from "@/lib/data/users";
 import { canSeeLead, getViewer, type Viewer } from "@/lib/data/viewer";
 import { effectiveVerdict, nextStep } from "@/lib/leads/rules";
@@ -39,19 +39,16 @@ export { SAMPLE_DATA };
  */
 const SUSPECT_BOOKING_KEPT_UNTIL_REVIEW = true;
 
-// ponytail: one in-memory copy per server instance, on globalThis so Route
-// Handlers and Server Components (separate bundles) share it. Not durable and
-// not shared between instances; it disappears with the fixtures.
-const store = globalThis as { __dealwrightSampleLeads?: LeadRecord[] };
+const records = sampleStore<LeadRecord[]>("leads", () =>
+  buildSampleLeads(Date.now()),
+);
 
-function records(): LeadRecord[] {
-  store.__dealwrightSampleLeads ??= buildSampleLeads(Date.now());
-  return store.__dealwrightSampleLeads;
-}
-
-/** Tests only: start again from the fixtures, placed relative to the current time. */
+/**
+ * Tests only: start again from the fixtures, placed relative to the current
+ * time. Every other sample store is built from the leads, so all of them reset.
+ */
 export function resetSampleLeads() {
-  store.__dealwrightSampleLeads = undefined;
+  resetSampleData();
 }
 
 function bookingsOf(record: LeadRecord) {
