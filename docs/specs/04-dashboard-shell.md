@@ -12,6 +12,8 @@ build_now: true
 
 Decisions behind this spec: ADR-0001, ADR-0002, ADR-0003, ADR-0006.
 
+> **Updated for the mockups.** The five screens this spec first listed as placeholders are now **mockups on sample data** (see "Mockups" in `README.md`). The navigation, the user menu and the navbar changed with them, and a role preview was added. Those changes are written into the sections below and summarised under [As built (mockups)](#as-built-mockups). The placeholder convention is kept for any screen added later; no screen uses it now.
+
 ## Problem Statement
 
 After signing in there is nowhere to go. The first screens must be built before any real lead exists, and if they are built against throwaway data in the wrong place, every one of them will be rewritten when real data arrives. Screens that cannot be built yet also need to exist in the navigation, or the team cannot see the whole product or what each missing part is waiting for.
@@ -27,18 +29,20 @@ Two fixed parts around a main area: a **sidebar** on the left and a **top navbar
 **Sidebar (left)**
 
 - The Dealwright wordmark at the top, linking to `/dashboard`. User-facing text in the shell says Dealwright, never ASCRM.
-- Navigation to every planned screen, in the order of the table below, each with an icon and a label. The current screen is marked.
-- Built screens first, then a divider, then the unbuilt screens. Each unbuilt screen carries a small "Soon" chip beside its label, so a user can tell before selecting it that it is a placeholder. Unbuilt items are still links and are not disabled.
-- A control to collapse the sidebar to icons only, and to expand it again. The choice is remembered in that browser. When collapsed, each item shows its label as a tooltip on hover and focus, and the "Soon" chip becomes a dot.
+- Navigation to every screen, in the order of the table below, each with an icon and a label. The current screen is marked.
+- Two groups with a divider between them: a rep's own work first, then, under the heading "Workspace", the screens that manage the Workspace (Users and roles, Workspace settings, Integrations). The second group, its heading and the divider are shown only to a role that may use those screens (spec 12); the server refuses the others independently.
+- **Settings in the sidebar belong to the Workspace.** A person's own settings are not in the sidebar; they are in the user menu (owner decision).
+- A screen that is not built yet carries a small "Soon" chip beside its label and is still a link. No screen is in that state now.
+- A control to collapse the sidebar to icons only, and to expand it again. The choice is remembered in that browser. When collapsed, each item shows its label as a tooltip on hover and focus, the group heading is hidden, and a "Soon" chip becomes a dot.
 
 **Top navbar**
 
 - **Page title and breadcrumb.** The current screen's name. On Lead detail: "Pipeline", then the lead's name, with "Pipeline" a link. On Suspect review with a lead open: "Suspect review", then the lead's name.
 - **Search entry.** A search field for leads. Submitting it opens the Pipeline with that search applied (spec 05); it has no results of its own. Proposed.
-- **Notifications entry.** A bell that links to `/dashboard/notifications`. It shows no unread count in this build, because notifications are a placeholder.
 - **Sample data label.** Persistent while the dashboard runs on sample data, with a one-sentence explanation on hover or focus: the leads shown are examples and changes are not kept.
-- **Theme switch** (spec 03).
-- **User menu.** Shows the signed-in user's name and email, with **Sign out** (spec 02).
+- **Notifications entry.** A bell that links to `/dashboard/notifications` and shows the unread count (spec 08). No count is shown when it is zero or unavailable.
+- **Role preview ("Viewing as").** Shown only while the dashboard runs on sample data. See [Role preview](#role-preview).
+- **User menu.** Shows the signed-in user's name and email, then **Settings** (the person's own Account settings, `/dashboard/account`), the **theme** (System, Light, Dark; spec 03), and **Sign out** (spec 02). The theme switch moved here from the navbar to make room for the role preview (owner decision).
 
 **Main area:** where the current screen renders. Its content is limited to the maximum width in spec 03.
 
@@ -50,7 +54,7 @@ Using the handoff's breakpoints.
 | ---------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 1080px and wider | Expanded by default; the user may collapse it to icons.                                                               | Everything shown.                                                                                                                                                        |
 | 720px to 1079px  | Collapsed to icons by default; the user may expand it, and it then overlays the main area rather than squeezing it.   | Everything shown; the search field narrows.                                                                                                                              |
-| Below 720px      | Hidden. A menu button in the navbar opens it as a sheet over the page; choosing an item or pressing Escape closes it. | Menu button, page title, notifications entry and user menu. Search becomes an icon that opens the field. The theme switch and Sample data label move into the user menu. |
+| Below 720px      | Hidden. A menu button in the navbar opens it as a sheet over the page; choosing an item or pressing Escape closes it. | Menu button, page title, notifications entry and user menu. Search becomes an icon that opens the field. The role preview and Sample data label move into the user menu. |
 
 ### Keyboard access
 
@@ -63,36 +67,60 @@ Using the handoff's breakpoints.
 - A "Soon" item's accessible name includes "not built yet".
 - After navigating, focus moves to the new screen's heading.
 
-No user in this build sees a different shell from any other: there are no roles, and every authenticated user gets the full view of everything (owner decision; see Assumptions).
+There are still no real roles: no Workspace, no membership, and every authenticated user may reach everything (owner decision; see Assumptions). What a user sees can now be narrowed by the **role preview**, which is a preview tool and not access control.
+
+### Role preview
+
+Roles are not decided (question 7). So that the team can compare what each proposed role would see, the shell carries a **"Viewing as"** control.
+
+- **Where:** in the top navbar, beside the user menu. Below 720px it is a group inside the user menu.
+- **When:** only while the dashboard runs on sample data. It disappears with the Sample data label.
+- **Roles offered:** Owner, Admin and Staff, as proposed in spec 12. The default is Owner, which shows everything, as before roles existed.
+- **What switching changes:** which sidebar entries exist, which sample leads are listed and can be opened or changed, and which screens answer "you do not have access". Staff is shown one fixed sample rep's leads, named in the control, because the signed-in person owns no sample lead.
+- **How it is labelled:** the control's menu is headed "Viewing as (preview)" and says: "A preview on sample data. It changes what this browser is shown, not who has access."
+- **How it works:** the choice is saved by the server in a cookie and the page is loaded again, so the server decides everything the new role sees. One data-access function resolves the viewer's role. Today it returns the previewed role; later it returns the real role from the Workspace membership. Screens and Route Handlers ask that function and never read the preview themselves.
+- **It is not access control.** The real guard is still "authenticated, with a profile" in the data-access layer. Anyone can switch the preview to Owner. Real lead data must not be connected before spec 12 is built (ADR-0004).
+
+Owner and Admin see the same thing in the preview, because spec 12 defines no owner-only setting.
 
 ### Navigation
 
-| Nav item                  | Route                         | In this build         | Spec |
-| ------------------------- | ----------------------------- | --------------------- | ---- |
-| Pipeline                  | `/dashboard`                  | Built, on sample data | 05   |
-| Suspect review            | `/dashboard/suspects`         | Built, on sample data | 07   |
-| Notifications             | `/dashboard/notifications`    | Placeholder           | 08   |
-| Deck presenter            | `/dashboard/deck-presenter`   | Placeholder           | 13   |
-| Proposal builder          | `/dashboard/proposal-builder` | Placeholder           | 14   |
-| Users and roles           | `/dashboard/users`            | Placeholder           | 12   |
-| Settings and integrations | `/dashboard/settings`         | Placeholder           | 16   |
+| Nav item           | Route                         | Group     | Shown to (preview) | In this build         | Spec |
+| ------------------ | ----------------------------- | --------- | ------------------ | --------------------- | ---- |
+| Pipeline           | `/dashboard`                  | Work      | Every role         | Built, on sample data | 05   |
+| Suspect review     | `/dashboard/suspects`         | Work      | Every role         | Built, on sample data | 07   |
+| Notifications      | `/dashboard/notifications`    | Work      | Every role         | Mockup                | 08   |
+| Deck presenter     | `/dashboard/deck-presenter`   | Work      | Every role         | Mockup                | 13   |
+| Proposal builder   | `/dashboard/proposal-builder` | Work      | Every role         | Mockup                | 14   |
+| Users and roles    | `/dashboard/users`            | Workspace | Owner, Admin       | Mockup                | 12   |
+| Workspace settings | `/dashboard/settings`         | Workspace | Owner, Admin       | Mockup                | 16   |
+| Integrations       | `/dashboard/integrations`     | Workspace | Owner, Admin       | Mockup                | 16   |
 
-Lead detail (`/dashboard/leads/{leadId}`, spec 06) is built on sample data and is reached from a lead, not from the navigation. While on it, Pipeline stays marked.
+"Settings and integrations" (spec 16) is split into two screens with two sidebar entries: **Workspace settings** and **Integrations** (owner decision).
 
-Invoices have no screen of their own in the handoff's page list; an invoice appears as a status on a lead. No Invoices nav item is added.
+Not in the sidebar:
 
-The Suspect review item shows a count of suspects waiting. Neither the Notifications item in the sidebar nor the bell in the navbar shows an unread count in this build, because notifications are a placeholder; the count and its live updates arrive with spec 08.
+- Lead detail (`/dashboard/leads/{leadId}`, spec 06), built on sample data and reached from a lead. While on it, Pipeline stays marked. It now shows the invoice draft (spec 15) and links into the deck and proposal mockups.
+- **Account settings** (`/dashboard/account`), a mockup of a person's own settings, reached from **Settings** in the user menu. No sidebar item is marked while on it.
+
+The deck presenter and the proposal builder keep the lead they are open on in the address (`?lead=…`), so a link from Lead detail lands on that lead's deck or proposal.
+
+Invoices have no screen of their own in the handoff's page list; an invoice appears on a lead. No Invoices nav item is added.
+
+The Suspect review item shows a count of suspects waiting. The Notifications item and the bell in the navbar show the unread count (spec 08). The count is refreshed when the window regains focus; the live channel in spec 08 is not built.
 
 ### Placeholder convention
 
-In the sidebar, an unbuilt screen is listed after the divider with its "Soon" chip, as described above. On the page itself, every unbuilt screen renders the placeholder panel from spec 03 inside the shell, with exactly these parts:
+_No screen is a placeholder now. The convention is kept for a screen added to the navigation table before it is built (`built: false`)._
+
+In the sidebar, an unbuilt screen carries its "Soon" chip, as described above. On the page itself, every unbuilt screen renders the placeholder panel from spec 03 inside the shell, with exactly these parts:
 
 1. The screen's name.
 2. A "Not built yet" label.
 3. One sentence saying what the screen will do.
 4. **Waiting on:** a list naming what the screen is waiting for.
 
-A placeholder has no fake controls, no sample content and no disabled copy of the future interface. The text for each:
+A placeholder has no fake controls, no sample content and no disabled copy of the future interface. The text each of the first five carried, before they became mockups:
 
 | Screen                    | What it will do                                                                        | Waiting on                                                                                                                     |
 | ------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
@@ -195,7 +223,7 @@ No domain model is added to the database in this build. The only database table 
 
 ## Assumptions
 
-- **Questions 7 and 9:** no Workspace, membership or role exists. Every authenticated user sees everything. Owner decision for this build, acceptable only on sample data (ADR-0004).
+- **Questions 7 and 9:** no Workspace, membership or role exists. Every authenticated user may see everything. Owner decision for this build, acceptable only on sample data (ADR-0004). The role preview narrows what is shown, using the roles proposed in spec 12; it decides nothing and guards nothing.
 - **Question 8:** the status values in the contract are the prototype's status lines. Assumed.
 - **Question 1:** the stage names are the app's own and are assumed to be the six in the handoff.
 - The data model sketch's field lists are assumed; the contract follows them and will move if spec 09 changes them. A contract change is then a deliberate, visible change, not part of "going live".
@@ -204,15 +232,15 @@ No domain model is added to the database in this build. The only database table 
 
 ## Acceptance checks
 
-1. A signed-in user with a profile at `/dashboard` sees a left sidebar with all seven nav items and a top navbar with the page title, search, notifications entry, Sample data label, theme switch and a user menu with their name and a working Sign out.
-2. The five unbuilt screens appear after a divider, each with a "Soon" chip, and each opens its placeholder.
+1. A signed-in user with a profile at `/dashboard` sees a left sidebar with all eight nav items in two groups and a top navbar with the page title, search, Sample data label, notifications entry, role preview and a user menu with their name, Settings, the theme and a working Sign out.
+2. Every nav item opens a working screen; none carries a "Soon" chip. Settings in the user menu opens Account settings.
 3. Collapsing the sidebar leaves icons with tooltips; reloading keeps it collapsed.
 4. At 900px the sidebar is icons by default; at 700px it is hidden and the menu button opens it as a sheet that closes on Escape and on choosing an item.
 5. Typing in the navbar search and pressing Enter opens the Pipeline filtered by that text.
 6. Using only the keyboard: Skip to content works, every sidebar and navbar control is reachable with a visible focus ring, and the user menu can be opened, moved through and closed.
 7. The shell says "Dealwright" and never "ASCRM".
-8. Each of the five placeholder routes shows the screen's name, "Not built yet", the one-sentence description and the "Waiting on" list from the table, and nothing that looks like a working control.
-9. No placeholder or shell text contains the name of a CRM or third-party service.
+8. Switching "Viewing as" to Staff removes the Workspace group from the sidebar, lists only one sample rep's leads, and makes `/dashboard/users`, `/dashboard/settings` and `/dashboard/integrations` say "You do not have access to this screen"; their APIs answer 403. Switching back to Owner restores everything. The control says it is a preview.
+9. No shell or rep-facing text contains the name of a CRM or third-party service. (The Integrations screen, for admins and owners, names providers; spec 16.)
 10. **Seam, by inspection:** a search for imports of the fixtures finds them only in data-access functions and their tests.
 11. **Seam, by inspection:** no component calls `fetch` or a data-access function; no Route Handler contains more than parse, call, respond.
 12. **Seam, by behaviour:** with the browser's network panel open, the Pipeline's client-side refetches go to `/api/leads` and `/api/pipeline/summary`; the first paint shows data without a client request for it.
@@ -294,12 +322,29 @@ _Seams confirmed by the owner: data-access functions and Route Handlers through 
 - No end-to-end browser suite yet. The seam checks done by inspection or rehearsal (fixture imports, thin handlers, network panel, replacement rehearsal) are carried out in review.
 - Prior art: none in the repo.
 
+## As built (mockups)
+
+What changed in the shell when the placeholder screens became mockups. Nothing here changes this spec's status or answers an open question.
+
+| Change                           | What it is                                                                                                                                                              | Rests on                                    |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| Sidebar groups                   | Work, then "Workspace". The Workspace group is hidden from Staff in the preview.                                                                                        | Question 7 (proposed roles), owner decision |
+| Workspace settings, Integrations | Spec 16's one screen became two sidebar entries.                                                                                                                        | Owner decision                              |
+| Account settings                 | A person's own settings, from **Settings** in the user menu.                                                                                                            | Owner decision                              |
+| Theme switch                     | Moved from the navbar into the user menu, at every width.                                                                                                               | Owner decision                              |
+| Role preview                     | "Viewing as" Owner, Admin or Staff, on sample data only. One function resolves the role (`getViewer` in `src/lib/data/viewer.ts`); the preview is behind that function. | Question 7 (assumed: the roles in spec 12)  |
+| Unread count                     | On the bell and on the Notifications item, refreshed on window focus.                                                                                                   | Spec 08; no realtime channel in the mockup  |
+| A "forbidden" refusal            | A signed-in user whose role does not allow a resource is refused with 403 and the code `forbidden`. The screen shows "You do not have access to this screen".           | Spec 12, "Not allowed"                      |
+| Staff and leads                  | In a Staff preview, another rep's lead answers "not found" to reads and writes, in the screens and in the API.                                                          | Question 7 (proposed), spec 12 acceptance 1 |
+
+**What is faked:** the role. It is a cookie anyone can change, honoured only while sample data is on. **To go live:** replace `resolveRole` in `src/lib/data/viewer.ts` with a read of the user's Workspace membership, delete the preview cookie, the `POST /api/viewer/role` route and the "Viewing as" control. Nothing that asks `getViewer`, `requireCapability` or `can` changes.
+
 ## Out of Scope
 
 - Any Prisma model other than User; any database read or write of lead data.
-- Roles, per-role navigation, Workspace switching.
-- Real notifications and an unread count (spec 08).
-- Deck presenter and proposal builder interfaces, even as sketches beyond the placeholder.
+- Real roles and Workspace switching. (A role _preview_ and per-role navigation on sample data are now built; see above.)
+- Real notifications raised by real events, and the realtime channel (spec 08).
+- Deck presenter and proposal builder interfaces connected to their services (specs 13, 14); they are mockups on sample data.
 - Search results in the navbar itself, a command palette or keyboard shortcuts.
 - Persisting sample-data changes.
 - Calls to any external service.
@@ -308,5 +353,5 @@ _Seams confirmed by the owner: data-access functions and Route Handlers through 
 
 - **Conflict with ADR-0002 and AGENTS.md, recorded not resolved.** Both require the guard to check authentication and then ownership through tenant membership. By owner decision there is no Workspace or membership yet, so the guard here checks authentication and profile only. When real data and spec 12 arrive, the ownership check is added inside these same data-access functions, which is part of replacing their bodies.
 - **Naming.** ADR-0002 says "tenant". The canonical term is Workspace; the ADR stays as written.
-- **Difference from the handoff.** The handoff asked for the deck presenter and proposal builder to be "sketched as shells". The owner's decision makes them labelled placeholders in this build.
+- **Difference from the handoff.** The handoff asked for the deck presenter and proposal builder to be "sketched as shells". The owner's decision made them labelled placeholders in the first build; they are mockups on sample data now.
 - The contract deliberately leaves out fields the screens do not show. Adding a field later is a contract change reviewed on its own.

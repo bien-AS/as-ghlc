@@ -14,7 +14,19 @@ _Avoid_: ASCRM (in user-facing text), the CRM, Sales App
 
 **Workspace**:
 One customer of the product. Users, leads and connections belong to a workspace.
-_Avoid_: Tenant, account, organisation
+_Avoid_: Tenant, account, organisation, org
+
+**Workspace settings**:
+Settings that belong to a workspace and are changed by its admins and owners, reached from the sidebar.
+_Avoid_: Org settings, company settings
+
+**Account settings**:
+One user's own settings (profile, theme, notification preferences), reached from the user menu.
+_Avoid_: Profile page, user settings, preferences
+
+**Role**:
+What a user may see and do in a workspace: owner, admin or staff.
+_Avoid_: Permission level, access level
 
 **User**:
 A person who signs in to the app.
@@ -98,4 +110,8 @@ _Avoid_: Gateway, integration, connector
 
 **Connection**:
 A workspace's link to one external service.
-_Avoid_: Integration, credential
+_Avoid_: Integration (for the link itself), credential
+
+**Integrations**:
+The name of the screen where an admin or owner manages a workspace's connections. It names a screen only; each thing on it is a connection.
+_Avoid_: Using "integration" for a single connection or for an adapter

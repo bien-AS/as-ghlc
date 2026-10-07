@@ -31,9 +31,14 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from "@/components/ui/native-select";
+import { PanelSection } from "@/components/ui/panel-section";
 import { PlaceholderPanel } from "@/components/ui/placeholder-panel";
 import { Skeleton } from "@/components/ui/skeleton";
-import { EmptyState, ErrorState } from "@/components/ui/state-panel";
+import {
+  EmptyState,
+  ErrorState,
+  NotAllowedState,
+} from "@/components/ui/state-panel";
 import { StatusLine } from "@/components/ui/status-line";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -45,6 +50,8 @@ import {
 } from "@/components/ui/tooltip";
 import { VerdictBox } from "@/components/ui/verdict-box";
 import { Wordmark } from "@/components/ui/wordmark";
+
+import { RolePreviewDemo } from "./role-preview-demo";
 
 export const metadata: Metadata = { title: "UI foundations · Dealwright" };
 
@@ -351,6 +358,24 @@ export default function DevUiPage() {
             description="Nothing was changed. Check your connection and try again."
             action={<Button>Try again</Button>}
           />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <PanelSection
+            title="A panel section"
+            actions={<Button size="sm">An action</Button>}
+          >
+            <p>
+              The titled panel a dashboard screen is made of. Lists inside it
+              are rows with dividers.
+            </p>
+          </PanelSection>
+          <NotAllowedState />
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <RolePreviewDemo />
+          <span className="text-muted-foreground">
+            The role preview, shown only on sample data.
+          </span>
         </div>
         <PlaceholderPanel
           name="A screen that is not built"
