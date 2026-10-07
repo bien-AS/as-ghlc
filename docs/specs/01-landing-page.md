@@ -16,7 +16,7 @@ The public name is **Dealwright**, shown as **Dealwright by Authority Solutions*
 > **Open (does not block the build):**
 >
 > - **Describing capabilities that are not built.** Decks, proposals and invoices are blocked specs. The owner's copy describes them as what the product does. Assumed: where the page goes into detail on one of them (sections 5, 6 and 7), it carries a visible "Planned" label, and nowhere does the page say they are available now. Owner: Project lead.
-> - **A logo for dark surfaces.** The only logo file is near-black on transparent and is legible only on light surfaces. No light or inverted version exists; one would have to be supplied by the owner. Until then the rules under "Logo and wordmark" apply.
+> - **A logo for dark surfaces.** Resolved: the owner supplied an all-white version, `public/as-logo-white.png`. It is used on dark surfaces; see "Logo and wordmark".
 > - **A Dealwright logo.** None exists. Assumed: Dealwright is set as a text wordmark in the heading font.
 > - **Privacy policy and terms.** Sign-up is open (ADR-0004) and collects names and emails, but no legal pages exist. The footer must not link to pages that do not exist. Owner: Project lead.
 > - **Palette and fonts** are provisional (question 12). See spec 03.
@@ -49,7 +49,7 @@ Everything on the page must be true. No invented customers, testimonials, logos,
 - **Dealwright** is a text wordmark set in the heading font (assumed; no Dealwright logo exists).
 - **The Authority Solutions logo** (`public/as-logo.png`, 680 by 173 pixels, a wide horizontal lockup of a red shield and a near-black wordmark on a transparent background) is the endorsing company's logo, not a Dealwright logo. It is used only for the "by Authority Solutions" endorsement, in the nav and the footer.
 - Rules for the logo: keep its aspect ratio (about 3.93 to 1); never stretch, crop, recolour or redraw it; size it by height; keep clear space around it of at least the height of the shield on every side; do not modify or move the file.
-- **Dark surfaces.** Because the wordmark is near-black, the logo is legible only on light surfaces. In the dark theme and in the dark band, either place it on a light surface (a light chip or plate behind it) or do not show it there and write "by Authority Solutions" as text instead. The footer's endorsement follows the same rule.
+- **Dark surfaces.** The near-black file is for light surfaces and the all-white file (`public/as-logo-white.png`, the same 680 by 173 pixels) is for dark ones. The theme picks the file; there is no plate behind the logo and no text fallback. The footer's endorsement follows the same rule. The logo does not appear in the band (section 7).
 
 ### Sections, top to bottom
 
@@ -88,6 +88,18 @@ What should feel alive, and why. Exact animation design happens at build time th
 | Closing CTA    | Still. Buttons respond to hover, focus and press.                               | The decision point should be calm.                               |
 | Footer         | The wordmark is revealed as the page ends.                                      | A deliberate finish to the page.                                 |
 
+### As built (revision notes)
+
+Where the built page is more specific than, or differs from, the table above:
+
+- **Nav.** The theme switch is in the nav from 720px up and in the footer below it, so only one is on screen and both CTAs fit at 375px. The bar's surface is opaque.
+- **Hero.** From 1024px the copy and the picture share one grid: the second headline line, the sub-headline and Sign up start on the same column line; the list of leads fills the space to their left and the verdict sits in front of it, under the button. The picture and its one-time verdict are inside the first screenful at 1280 by 800. The stage tabs in the picture run past its edge and fade out, as the app's tab row scrolls sideways.
+- **Pipeline strip.** From 1024px the six stages sit on one rail from edge to edge. A sample lead travels the rail once when it comes into view. A bracket under stages one to five leads to the three exits: a lead can leave before it is won (glossary, "Exit"). The page does not say which exit happens at which stage.
+- **How it works.** The block pins from 1024px wide and 672px tall; each step holds for the same amount of scroll. Each picture plays one change of state when its step becomes current (the verdict resolves; the stage advances and the next-step line changes). Otherwise the steps are a list, each with its picture beside it on a wide screen and under it on a narrow one.
+- **Features.** A row from 1280px, a stack below.
+- **Works on top.** See "Themes" under States: the band is dark in the light theme and light in the dark theme.
+- **Pictures.** Each is composed in two overlapping planes on a softly tinted ground, built from the app's own chips, labels and wording, with made-up names and a "Sample data" chip.
+
 ## States
 
 - **Default:** the full page, static content, no data requests.
@@ -97,7 +109,7 @@ What should feel alive, and why. Exact animation design happens at build time th
 - **Signed-in visitor:** sees the same page. The CTAs still read Sign up and Sign in and redirect to `/dashboard` through spec 02's rules.
 - **Reduced motion:** all content visible without animation; the marquee is static; the sticky narrative becomes three stacked steps each with its illustration.
 - **Small screens:** single column below 720px. The sticky narrative and the feature switcher stack. Nav anchor links collapse; both CTAs stay visible.
-- **Themes:** light and dark both work (spec 03). The dark band uses the dark theme's tokens in both themes. In the dark theme the Authority Solutions logo sits on a light surface or is replaced by text.
+- **Themes:** light and dark both work (spec 03). The band (section 7) is the page's one tonal break and reads the other theme's tokens: dark in the light theme, light in the dark theme, because a dark band on the dark ground barely separates. In the dark theme the white version of the Authority Solutions logo is shown.
 
 ## Data
 
@@ -123,7 +135,7 @@ None read or written. The page is static content and touches no entity in the da
 7. The page states that the product works on top of the visitor's CRM and does not replace it.
 8. The pipeline strip lists exactly the six stages in order and the three exits, spelled as in the glossary.
 9. The Authority Solutions logo keeps its proportions at every width (width divided by height stays about 3.93), is not cropped, and has clear space around it.
-10. In the dark theme and in the dark band, the logo is either on a light surface or absent; it is never shown near-black on a dark background.
+10. In the dark theme the white version of the logo is shown; the near-black one is never shown on a dark background. The logo is absent from the band.
 11. With the operating system set to reduce motion, nothing on the page animates and all content is still readable.
 12. At 375px wide there is no horizontal scroll and both CTAs are reachable without opening a menu.
 13. The page renders correctly in light and dark themes, and the theme switch works.
@@ -187,7 +199,7 @@ _Seams confirmed by the owner: pages through Testing Library at page level; no e
 - Customer logos, testimonials, case studies, metrics.
 - Analytics, cookie banners, A/B tests, contact or demo-request forms.
 - Search-engine and social-preview work beyond a title and description.
-- A Dealwright logo, or a light version of the Authority Solutions logo.
+- A Dealwright logo.
 - Translations.
 
 ## Further Notes

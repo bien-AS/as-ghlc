@@ -99,7 +99,7 @@ The light theme is the prototype's. The dark theme is new: a warm mid-grey groun
 - The product's public name is Dealwright, shown as "Dealwright by Authority Solutions" while the product is early. **Dealwright is a text wordmark set in the heading font.** No Dealwright logo exists (assumed until one is supplied).
 - **The Authority Solutions logo** (`public/as-logo.png`) is the endorsing company's logo, not a Dealwright logo. It is 680 by 173 pixels (about 3.93 to 1), a wide horizontal lockup with a red shield on the left and a near-black wordmark, on a transparent background. It is used only for the "by Authority Solutions" endorsement: the landing nav and footer, and the auth pages.
 - Preserve its aspect ratio. Never stretch, crop, recolour or redraw it. Size it by height. Keep clear space on every side of at least the height of the shield. Do not modify or move the file.
-- **Dark surfaces.** The near-black wordmark is legible only on light surfaces. In the dark theme, and on any dark section, either place the logo on a light surface or do not show it there and write "by Authority Solutions" as text. **No light or inverted version exists; one would have to be supplied by the owner.**
+- **Dark surfaces.** The near-black wordmark of `public/as-logo.png` is legible only on light surfaces. The owner has supplied an all-white version, `public/as-logo-white.png` (the same 680 by 173 pixels), which is used on dark surfaces: in the dark theme, and on any dark section inside the light theme. The near-black file is never shown on a dark surface and the white file never on a light one; no plate and no text fallback is needed.
 
 ### Reusable components
 
@@ -147,7 +147,7 @@ None. No entity in the data model is read or written. The theme choice is stored
 11. At 1280px and wider the content stops growing; the layout is two columns below 1080px and one below 720px.
 12. Headings, body and labels use the three specified fonts at the specified sizes and weights.
 13. Wherever the Authority Solutions logo appears, its width divided by its height is about 3.93, it is not cropped, and it has clear space around it.
-14. In the dark theme the logo is on a light surface or absent, never near-black on a dark background.
+14. In the dark theme the white version of the logo is shown, never the near-black one on a dark background.
 15. No component on an app surface has the component library's default look: colours, radii and fonts all come from the tokens, in both themes.
 16. The sidebar, navbar, wordmark, dialog and the other shared pieces exist once, as components, and are not repeated inline in pages.
 
@@ -183,7 +183,7 @@ None. No entity in the data model is read or written. The theme choice is stored
 - The three fonts are loaded through the framework's font facility with only the listed weights, replacing the starter fonts.
 - **Component library: shadcn/ui, for the app surfaces** (auth pages and dashboard). _Recommended by the lead, awaiting owner confirmation._ It is not part of the committed codebase yet. At the time of writing, the library's configuration, dependencies and a full set of its components are present in the working tree, uncommitted, still carrying the library's default theme and not yet passing the repository's format check. That is a starting point, not a finished install: the components still have to be re-themed and the unused ones removed. Its components are copied into `src/components/ui` and re-themed with the tokens above in both themes, so nothing ships with the default shadcn look. It supplies the accessible primitives: sidebar, dropdown menu, dialog and sheet, tooltip, tabs, form controls, table and toast. The landing page is bespoke and borrows a primitive only where it needs one.
 - **Reusable components live in `src/components/ui`** (owner's rule, above). This is the one place in these specs where a directory is named, because the rule itself names it.
-- **The wordmark component** renders the Dealwright text wordmark and, when asked, the endorsement with the Authority Solutions logo. It sizes the logo by height with its intrinsic ratio declared, applies the clear space, and on a dark surface either puts the logo on a light plate or falls back to text. Screens never place the logo file directly.
+- **The wordmark component** renders the Dealwright text wordmark and, when asked, the endorsement with the Authority Solutions logo. It sizes the logo by height with its intrinsic ratio declared, applies the clear space, and on a dark surface shows the white version of the logo (`public/as-logo-white.png`). Screens never place the logo file directly.
 - Components are plain presentational components with no data access. They are the only place token-to-role decisions are made (for example "danger button uses crit").
 - The verdict box and chip take a tone, and a single mapping turns a verdict or status into a tone, so every screen colours them the same way.
 - The 14px-bold floor for `ink-3` is enforced by using it only inside the label styles.
@@ -207,7 +207,7 @@ _Seams confirmed by the owner: pages through Testing Library at page level; no e
 - Per-workspace branding (the data model sketch gives Workspace a branding field; spec 09).
 - Components not needed by specs 01, 02, 04, 05, 06 and 07, such as date pickers, rich text editors and data grids.
 - An illustration or icon set of our own.
-- A Dealwright logo, and a light version of the Authority Solutions logo (to be supplied by the owner).
+- A Dealwright logo (to be supplied by the owner).
 - Motion design for specific screens (decided per screen at build time).
 - Print styles and translations.
 
