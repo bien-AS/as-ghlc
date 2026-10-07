@@ -67,8 +67,15 @@ const timeline = () =>
 const confirmIn = (name: RegExp) =>
   within(screen.getByRole("alertdialog", { name }));
 
+const panel = (title: string) =>
+  within(
+    screen
+      .getByRole("heading", { name: title })
+      .closest("section") as HTMLElement,
+  );
+
 test("shows the header chips, details, form answers, verdict box, the three status panels and the timeline", async () => {
-  await open("Kwame Asante");
+  const leadId = await open("Kwame Asante");
 
   expect(chips()).toEqual([
     "Stage: Qualified",
@@ -101,11 +108,28 @@ test("shows the header chips, details, form answers, verdict box, the three stat
   expect(verdict?.textContent).toContain("Valid");
   expect(verdict?.textContent).toContain("Installer registration matches.");
 
-  for (const panel of ["Deck", "Proposal", "Invoice"]) {
-    expect(screen.getByRole("heading", { name: panel })).toBeDefined();
-  }
-  expect(screen.getAllByText(/^Not available yet/)).toHaveLength(3);
-  expect(screen.getAllByText("No invoice yet")).toHaveLength(2);
+  // Deck, proposal and invoice: where each stands, and the way into it.
+  expect(panel("Deck").getByText("Discovery template")).toBeDefined();
+  expect(
+    panel("Deck").getByRole("link", { name: "Open deck" }).getAttribute("href"),
+  ).toBe(`/dashboard/deck-presenter?lead=${leadId}`);
+  expect(panel("Proposal").getByText("Draft")).toBeDefined();
+  expect(
+    panel("Proposal")
+      .getByRole("link", { name: "Open proposal" })
+      .getAttribute("href"),
+  ).toBe(`/dashboard/proposal-builder?lead=${leadId}`);
+  expect(
+    panel("Invoice").getByText(
+      "No invoice yet. A draft is created when the proposal is signed.",
+    ),
+  ).toBeDefined();
+  expect(document.getElementById("invoice")).toBe(
+    screen.getByRole("heading", { name: "Invoice" }).closest("section"),
+  );
+  expect(screen.queryByText(/Not available yet/)).toBeNull();
+  // No invoice, so none is asked for.
+  expect(api.calls().some((call) => call.includes("/invoice"))).toBe(false);
 
   // Newest first, each saying who or what acted.
   const entries = timeline().map((item) => item.textContent);
@@ -171,11 +195,7 @@ test.each([
     null,
     "Proposal sent. Waiting for the lead to view and sign it.",
   ],
-  [
-    "Jonas Whitlock",
-    "Check invoice draft",
-    "Signed. Check the invoice draft. Invoice drafts are not available yet.",
-  ],
+  ["Jonas Whitlock", "Check invoice draft", "Signed. Check the invoice draft."],
 ])(
   "%s: the main action and the hint line follow the action table",
   async (name, main, text) => {
@@ -197,13 +217,22 @@ test.each([
       "Open deck": `/dashboard/deck-presenter?lead=${leadId}`,
       "Start proposal": `/dashboard/proposal-builder?lead=${leadId}`,
       "Finish proposal": `/dashboard/proposal-builder?lead=${leadId}`,
+      // The invoice draft is on this page (spec 15).
+      "Check invoice draft": `/dashboard/leads/${leadId}#invoice`,
     };
     if (main && destination[main]) {
       expect(primary[0].getAttribute("href")).toBe(destination[main]);
     }
-    if (main === "Check invoice draft") {
-      expect((primary[0] as HTMLButtonElement).disabled).toBe(true);
-    }
+    // While a proposal is out there is nothing to do but wait; it can be opened.
+    expect(
+      actions
+        .queryAllByRole("link", { name: "Open proposal" })
+        .map((link) => link.getAttribute("href")),
+    ).toEqual(
+      name === "Anneliese Brandt"
+        ? [`/dashboard/proposal-builder?lead=${leadId}`]
+        : [],
+    );
     // Not qualified sits beside Qualified, and nowhere else.
     expect(
       actions.queryAllByRole("button", { name: "Not qualified" }),
@@ -255,7 +284,7 @@ test("Qualified moves the lead on: stage, status, main action and a timeline ent
 
   fireEvent.click(button("Qualified"));
 
-  await screen.findByRole("link", { name: "Start proposal" });
+  await screen.findAllByRole("link", { name: "Start proposal" });
   expect(chips().slice(0, 2)).toEqual(["Stage: Qualified", "Qualified"]);
   expect(hint()).toBe("Qualified. Build the proposal next.");
   noButton("Not qualified");
@@ -355,7 +384,7 @@ test("while an action is in progress the pressed button shows it and no other ac
   fireEvent.click(button(/^(Loading\s*)?Qualified$/));
 
   release();
-  await screen.findByRole("link", { name: "Start proposal" });
+  await screen.findAllByRole("link", { name: "Start proposal" });
   expect(api.calls().filter((call) => call.startsWith("POST "))).toHaveLength(
     1,
   );
@@ -374,7 +403,7 @@ test("when an action fails the lead is unchanged, a message says so and Try agai
 
   api.restore();
   fireEvent.click(button("Try again"));
-  await screen.findByRole("link", { name: "Start proposal" });
+  await screen.findAllByRole("link", { name: "Start proposal" });
   expect(screen.queryByText(/did not go through/)).toBeNull();
 });
 
@@ -445,4 +474,75 @@ test("the way back to the Pipeline carries the filters the rep last had there", 
   expect(
     screen.getByRole("link", { name: "Pipeline" }).getAttribute("href"),
   ).toBe("/dashboard?tab=qualified&q=asante");
+});
+
+test("the proposal panel offers the way into the builder that fits: start, open, or not yet", async () => {
+  const beatrix = await open("Beatrix Olander");
+  expect(panel("Proposal").getByText("Not started")).toBeDefined();
+  expect(
+    panel("Proposal")
+      .getByRole("link", { name: "Start proposal" })
+      .getAttribute("href"),
+  ).toBe(`/dashboard/proposal-builder?lead=${beatrix}`);
+
+  cleanup();
+  await open("Sofia Lindgren");
+  expect(panel("Proposal").queryByRole("link")).toBeNull();
+  expect(
+    panel("Proposal").getByText(
+      "A proposal can be started once the lead is Qualified.",
+    ),
+  ).toBeDefined();
+  expect(panel("Deck").getByText("Not generated yet")).toBeDefined();
+
+  // A lost lead's proposal can still be read.
+  cleanup();
+  await open("Seraphina Duarte");
+  expect(panel("Proposal").getByText("Lost")).toBeDefined();
+  expect(
+    panel("Proposal").getByRole("link", { name: "Open proposal" }),
+  ).toBeDefined();
+  expect(panel("Deck").queryByRole("link")).toBeNull();
+});
+
+test("a won lead shows its invoice draft: status, lines, total, when it was drafted and where to finish it", async () => {
+  await open("Jonas Whitlock");
+  const invoice = panel("Invoice");
+  await invoice.findByText("Draft");
+
+  expect(
+    within(invoice.getByRole("list", { name: "Invoice lines" }))
+      .getAllByRole("listitem")
+      .map((line) => line.textContent),
+  ).toEqual(["Paid search management$1,200", "Analytics and reporting$400"]);
+  expect(invoice.getByText("$1,600")).toBeDefined();
+  expect(invoice.getByText(/^Drafted/).querySelector("time")).not.toBeNull();
+  expect(
+    invoice.getByText(
+      "Finish and send it in the invoice service. Sample data: there is nothing to open.",
+    ),
+  ).toBeDefined();
+  expect(document.body.textContent).not.toMatch(FORBIDDEN);
+
+  // One the sample says was already sent.
+  cleanup();
+  await open("Ingrid Aaltonen");
+  await panel("Invoice").findByText("Sent");
+  expect(
+    panel("Invoice").getByText(/It was sent from the invoice service\./),
+  ).toBeDefined();
+});
+
+test("an invoice that cannot be loaded says so in its panel, and Try again loads it", async () => {
+  api.fail("GET", /\/invoice$/);
+  await open("Jonas Whitlock");
+  expect(screen.getByRole("status", { name: "Loading invoice" })).toBeDefined();
+  await panel("Invoice").findByText("The invoice could not be loaded.");
+  // The rest of the lead is unaffected.
+  expect(chips()[0]).toBe("Stage: Lead Won");
+
+  api.restore();
+  fireEvent.click(panel("Invoice").getByRole("button", { name: "Try again" }));
+  await panel("Invoice").findByText("Draft");
+  expect(screen.queryByText("The invoice could not be loaded.")).toBeNull();
 });

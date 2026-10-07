@@ -18,6 +18,7 @@ import { EmptyState, ErrorState } from "@/components/ui/state-panel";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { VerdictBox } from "@/components/ui/verdict-box";
+import { useInvoice } from "@/hooks/use-invoices";
 import {
   useLead,
   useMarkLost,
@@ -26,6 +27,7 @@ import {
 } from "@/hooks/use-leads";
 import { usePipelineHref } from "@/hooks/use-pipeline-href";
 import { ApiError } from "@/lib/api/client";
+import { INVOICE_STATUS_META } from "@/lib/invoices/rules";
 import {
   ACTION_LABEL,
   BOOKING_KIND_LABEL,
@@ -33,23 +35,35 @@ import {
   EXIT_LABEL,
   type LeadAction,
   nextStep,
-  PROPOSAL_LABEL,
   STAGE_LABEL,
   STATUS_META,
   VERDICT_META,
 } from "@/lib/leads/rules";
+import {
+  canHaveProposal,
+  formatUsd,
+  proposalStatusMeta,
+} from "@/lib/proposals/rules";
 
-import { deckHref, proposalHref, suspectHref } from "../navigation";
+import {
+  deckHref,
+  INVOICE_ANCHOR,
+  invoiceHref,
+  proposalHref,
+  suspectHref,
+} from "../navigation";
 
 /** How many timeline entries show before "Show earlier" (spec 06, "Long content"). */
 const TIMELINE_FIRST = 20;
 
-/** The actions that only lead somewhere else. Check invoice draft has nowhere to go yet. */
+/** The actions that only lead somewhere else. The invoice draft is on this page (spec 15). */
 const DESTINATION: Partial<Record<LeadAction, (leadId: string) => string>> = {
   review: suspectHref,
   open_deck: deckHref,
   start_proposal: proposalHref,
   finish_proposal: proposalHref,
+  open_proposal: proposalHref,
+  check_invoice: invoiceHref,
 };
 
 type Write = "qualify" | "not_qualify" | "lost" | "spam";
@@ -181,21 +195,14 @@ export function LeadScreen({
         </LinkButton>
       );
     }
-    if (step.main === "qualify") {
-      return (
-        <Button
-          variant="primary"
-          loading={pending === "qualify"}
-          disabled={busy}
-          onClick={() => qualify("qualified")}
-        >
-          {label}
-        </Button>
-      );
-    }
-    // Check invoice draft: shown, but there is nowhere to send the rep yet.
+    // The one main action that does something here instead of leading away.
     return (
-      <Button variant="primary" disabled>
+      <Button
+        variant="primary"
+        loading={pending === "qualify"}
+        disabled={busy}
+        onClick={() => qualify("qualified")}
+      >
         {label}
       </Button>
     );
@@ -207,6 +214,7 @@ export function LeadScreen({
     : data.activities.slice(0, TIMELINE_FIRST);
   const record = data.verdictRecord;
   const verdict = VERDICT_META[data.verdict];
+  const proposal = proposalStatusMeta(data.proposal?.status);
 
   return (
     <>
@@ -255,7 +263,7 @@ export function LeadScreen({
           </li>
           {data.proposal && (
             <li>
-              <Badge>Proposal: {PROPOSAL_LABEL[data.proposal.status]}</Badge>
+              <Badge variant={proposal.tone}>Proposal: {proposal.label}</Badge>
             </li>
           )}
         </ul>
@@ -277,6 +285,14 @@ export function LeadScreen({
                 confirmLabel="Mark not qualified"
                 onConfirm={() => qualify("not_qualified")}
               />
+            )}
+            {step.secondary === "open_proposal" && (
+              <LinkButton
+                href={proposalHref(data.id)}
+                aria-disabled={busy || undefined}
+              >
+                {ACTION_LABEL.open_proposal}
+              </LinkButton>
             )}
             {/* The two standing actions sit apart from the main one. */}
             <div className="flex flex-wrap gap-3 nav:ml-auto">
@@ -430,11 +446,7 @@ export function LeadScreen({
             <dt>Deck</dt>
             <dd>{data.deck ? data.deck.templateName : "Not generated yet"}</dd>
             <dt>Proposal</dt>
-            <dd>
-              {data.proposal
-                ? PROPOSAL_LABEL[data.proposal.status]
-                : "Not started"}
-            </dd>
+            <dd>{proposal.label}</dd>
             <dt>Invoice</dt>
             <dd className="first-letter:uppercase">
               {data.invoice?.status ?? "No invoice yet"}
@@ -510,29 +522,40 @@ export function LeadScreen({
           )}
 
           <PanelSection title="Deck">
-            <p>{data.deck ? data.deck.templateName : "Not generated yet"}</p>
-            <p className="text-muted-foreground">
-              Not available yet: viewing and downloading a deck.
-            </p>
+            {data.deck ? (
+              <>
+                <p>{data.deck.templateName} template</p>
+                {!data.exit && (
+                  <LinkButton href={deckHref(data.id)} className="self-start">
+                    Open deck
+                  </LinkButton>
+                )}
+              </>
+            ) : (
+              <p className="text-muted-foreground">Not generated yet</p>
+            )}
           </PanelSection>
           <PanelSection title="Proposal">
             <p>
-              {data.proposal
-                ? PROPOSAL_LABEL[data.proposal.status]
-                : "Not started"}
+              <Badge variant={proposal.tone}>{proposal.label}</Badge>
             </p>
-            <p className="text-muted-foreground">
-              Not available yet: building and sending a proposal.
-            </p>
+            {data.proposal ? (
+              <LinkButton href={proposalHref(data.id)} className="self-start">
+                Open proposal
+              </LinkButton>
+            ) : canHaveProposal(data) ? (
+              <LinkButton href={proposalHref(data.id)} className="self-start">
+                Start proposal
+              </LinkButton>
+            ) : (
+              !data.exit && (
+                <p className="text-muted-foreground">
+                  A proposal can be started once the lead is Qualified.
+                </p>
+              )
+            )}
           </PanelSection>
-          <PanelSection title="Invoice">
-            <p className="first-letter:uppercase">
-              {data.invoice?.status ?? "No invoice yet"}
-            </p>
-            <p className="text-muted-foreground">
-              Not available yet: opening an invoice draft.
-            </p>
-          </PanelSection>
+          <InvoicePanel leadId={data.id} expected={Boolean(data.invoice)} />
         </div>
 
         <PanelSection
@@ -575,6 +598,89 @@ export function LeadScreen({
         </PanelSection>
       </div>
     </>
+  );
+}
+
+/**
+ * The lead's invoice draft (spec 15, which defines no screen of its own). The
+ * draft is created when the proposal is signed; the rep finishes it in the
+ * invoice service (question 3, assumed).
+ */
+function InvoicePanel({
+  leadId,
+  expected,
+}: {
+  leadId: string;
+  /** The lead says it has an invoice, so there is one to ask for. */
+  expected: boolean;
+}) {
+  const invoice = useInvoice(leadId, expected);
+  const data = expected ? invoice.data : null;
+  const status = data && INVOICE_STATUS_META[data.status];
+
+  return (
+    <PanelSection
+      title="Invoice"
+      id={INVOICE_ANCHOR}
+      // Clears the top bar when "Check invoice draft" jumps here.
+      className="scroll-mt-16"
+    >
+      {expected && invoice.isPending ? (
+        <output aria-label="Loading invoice" className="flex flex-col gap-2">
+          <Skeleton className="h-5 w-16 rounded-full" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-2/3" />
+        </output>
+      ) : expected && invoice.isError ? (
+        <p role="alert" className="flex flex-wrap items-center gap-2">
+          The invoice could not be loaded.
+          <Button
+            size="sm"
+            loading={invoice.isFetching}
+            onClick={() => invoice.refetch()}
+          >
+            Try again
+          </Button>
+        </p>
+      ) : data && status ? (
+        <>
+          <p className="flex flex-wrap items-center gap-2">
+            <Badge variant={status.tone}>{status.label}</Badge>
+            <span className="text-muted-foreground">
+              Drafted <LocalTime value={data.createdAt} />
+            </span>
+          </p>
+          <ul aria-label="Invoice lines" className="flex flex-col gap-1.5">
+            {data.lines.map((line, index) => (
+              <li
+                // biome-ignore lint/suspicious/noArrayIndexKey: a read-only list in the order given; two lines may be identical
+                key={index}
+                className="flex items-baseline justify-between gap-3"
+              >
+                <span className="min-w-0 wrap-break-word">
+                  {line.description}
+                </span>
+                <span className="tabular-nums">{formatUsd(line.amount)}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="flex items-baseline justify-between gap-3 border-t border-border pt-2 font-semibold">
+            Total
+            <span className="tabular-nums">{formatUsd(data.total)}</span>
+          </p>
+          <p className="text-pretty text-muted-foreground">
+            {data.status === "draft"
+              ? "Finish and send it in the invoice service."
+              : "It was sent from the invoice service."}{" "}
+            Sample data: there is nothing to open.
+          </p>
+        </>
+      ) : (
+        <p className="text-pretty text-muted-foreground">
+          No invoice yet. A draft is created when the proposal is signed.
+        </p>
+      )}
+    </PanelSection>
   );
 }
 

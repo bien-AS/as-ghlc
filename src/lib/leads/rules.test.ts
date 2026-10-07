@@ -139,7 +139,7 @@ const table: Row[] = [
     "Proposal Sent",
     { stage: "proposal_sent", exit: null, verdict: "valid", bookings: [] },
     null,
-    null,
+    "open_proposal",
     "Proposal sent. Waiting for the lead to view and sign it.",
   ],
   [
@@ -147,7 +147,7 @@ const table: Row[] = [
     { stage: "won", exit: null, verdict: "valid", bookings: [] },
     "check_invoice",
     null,
-    "Signed. Check the invoice draft. Invoice drafts are not available yet.",
+    "Signed. Check the invoice draft.",
   ],
 ];
 
