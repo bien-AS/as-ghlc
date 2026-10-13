@@ -155,7 +155,7 @@ test("the three tools are fixed and offer no choice; the CRM lists one available
   ).toBeNull();
 
   const list = within(
-    panel("CRM").getByRole("heading", { name: "CRMs Dealwright connects to" })
+    panel("CRM").getByRole("heading", { name: "CRMs the app connects to" })
       .parentElement as HTMLElement,
   ).getAllByRole("listitem");
   expect(list.map((item) => item.textContent)).toEqual([

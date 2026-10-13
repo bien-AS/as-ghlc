@@ -37,11 +37,16 @@ test("theme switch offers System, Light and Dark, applies and stores the choice"
   fireEvent.click(dark);
   expect(dark.checked).toBe(true);
   expect(document.documentElement.classList.contains("dark")).toBe(true);
-  expect(localStorage.getItem("theme")).toBe("dark");
+  expect(localStorage.getItem("as-vantage-theme")).toBe("dark");
 
-  fireEvent.click(system);
+  fireEvent.click(screen.getByRole("radio", { name: "Light" }));
+  expect(document.documentElement.classList.contains("light")).toBe(true);
   expect(document.documentElement.classList.contains("dark")).toBe(false);
-  expect(localStorage.getItem("theme")).toBeNull();
+
+  // Vantage is dark-first: System on a device that does not ask for light is dark.
+  fireEvent.click(system);
+  expect(document.documentElement.classList.contains("dark")).toBe(true);
+  expect(localStorage.getItem("as-vantage-theme")).toBeNull();
 });
 
 test("two theme switches on one page each show the choice, each take focus, and stay in step", () => {

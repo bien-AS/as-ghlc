@@ -5,7 +5,7 @@ import { enforceRoute } from "@/lib/data/users";
 import { UpdatePasswordForm } from "./update-password-form";
 
 export const metadata: Metadata = {
-  title: "Choose a new password · Dealwright",
+  title: "Choose a new password · Authority Solutions",
 };
 
 export default async function UpdatePasswordPage() {

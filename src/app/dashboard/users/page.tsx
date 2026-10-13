@@ -9,7 +9,9 @@ import { getQueryClient } from "@/lib/query-client";
 import { UsersScreen } from "../_components/users-screen";
 import { USERS_HREF } from "../navigation";
 
-export const metadata: Metadata = { title: "Users and roles · Dealwright" };
+export const metadata: Metadata = {
+  title: "Users and roles · Authority Solutions",
+};
 
 export default async function UsersPage() {
   await enforceRoute(USERS_HREF);

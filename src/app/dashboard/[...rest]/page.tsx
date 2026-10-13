@@ -22,7 +22,7 @@ export async function generateMetadata({
   params,
 }: PageProps<"/dashboard/[...rest]">): Promise<Metadata> {
   const item = placeholderFor((await params).rest);
-  return { title: `${item?.label ?? "Page not found"} · Dealwright` };
+  return { title: `${item?.label ?? "Page not found"} · Authority Solutions` };
 }
 
 export default async function PlaceholderPage({

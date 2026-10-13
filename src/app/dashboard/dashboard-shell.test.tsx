@@ -136,10 +136,9 @@ test("the sidebar lists every screen in order: a rep's work, a divider, then the
   // The wordmark leads home, and the shell never uses the internal name.
   expect(
     screen
-      .getByRole("link", { name: "Dealwright, go to the Pipeline" })
+      .getByRole("link", { name: "Go to the Pipeline" })
       .getAttribute("href"),
   ).toBe("/dashboard");
-  expect(document.body.textContent).toContain("Dealwright");
   expect(document.body.textContent).not.toMatch(FORBIDDEN);
 });
 
@@ -429,7 +428,7 @@ test("the user menu shows the signed-in user's name and email, Settings, the the
 
   fireEvent.click(within(menu).getByRole("menuitemradio", { name: "Dark" }));
   expect(document.documentElement.classList.contains("dark")).toBe(true);
-  expect(localStorage.getItem("theme")).toBe("dark");
+  expect(localStorage.getItem("as-vantage-theme")).toBe("dark");
   localStorage.clear();
   document.documentElement.className = "";
 

@@ -6,7 +6,9 @@ import { enforceRoute, silentProfileNames } from "@/lib/data/users";
 import { ProfileSetupForm } from "./profile-setup-form";
 import { SilentProfileSetup } from "./silent-profile-setup";
 
-export const metadata: Metadata = { title: "Set up your profile · Dealwright" };
+export const metadata: Metadata = {
+  title: "Set up your profile · Authority Solutions",
+};
 
 /*
  * This page only reads. It never writes to the database while rendering

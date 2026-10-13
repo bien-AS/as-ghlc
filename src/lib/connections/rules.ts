@@ -49,8 +49,8 @@ export const STAGE_SYNC_DIRECTION: "app_to_crm" | "both" = "app_to_crm";
 /** The direction in one line, shown above the stage table. */
 export const stageDirectionText = (crmName: string) =>
   STAGE_SYNC_DIRECTION === "app_to_crm"
-    ? `Dealwright owns a lead's stage and pushes it out to ${crmName}. Choose the stage each one becomes there.`
-    : `A lead's stage is kept in step between Dealwright and ${crmName}. Choose the stage that matches each one.`;
+    ? `The app owns a lead's stage and pushes it out to ${crmName}. Choose the stage each one becomes there.`
+    : `A lead's stage is kept in step between the app and ${crmName}. Choose the stage that matches each one.`;
 
 /**
  * Question 10 (ASSUMED): the proposal, invoice and deck tools are fixed in the

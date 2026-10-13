@@ -175,7 +175,7 @@ test("choosing a theme applies it and keeps it in this browser", async () => {
 
   fireEvent.click(within(panel("Theme")).getByRole("radio", { name: "Dark" }));
   expect(document.documentElement.classList.contains("dark")).toBe(true);
-  expect(localStorage.getItem("theme")).toBe("dark");
+  expect(localStorage.getItem("as-vantage-theme")).toBe("dark");
   expect(writes()).toEqual([]);
 });
 

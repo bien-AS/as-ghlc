@@ -84,7 +84,7 @@ export function SignUpForm({ next }: { next: string }) {
       key="form"
       headingRef={heading}
       title="Create your account"
-      description="Start working leads in Dealwright."
+      description="Start working leads."
       footer={
         <>
           Already have an account? <Link href="/sign-in">Sign in</Link>

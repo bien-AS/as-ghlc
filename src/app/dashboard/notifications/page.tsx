@@ -13,7 +13,9 @@ import { getQueryClient } from "@/lib/query-client";
 import { NotificationsScreen } from "../_components/notifications-screen";
 import { NOTIFICATIONS_HREF } from "../navigation";
 
-export const metadata: Metadata = { title: "Notifications · Dealwright" };
+export const metadata: Metadata = {
+  title: "Notifications · Authority Solutions",
+};
 
 export default async function NotificationsPage() {
   await enforceRoute(NOTIFICATIONS_HREF);

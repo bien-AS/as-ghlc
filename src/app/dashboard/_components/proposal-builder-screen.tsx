@@ -348,7 +348,7 @@ function NotStarted({ view, write }: { view: ProposalView; write: Write }) {
         <HintLine>
           Starts a draft with services suggested from the lead's form answers
           and budget. You set every price before anything is sent. Sample data:
-          the suggestion is made up and nothing leaves Dealwright.
+          the suggestion is made up and nothing leaves the app.
         </HintLine>
       </div>
     </div>

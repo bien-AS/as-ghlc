@@ -4,9 +4,12 @@ import { useSyncExternalStore } from "react";
 
 export type Theme = "system" | "light" | "dark";
 
-/** Shared with the inline script in src/app/layout.tsx; keep the two in step. */
-export const THEME_STORAGE_KEY = "theme";
-const DARK_QUERY = "(prefers-color-scheme: dark)";
+/**
+ * Shared with the inline script in src/app/layout.tsx; keep the two in step.
+ * The key is the Vantage design system's own, so its ThemeToggle would agree.
+ */
+export const THEME_STORAGE_KEY = "as-vantage-theme";
+const LIGHT_QUERY = "(prefers-color-scheme: light)";
 
 const listeners = new Set<() => void>();
 
@@ -21,10 +24,13 @@ function readTheme(): Theme {
 }
 
 export function applyTheme(theme: Theme = readTheme()) {
+  // Vantage is dark-first: anything that is not explicitly light is dark, and
+  // one of the two classes is always present.
   const dark =
     theme === "dark" ||
-    (theme === "system" && window.matchMedia(DARK_QUERY).matches);
+    (theme === "system" && !window.matchMedia(LIGHT_QUERY).matches);
   document.documentElement.classList.toggle("dark", dark);
+  document.documentElement.classList.toggle("light", !dark);
 }
 
 export function setTheme(theme: Theme) {
@@ -43,7 +49,7 @@ function subscribe(onChange: () => void) {
     applyTheme();
     onChange();
   };
-  const media = window.matchMedia(DARK_QUERY);
+  const media = window.matchMedia(LIGHT_QUERY);
   listeners.add(onChange);
   media.addEventListener("change", sync); // device setting changed
   window.addEventListener("storage", sync); // changed in another tab

@@ -1,11 +1,11 @@
 import Link from "next/link";
 
+import { AuthoritySolutionsLogo } from "@/components/ui/authority-solutions-logo";
 import { ThemeSwitch } from "@/components/ui/theme-switch";
-import { Wordmark } from "@/components/ui/wordmark";
 import { cn } from "@/lib/utils";
 
 /**
- * The frame every auth screen shares (spec 02): the endorsed wordmark linking
+ * The frame every auth screen shares (spec 02): the logo linking
  * to "/", the theme switch, and one centred column for a single panel.
  */
 function AuthShell({ children }: { children: React.ReactNode }) {
@@ -13,7 +13,7 @@ function AuthShell({ children }: { children: React.ReactNode }) {
     <div data-slot="auth-shell" className="flex flex-1 flex-col">
       <header className="flex items-center justify-between gap-4 px-4 py-3 sm:px-6">
         <Link href="/" className="rounded-md">
-          <Wordmark endorsed />
+          <AuthoritySolutionsLogo height={28} />
         </Link>
         <ThemeSwitch />
       </header>

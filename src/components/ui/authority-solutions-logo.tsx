@@ -1,6 +1,6 @@
 import Image from "next/image";
 
-import { ENDORSER_NAME } from "@/lib/brand";
+import { COMPANY_NAME } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 
 // Intrinsic size of both files. The ratio is fixed here so no screen can stretch it.
@@ -15,7 +15,7 @@ const FILES = {
 } as const;
 
 /**
- * The endorsing company's logo (spec 03, "Logo and wordmark"). Sized by height
+ * The Authority Solutions logo. The app has no name of its own; this is its mark. Sized by height
  * only; the width follows from the fixed ratio. It draws no box of its own:
  * clear space comes from the layout around it.
  *
@@ -39,7 +39,7 @@ function AuthoritySolutionsLogo({
   const file = (on: "light" | "dark", themeClass: string) => (
     <Image
       src={FILES[on]}
-      alt={ENDORSER_NAME}
+      alt={COMPANY_NAME}
       width={width}
       height={height}
       // Both are small; loading the hidden one too means a theme change does not wait for it.

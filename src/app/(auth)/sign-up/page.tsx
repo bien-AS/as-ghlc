@@ -5,7 +5,9 @@ import { enforceRoute } from "@/lib/data/users";
 
 import { SignUpForm } from "./sign-up-form";
 
-export const metadata: Metadata = { title: "Create your account · Dealwright" };
+export const metadata: Metadata = {
+  title: "Create your account · Authority Solutions",
+};
 
 export default async function SignUpPage({
   searchParams,

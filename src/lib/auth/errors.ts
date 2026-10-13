@@ -9,7 +9,7 @@ export const AUTH_MESSAGES = {
     "That password is too easy to guess. Choose a longer or less common one.",
   samePassword: "Choose a password you have not used for this account.",
   network:
-    "We could not reach Dealwright. Check your connection and try again.",
+    "We could not reach the server. Check your connection and try again.",
   fallback: "Something went wrong. Try again.",
 } as const;
 

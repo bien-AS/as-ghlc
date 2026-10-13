@@ -9,7 +9,9 @@ import { getQueryClient } from "@/lib/query-client";
 import { IntegrationsScreen } from "../_components/integrations-screen";
 import { INTEGRATIONS_HREF } from "../navigation";
 
-export const metadata: Metadata = { title: "Integrations · Dealwright" };
+export const metadata: Metadata = {
+  title: "Integrations · Authority Solutions",
+};
 
 export default async function IntegrationsPage() {
   await enforceRoute(INTEGRATIONS_HREF);

@@ -50,10 +50,10 @@ export function SignInForm({
   return (
     <AuthPanel
       title="Sign in"
-      description="Welcome back to Dealwright."
+      description="Welcome back."
       footer={
         <>
-          New to Dealwright? <Link href="/sign-up">Create an account</Link>
+          New here? <Link href="/sign-up">Create an account</Link>
         </>
       }
     >

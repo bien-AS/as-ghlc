@@ -196,8 +196,8 @@ function DetailsForm({ workspace }: { workspace: Workspace }) {
         </div>
         <BrandingPreview {...preview} />
         <p className="max-w-[65ch] text-pretty text-muted-foreground">
-          This is how the Workspace is named to your team. The look of
-          Dealwright itself does not change.
+          This is how the Workspace is named to your team. The look of the app
+          itself does not change.
         </p>
       </PanelSection>
 

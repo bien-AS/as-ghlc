@@ -12,7 +12,9 @@ import { getViewerTimeZone } from "@/lib/viewer-time-zone";
 import { SuspectScreen } from "../../_components/suspect-screen";
 import { SUSPECTS_HREF, suspectHref } from "../../navigation";
 
-export const metadata: Metadata = { title: "Suspect review · Dealwright" };
+export const metadata: Metadata = {
+  title: "Suspect review · Authority Solutions",
+};
 
 /** /dashboard/suspects, and /dashboard/suspects/{leadId} for one suspect (spec 07). */
 export default async function SuspectsPage({

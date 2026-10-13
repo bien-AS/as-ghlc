@@ -27,9 +27,10 @@ import { PanelLeftIcon } from "lucide-react";
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state";
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
-const SIDEBAR_WIDTH = "16rem";
-const SIDEBAR_WIDTH_MOBILE = "18rem";
-const SIDEBAR_WIDTH_ICON = "3rem";
+// px, not rem: 1rem is 14px in Vantage, and its sidebar is 240px wide.
+const SIDEBAR_WIDTH = "240px";
+const SIDEBAR_WIDTH_MOBILE = "288px";
+const SIDEBAR_WIDTH_ICON = "44px";
 const SIDEBAR_KEYBOARD_SHORTCUT = "b";
 
 type SidebarContextProps = {
@@ -197,7 +198,7 @@ function Sidebar({
         >
           <SheetHeader className="sr-only">
             <SheetTitle>Navigation</SheetTitle>
-            <SheetDescription>Every screen in Dealwright.</SheetDescription>
+            <SheetDescription>Every screen in the app.</SheetDescription>
           </SheetHeader>
           <div className="flex h-full w-full flex-col">{children}</div>
         </SheetContent>

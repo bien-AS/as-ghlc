@@ -4,7 +4,9 @@ import { enforceRoute } from "@/lib/data/users";
 
 import { ResetRequestForm } from "./reset-request-form";
 
-export const metadata: Metadata = { title: "Reset your password · Dealwright" };
+export const metadata: Metadata = {
+  title: "Reset your password · Authority Solutions",
+};
 
 export default async function ResetPasswordPage({
   searchParams,

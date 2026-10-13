@@ -50,11 +50,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { VerdictBox } from "@/components/ui/verdict-box";
-import { Wordmark } from "@/components/ui/wordmark";
 
 import { RolePreviewDemo } from "./role-preview-demo";
 
-export const metadata: Metadata = { title: "UI foundations · Dealwright" };
+export const metadata: Metadata = {
+  title: "UI foundations · Authority Solutions",
+};
 
 // Full class names so Tailwind can see them.
 const swatches = [
@@ -272,10 +273,8 @@ export default function DevUiPage() {
         </div>
       </Section>
 
-      <Section title="Wordmark and logo">
+      <Section title="Logo">
         <div className="flex flex-col items-start gap-4">
-          <Wordmark />
-          <Wordmark endorsed />
           <AuthoritySolutionsLogo height={32} />
           <div className="light rounded-panel bg-surface p-6 ring-1 ring-line">
             <AuthoritySolutionsLogo height={32} surface="light" />

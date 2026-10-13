@@ -5,7 +5,7 @@ import { enforceRoute } from "@/lib/data/users";
 
 import { SignInForm } from "./sign-in-form";
 
-export const metadata: Metadata = { title: "Sign in · Dealwright" };
+export const metadata: Metadata = { title: "Sign in · Authority Solutions" };
 
 const first = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value;

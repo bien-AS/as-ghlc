@@ -9,7 +9,9 @@ import { getQueryClient } from "@/lib/query-client";
 import { WorkspaceScreen } from "../_components/workspace-screen";
 import { WORKSPACE_SETTINGS_HREF } from "../navigation";
 
-export const metadata: Metadata = { title: "Workspace settings · Dealwright" };
+export const metadata: Metadata = {
+  title: "Workspace settings · Authority Solutions",
+};
 
 export default async function WorkspaceSettingsPage() {
   await enforceRoute(WORKSPACE_SETTINGS_HREF);

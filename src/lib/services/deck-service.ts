@@ -183,7 +183,7 @@ export async function generateSlides(
 // 16:9, in points.
 const PAGE = { width: 960, height: 540, margin: 64 };
 export const SAMPLE_PDF_NOTE =
-  "Sample deck. Built by Dealwright from sample data, not by the deck service.";
+  "Sample deck. Built from sample data, not by the deck service.";
 
 // ponytail: the standard PDF fonts are written here as plain ASCII, so any
 // other character prints as "?". It goes with the sample PDF.

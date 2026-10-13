@@ -82,7 +82,7 @@ test("shows the Workspace's name, its branding with a preview, and who can join,
     screen.getByText(/apart from every other customer's/).textContent,
   ).toMatch(/A Workspace cannot be created or deleted here\.$/);
   expect(
-    screen.getByText(/The look of Dealwright itself does not change\./),
+    screen.getByText(/The look of the app itself does not change\./),
   ).toBeDefined();
   expect(
     screen.getByText(/on an allowed domain, or who have an invite, may join/),

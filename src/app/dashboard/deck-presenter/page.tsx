@@ -16,7 +16,9 @@ import { getQueryClient } from "@/lib/query-client";
 import { DeckScreen, type DeckScreenMissing } from "../_components/deck-screen";
 import { DECK_PRESENTER_HREF, deckHref } from "../navigation";
 
-export const metadata: Metadata = { title: "Deck presenter · Dealwright" };
+export const metadata: Metadata = {
+  title: "Deck presenter · Authority Solutions",
+};
 
 const isNotFound = (error: unknown) =>
   error instanceof AccessError && error.code === "not_found";

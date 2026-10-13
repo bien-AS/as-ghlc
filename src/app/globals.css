@@ -1,86 +1,83 @@
+/*
+ * The Vantage design system's two token layers get a cascade layer of their
+ * own, ordered before `base`. Its element rules (a, h1, button) then lose to
+ * Tailwind's reset, exactly as in the system's own Tailwind 3 stylesheet,
+ * which imports the tokens ahead of the reset.
+ */
+@layer theme, vantage, base, components, utilities;
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "../../node_modules/@vantage/design-system/tokens/colors_and_type.css"
+  layer(vantage);
+@import "../../node_modules/@vantage/design-system/tokens/tokens.css"
+  layer(vantage);
 @import "./marketing.css";
+
+/* Tailwind only emits classes it can see; the kit's live in node_modules. */
+@source "../../node_modules/@vantage/design-system/src";
 
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Dealwright tokens (docs/specs/03-ui-foundations.md).
- * Every value is assumed until question 12 is answered: change the values in
- * the two blocks below and nothing else.
+ * Vantage is dark-first: `:root` is the dark palette and `.light` derives from
+ * it. The script in layout.tsx puts `dark` or `light` on <html> before paint.
  *
- * `.dark` on <html> is set before first paint by the script in layout.tsx.
- * `.light` re-scopes a subtree to the light values (the review page uses it).
- * `.inverse` re-scopes a subtree to the other theme's values: dark inside the
- * light theme, light inside the dark theme (the landing page's band).
+ * This app's own token names, pointed at Vantage tokens. Declared on every
+ * theme scope so they re-resolve inside a nested `.light` or `.dark`.
+ * `--surface` and `--primary` are Vantage's own and are not redefined.
  */
 :root,
 .light,
-.dark .inverse {
-  color-scheme: light;
-  --ground: #f7f4f2;
-  --surface: #ffffff;
-  --surface-2: #efeae7;
-  --line: #dfd7d3;
-  --ink: #1e1a18;
-  --ink-2: #5f5651;
-  --ink-3: #8b8079;
-  --brand: #a52b30;
-  --brand-ink: #ffffff;
-  --brand-text: #a52b30;
-  --brand-soft: #f8e7e7;
-  --ok: #2b6e4e;
-  --ok-soft: #dceee4;
-  --warn: #8a6210;
-  --warn-soft: #f6ebd2;
-  --crit: #ac3229;
-  --crit-soft: #f7dfdb;
+.dark,
+[data-theme] {
+  --ground: var(--bg-page);
+  --surface-2: var(--bg-subtle);
+  --line: var(--border);
+  --ink: var(--fg-1);
+  --ink-2: var(--fg-2);
+  --ink-3: var(--fg-3);
+  /* Teal is the only primary-action colour; red is for the logo and for danger. */
+  --brand: var(--cta-teal);
+  --brand-hover: var(--teal-fill-hover);
+  --brand-ink: var(--fg-on-teal);
+  --brand-text: hsl(var(--sc-teal-ink));
+  --brand-soft: var(--cta-teal-soft);
+  /* `*-ink` on `*-soft` is the measured pairing (RULES.md, section 3). */
+  --ok: hsl(var(--sc-teal-ink));
+  --ok-soft: var(--cta-teal-soft);
+  --warn: hsl(var(--sc-amber-ink));
+  --warn-soft: var(--amber-soft);
+  --crit: hsl(var(--sc-danger-ink));
+  --crit-soft: var(--danger-soft);
+
+  /* shadcn's variable names, for components that read them with var(). */
+  --background: var(--bg-page);
+  --foreground: var(--fg-1);
+  --secondary: var(--bg-subtle);
+  --muted: var(--bg-subtle);
+  --sidebar-accent: var(--bg-dark-hover);
+  --sidebar-border: var(--border-dark);
+
+  /* next/font serves hashed family names, so the kit's "Poppins" needs these. */
+  --font-sans:
+    var(--font-poppins), Arial, "Helvetica Neue", Helvetica, sans-serif;
+  --font-display:
+    var(--font-poppins), Arial, "Helvetica Neue", Helvetica, sans-serif;
+  --font-mono:
+    var(--font-jetbrains-mono), "SF Mono", Menlo, Consolas, monospace;
 }
 
-.dark,
-.inverse {
+:root,
+.dark {
   color-scheme: dark;
-  --ground: #2b2827;
-  --surface: #353130;
-  --surface-2: #403b39;
-  --line: #524c49;
-  --ink: #ffffff;
-  --ink-2: #d2cac5;
-  --ink-3: #a69d97;
-  --brand: #c93a3f;
-  --brand-ink: #ffffff;
-  --brand-text: #f58a84;
-  --brand-soft: #4d2527;
-  --ok: #86d1a8;
-  --ok-soft: #25402f;
-  --warn: #e3b866;
-  --warn-soft: #453817;
-  --crit: #f4978b;
-  --crit-soft: #50282a;
 }
-
-/*
- * shadcn's variable names, for the few components that read them with var()
- * instead of a utility. Declared on every theme scope so they re-resolve there.
- */
-:root,
-.light,
-.dark,
-.inverse {
-  --background: var(--ground);
-  --foreground: var(--ink);
-  --primary: var(--brand);
-  --secondary: var(--surface-2);
-  --muted: var(--surface-2);
-  --sidebar-accent: var(--surface-2);
-  --sidebar-border: var(--line);
-  /* Pressed/hover shade of the brand fill; darker in both themes so brand-ink stays readable. */
-  --brand-hover: color-mix(in oklch, var(--brand), black 14%);
+.light {
+  color-scheme: light;
 }
 
 @theme inline {
-  /* Spec tokens as utilities: bg-ground, text-ink-2, border-line, bg-ok-soft ... */
+  /* This app's utilities: bg-ground, text-ink-2, border-line, bg-ok-soft ... */
   --color-ground: var(--ground);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
@@ -100,84 +97,170 @@
   --color-crit: var(--crit);
   --color-crit-soft: var(--crit-soft);
 
-  /* shadcn roles mapped onto the spec tokens. */
-  --color-background: var(--ground);
-  --color-foreground: var(--ink);
-  --color-card: var(--surface);
-  --color-card-foreground: var(--ink);
-  --color-popover: var(--surface);
-  --color-popover-foreground: var(--ink);
-  --color-primary: var(--brand);
-  --color-primary-foreground: var(--brand-ink);
-  --color-secondary: var(--surface-2);
-  --color-secondary-foreground: var(--ink);
-  --color-muted: var(--surface-2);
-  /* ink-2, not ink-3: ink-3 is below 4.5 to 1 on the light ground. */
-  --color-muted-foreground: var(--ink-2);
-  --color-accent: var(--surface-2);
-  --color-accent-foreground: var(--ink);
-  --color-destructive: var(--crit);
-  --color-border: var(--line);
-  --color-input: var(--line);
-  /* Focus ring is ink so it never reads as an error or a brand fill. */
-  --color-ring: var(--ink);
+  /* shadcn roles, from the kit's `--sc-*` layer. */
+  --color-background: hsl(var(--sc-background));
+  --color-foreground: hsl(var(--sc-foreground));
+  --color-card: hsl(var(--sc-card));
+  --color-card-foreground: hsl(var(--sc-card-foreground));
+  --color-popover: hsl(var(--sc-popover));
+  --color-popover-foreground: hsl(var(--sc-popover-foreground));
+  --color-primary: hsl(var(--sc-primary));
+  --color-primary-foreground: hsl(var(--sc-primary-foreground));
+  --color-secondary: var(--bg-subtle);
+  --color-secondary-foreground: var(--fg-1);
+  --color-muted: hsl(var(--sc-muted));
+  --color-muted-foreground: var(--fg-2);
+  --color-accent: var(--bg-subtle);
+  --color-accent-foreground: var(--fg-1);
+  --color-destructive: hsl(var(--sc-danger-ink));
+  --color-border: hsl(var(--sc-border));
+  --color-input: hsl(var(--sc-input));
+  --color-ring: hsl(var(--sc-ring));
   --color-chart-1: var(--brand);
   --color-chart-2: var(--ok);
   --color-chart-3: var(--warn);
   --color-chart-4: var(--ink-2);
   --color-chart-5: var(--ink-3);
-  --color-sidebar: var(--surface);
-  --color-sidebar-foreground: var(--ink);
-  --color-sidebar-primary: var(--brand);
-  --color-sidebar-primary-foreground: var(--brand-ink);
-  --color-sidebar-accent: var(--surface-2);
-  --color-sidebar-accent-foreground: var(--ink);
-  --color-sidebar-border: var(--line);
-  --color-sidebar-ring: var(--ink);
-
-  /* Fonts come from next/font variables set on <html> in layout.tsx. */
-  --font-sans: var(--font-source-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-heading: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+  /*
+   * The sidebar is Vantage's always-dark chrome: the same in both themes, so it
+   * takes the non-flipping `*-on-dark` tokens. `accent` is the hover ground;
+   * the current row uses `--bg-dark-active`, set in app-sidebar.tsx.
+   */
+  --color-sidebar: var(--bg-dark);
+  --color-sidebar-foreground: var(--fg-on-dark-2);
+  --color-sidebar-primary: var(--accent-on-dark);
+  --color-sidebar-primary-foreground: var(--fg-on-accent-on-dark);
+  --color-sidebar-accent: var(--bg-dark-hover);
+  --color-sidebar-accent-foreground: var(--fg-on-dark-1);
+  --color-sidebar-border: var(--border-dark);
+  --color-sidebar-ring: var(--accent-on-dark);
 
   /*
-   * Shapes: 9px buttons and inputs (rounded-lg / rounded-control), 11px verdict
-   * and deck boxes (rounded-box), 13px panels (rounded-xl / rounded-panel).
+   * The kit's own utility names, mirroring its tailwind.config.ts so its
+   * components compile here. Tailwind 4 gives every colour an opacity
+   * modifier, so the config's `hexToken` helper has no equivalent.
    */
-  --radius-sm: 5px;
-  --radius-md: 7px;
-  --radius-lg: 9px;
-  --radius-xl: 13px;
-  --radius-2xl: 16px;
-  --radius-3xl: 20px;
+  --color-surface-page: var(--bg-page);
+  --color-surface-hover: var(--bg-card-hover);
+  --color-surface-subtle: var(--bg-subtle);
+  --color-surface-inset: var(--bg-inset);
+  --color-surface-dark: var(--bg-dark);
+  --color-line-strong: var(--border-strong);
+  --color-line-subtle: var(--border-subtle);
+  --color-line-field: var(--border-input);
+  --color-line-field-hover: var(--border-input-hover);
+  --color-line-dark: var(--border-dark);
+  --color-ink-4: var(--fg-4);
+  --color-ink-on-dark: var(--fg-on-dark-1);
+  --color-ink-on-dark-2: var(--fg-on-dark-2);
+  --color-ink-on-dark-3: var(--fg-on-dark-3);
+  --color-ink-on-teal: var(--fg-on-teal);
+  --color-teal: var(--cta-teal);
+  --color-teal-ink: hsl(var(--sc-teal-ink));
+  --color-teal-hover: var(--cta-teal-hover);
+  --color-teal-press: var(--cta-teal-press);
+  --color-teal-fill-hover: var(--teal-fill-hover);
+  --color-teal-fill-press: var(--teal-fill-press);
+  --color-teal-soft: var(--cta-teal-soft);
+  --color-amber: var(--amber);
+  --color-amber-soft: var(--amber-soft);
+  --color-amber-ink: hsl(var(--sc-amber-ink));
+  --color-danger: var(--as-red);
+  --color-danger-dark: var(--as-red-dark);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-ink: hsl(var(--sc-danger-ink));
+  --color-rank-pack: hsl(var(--sc-rank-1-3));
+  --color-rank-page1: hsl(var(--sc-rank-4-10));
+  --color-rank-page2: hsl(var(--sc-rank-11-19));
+  --color-rank-out: hsl(var(--sc-rank-20-plus));
+  --color-rank-none: hsl(var(--sc-rank-none));
+  --color-rank-foreground: hsl(var(--sc-on-rank));
+  --color-rank-pack-ink: hsl(var(--sc-rank-1-3-ink));
+  --color-rank-page1-ink: hsl(var(--sc-rank-4-10-ink));
+  --color-rank-page2-ink: hsl(var(--sc-rank-11-19-ink));
+  --color-rank-out-ink: hsl(var(--sc-rank-20-plus-ink));
+  --color-rank-none-ink: hsl(var(--sc-rank-none-ink));
+  --color-rank-pack-on: hsl(var(--sc-rank-1-3-on));
+  --color-rank-page1-on: hsl(var(--sc-rank-4-10-on));
+  --color-rank-page2-on: hsl(var(--sc-rank-11-19-on));
+  --color-rank-out-on: hsl(var(--sc-rank-20-plus-on));
+  --color-rank-none-on: hsl(var(--sc-rank-none-on));
+
+  --font-sans:
+    var(--font-poppins), Arial, "Helvetica Neue", Helvetica, sans-serif;
+  --font-display:
+    var(--font-poppins), Arial, "Helvetica Neue", Helvetica, sans-serif;
+  --font-heading:
+    var(--font-poppins), Arial, "Helvetica Neue", Helvetica, sans-serif;
+  --font-mono:
+    var(--font-jetbrains-mono), "SF Mono", Menlo, Consolas, monospace;
+
+  --text-nano: var(--fs-nano);
+  --text-nano--line-height: var(--lh-tight);
+  --text-micro: var(--fs-micro);
+  --text-micro--line-height: var(--lh-tight);
+  --text-meta: var(--fs-meta);
+  --text-meta--line-height: var(--lh-snug);
+  --text-small: var(--fs-small);
+  --text-small--line-height: var(--lh-normal);
+  --text-body: var(--fs-body);
+  --text-body--line-height: var(--lh-normal);
+  --text-display: var(--fs-display);
+  --text-display--line-height: var(--lh-tight);
+
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-xl: var(--r-xl);
+  --radius-2xl: var(--r-2xl);
+  --radius-3xl: var(--r-3xl);
   --radius-4xl: 24px;
-  --radius-control: 9px;
-  --radius-box: 11px;
-  --radius-panel: 13px;
+  --radius-control: var(--r-lg);
+  --radius-box: var(--r-xl);
+  --radius-panel: var(--r-xl);
+
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-focus: var(--shadow-focus);
+  --shadow-focus-danger: var(--shadow-focus-danger);
+
+  --ease-standard: var(--ease-standard);
+  --ease-emphasized: var(--ease-emphasized);
 
   --container-content: 1280px;
 }
 
 @theme {
-  /* Body and controls are 15px / 1.5; shadcn sets them with text-sm. */
-  --text-sm: 0.9375rem;
+  /* 1rem is 14px in Vantage; shadcn sets body and controls with text-sm. */
+  --text-sm: 1rem;
   --text-sm--line-height: 1.5;
-  /* Only 400 and 600 are loaded for the body font, so "medium" is 600. */
-  --font-weight-medium: 600;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   /*
-   * The handoff's two layout breakpoints (specs 03 and 04). Below `nav` (720px)
-   * the sidebar is a sheet and pages are one column; from `wide` (1080px) the
-   * sidebar is expanded by default and pages take their full column count.
+   * Below `nav` (720px) the sidebar is a sheet and pages are one column; from
+   * `wide` (1080px) the sidebar is expanded by default. Media queries measure
+   * rem against the browser default, not Vantage's 14px.
    */
   --breakpoint-nav: 45rem;
   --breakpoint-wide: 67.5rem;
 }
 
+/* The kit's three durations; Tailwind 4 has no theme key for a named duration. */
+@utility duration-fast {
+  transition-duration: var(--dur-fast);
+}
+@utility duration-med {
+  transition-duration: var(--dur-med);
+}
+@utility duration-slow {
+  transition-duration: var(--dur-slow);
+}
+
 /* Panel headings and field labels: label font, uppercase, wide tracking. */
 @utility label-caps {
   font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: var(--fs-micro);
   line-height: 1.4;
   font-weight: 500;
   letter-spacing: 0.08em;
@@ -220,14 +303,14 @@
 @media (max-width: 44.99rem), (pointer: coarse) {
   [data-slot="auth-shell"]
     :is([data-slot="button"], [data-slot="link-button"], [data-slot="input"]) {
-    min-height: 2.75rem;
+    min-height: 44px;
   }
   [data-slot="auth-shell"] [data-slot="password-toggle"] {
-    width: 2.75rem;
+    width: 44px;
   }
   [data-slot="auth-shell"]
     [data-slot="input"]:has(+ [data-slot="password-toggle"]) {
-    padding-right: 2.75rem;
+    padding-right: 44px;
   }
 }
 

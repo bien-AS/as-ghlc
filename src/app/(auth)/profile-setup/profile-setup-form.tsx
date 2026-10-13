@@ -46,7 +46,7 @@ export function ProfileSetupForm({
   return (
     <AuthPanel
       title="Set up your profile"
-      description="Check your name. This is how teammates will see you in Dealwright."
+      description="Check your name. This is how teammates will see you in the app."
     >
       <form
         // Never GET: a submit the browser handles itself must not put fields in the address.

@@ -10,7 +10,9 @@ import { getQueryClient } from "@/lib/query-client";
 import { ProposalBuilderScreen } from "../_components/proposal-builder-screen";
 import { PROPOSAL_BUILDER_HREF, proposalHref } from "../navigation";
 
-export const metadata: Metadata = { title: "Proposal builder · Dealwright" };
+export const metadata: Metadata = {
+  title: "Proposal builder · Authority Solutions",
+};
 
 /** /dashboard/proposal-builder, and ?lead={id} for one lead's proposal (spec 14). */
 export default async function ProposalBuilderPage({

@@ -128,7 +128,7 @@ test("too many attempts and a network failure each say what happened", async () 
   auth.signInWithPassword.mockRejectedValue(new TypeError("Failed to fetch"));
   submit();
   await screen.findByText(
-    "We could not reach Dealwright. Check your connection and try again.",
+    "We could not reach the server. Check your connection and try again.",
   );
 });
 

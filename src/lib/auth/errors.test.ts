@@ -49,10 +49,10 @@ test("a network failure asks the person to try again", () => {
     status: 0,
   });
   expect(authErrorMessage(offline)).toBe(
-    "We could not reach Dealwright. Check your connection and try again.",
+    "We could not reach the server. Check your connection and try again.",
   );
   expect(authErrorMessage(new TypeError("Failed to fetch"))).toBe(
-    "We could not reach Dealwright. Check your connection and try again.",
+    "We could not reach the server. Check your connection and try again.",
   );
 });
 

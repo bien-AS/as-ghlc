@@ -11,7 +11,7 @@ import { getQueryClient } from "@/lib/query-client";
 import { LeadScreen } from "../../_components/lead-screen";
 import { leadHref } from "../../navigation";
 
-export const metadata: Metadata = { title: "Lead · Dealwright" };
+export const metadata: Metadata = { title: "Lead · Authority Solutions" };
 
 export default async function LeadPage({
   params,

@@ -191,8 +191,8 @@ function ConnectionPanel({ connection }: { connection: Connection }) {
               title={`Disconnect ${provider.name}?`}
               description={
                 isCrm
-                  ? "Leads stop arriving from it and changes stop being pushed out to it. Leads already in Dealwright stay. You can connect it again with its API key."
-                  : "Dealwright stops using it until you connect it again with its API key."
+                  ? "Leads stop arriving from it and changes stop being pushed out to it. Leads already in the app stay. You can connect it again with its API key."
+                  : "The app stops using it until you connect it again with its API key."
               }
               confirmLabel="Disconnect"
               onConfirm={() => {
@@ -338,9 +338,9 @@ function ImportLeads({ providerName }: { providerName: string }) {
     <div className={blockClass}>
       <h3 className="text-sm">Import leads</h3>
       <p className={muted}>
-        Brings the leads already in {providerName} into Dealwright. A lead that
-        is already here is not added a second time, so an import can be run
-        again safely.
+        Brings the leads already in {providerName} into the app. A lead that is
+        already here is not added a second time, so an import can be run again
+        safely.
       </p>
       {run.isError && <WriteFailure error={run.error} />}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -400,7 +400,7 @@ function StageMappingForm({
           aria-hidden="true"
           className="hidden grid-cols-2 gap-3 pb-2 font-semibold text-muted-foreground nav:grid"
         >
-          <span>Stage in Dealwright</span>
+          <span>Stage in the app</span>
           <span>Stage in {providerName}</span>
         </div>
         {STAGES.map((stage) => (
@@ -442,7 +442,7 @@ function StageMappingForm({
 function CrmProviders() {
   return (
     <div className={blockClass}>
-      <h3 className="text-sm">CRMs Dealwright connects to</h3>
+      <h3 className="text-sm">CRMs the app connects to</h3>
       <ul className="flex flex-col gap-2">
         {CRM_PROVIDERS.map((provider) => {
           const meta = AVAILABILITY_META[provider.availability];

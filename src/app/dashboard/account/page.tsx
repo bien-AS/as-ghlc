@@ -10,7 +10,9 @@ import { getQueryClient } from "@/lib/query-client";
 import { AccountScreen } from "../_components/account-screen";
 import { ACCOUNT_HREF } from "../navigation";
 
-export const metadata: Metadata = { title: "Account settings · Dealwright" };
+export const metadata: Metadata = {
+  title: "Account settings · Authority Solutions",
+};
 
 export default async function AccountPage() {
   const current = await enforceRoute(ACCOUNT_HREF);

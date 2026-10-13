@@ -10,7 +10,7 @@ import { getViewerTimeZone } from "@/lib/viewer-time-zone";
 
 import { PipelineScreen } from "./_components/pipeline-screen";
 
-export const metadata: Metadata = { title: "Pipeline · Dealwright" };
+export const metadata: Metadata = { title: "Pipeline · Authority Solutions" };
 
 export default async function PipelinePage({
   searchParams,

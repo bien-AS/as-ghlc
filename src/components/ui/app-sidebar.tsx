@@ -3,6 +3,7 @@
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 
+import { AuthoritySolutionsLogo } from "@/components/ui/authority-solutions-logo";
 import { Badge } from "@/components/ui/badge";
 import {
   Sidebar,
@@ -37,7 +38,7 @@ export type AppSidebarGroup = {
 };
 
 /**
- * The dashboard's left navigation (spec 04): the wordmark, then groups of
+ * The dashboard's left navigation (spec 04): the logo, then groups of
  * screens with a divider between them. A screen that is still a placeholder is
  * marked "Soon". Collapses to icons, with each label as a tooltip, and becomes
  * a sheet below the `nav` breakpoint.
@@ -70,6 +71,9 @@ function AppSidebar({
       <SidebarMenuItem key={href}>
         <SidebarMenuButton
           isActive={current}
+          // Vantage's current row: a quieter ground than hover, bold, with a
+          // 3px accent rail and an accent icon.
+          className="relative data-active:bg-[var(--bg-dark-active)] data-active:font-bold data-active:before:absolute data-active:before:top-1/2 data-active:before:left-0 data-active:before:h-[18px] data-active:before:w-[3px] data-active:before:-translate-y-1/2 data-active:before:rounded-r data-active:before:bg-sidebar-primary data-active:hover:bg-sidebar-accent data-active:[&_svg]:text-sidebar-primary"
           tooltip={
             built
               ? [label, waiting].filter(Boolean).join(", ")
@@ -104,7 +108,12 @@ function AppSidebar({
           )}
         </SidebarMenuButton>
         {waiting && (
-          <SidebarMenuBadge aria-hidden="true">{count}</SidebarMenuBadge>
+          <SidebarMenuBadge
+            aria-hidden="true"
+            className="rounded-full bg-sidebar-accent px-1.5 font-mono text-nano font-bold peer-data-active/menu-button:bg-sidebar-primary peer-data-active/menu-button:text-sidebar-primary-foreground"
+          >
+            {count}
+          </SidebarMenuBadge>
         )}
       </SidebarMenuItem>
     );
@@ -117,14 +126,13 @@ function AppSidebar({
       <SidebarHeader className="h-12 justify-center border-b border-sidebar-border px-3 group-data-[collapsible=icon]:px-2">
         <Link
           href={homeHref}
-          aria-label="Dealwright, go to the Pipeline"
+          aria-label="Go to the Pipeline"
           onClick={closeSheet}
-          className="flex h-8 items-center rounded-md px-1 font-heading text-xl font-bold tracking-tight group-data-[collapsible=icon]:justify-center"
+          // Collapsed to icons, the link clips the lockup to its shield.
+          className="flex h-8 items-center overflow-hidden rounded-md px-1 group-data-[collapsible=icon]:w-7 group-data-[collapsible=icon]:px-0"
         >
-          D
-          <span className="group-data-[collapsible=icon]:hidden">
-            ealwright
-          </span>
+          {/* The sidebar is dark in both themes, so the logo is always the white one. */}
+          <AuthoritySolutionsLogo height={24} surface="dark" />
         </Link>
       </SidebarHeader>
       <SidebarContent>
@@ -134,7 +142,7 @@ function AppSidebar({
               {index > 0 && <SidebarSeparator />}
               <SidebarGroup>
                 {group.label && (
-                  <SidebarGroupLabel className="label-caps">
+                  <SidebarGroupLabel className="text-nano font-bold tracking-[0.08em] text-ink-on-dark-3 uppercase">
                     {group.label}
                   </SidebarGroupLabel>
                 )}

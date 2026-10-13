@@ -190,8 +190,8 @@ function NotificationPreferencesPanel() {
   return (
     <PanelSection title="Notification preferences">
       <p className="max-w-[65ch] text-pretty text-muted-foreground">
-        In Dealwright only. A type you switch off is left out of your
-        notifications and your unread count.
+        In the app only. A type you switch off is left out of your notifications
+        and your unread count.
       </p>
       {shown ? (
         <ul className="divide-y divide-border border-y border-border">
