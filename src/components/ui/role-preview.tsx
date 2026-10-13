@@ -104,7 +104,7 @@ function RolePreview({
         {current?.label ?? props.value}
         <ChevronDownIcon aria-hidden="true" className="text-muted-foreground" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-72">
+      <DropdownMenuContent align="end" className="w-[288px]">
         <RolePreviewGroup {...props} />
       </DropdownMenuContent>
     </DropdownMenu>

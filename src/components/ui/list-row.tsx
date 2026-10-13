@@ -27,9 +27,9 @@ function ListRow({
       aria-disabled={disabled || undefined}
       tabIndex={disabled ? -1 : undefined}
       className={cn(
-        "block px-4 py-2.5 outline-none hover:bg-secondary focus-visible:bg-secondary focus-visible:shadow-[inset_0_0_0_2px_var(--ink)] aria-disabled:pointer-events-none aria-disabled:opacity-40",
+        "block px-4 py-2.5 outline-none hover:bg-secondary focus-visible:bg-secondary focus-visible:shadow-[inset_0_0_0_2px_var(--cta-teal)] aria-disabled:pointer-events-none aria-disabled:opacity-40",
         selected &&
-          "bg-secondary shadow-[inset_2px_0_0_var(--brand)] focus-visible:shadow-[inset_2px_0_0_var(--brand),inset_0_0_0_2px_var(--ink)]",
+          "bg-secondary shadow-[inset_3px_0_0_var(--brand)] focus-visible:shadow-[inset_3px_0_0_var(--brand),inset_0_0_0_2px_var(--cta-teal)]",
         className,
       )}
       {...props}

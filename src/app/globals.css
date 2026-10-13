@@ -102,8 +102,9 @@
   --color-foreground: hsl(var(--sc-foreground));
   --color-card: hsl(var(--sc-card));
   --color-card-foreground: hsl(var(--sc-card-foreground));
-  --color-popover: hsl(var(--sc-popover));
-  --color-popover-foreground: hsl(var(--sc-popover-foreground));
+  /* tokens.css defines no popover role: a popover is a card that floats. */
+  --color-popover: hsl(var(--sc-card));
+  --color-popover-foreground: hsl(var(--sc-card-foreground));
   --color-primary: hsl(var(--sc-primary));
   --color-primary-foreground: hsl(var(--sc-primary-foreground));
   --color-secondary: var(--bg-subtle);
@@ -233,9 +234,14 @@
 }
 
 @theme {
-  /* 1rem is 14px in Vantage; shadcn sets body and controls with text-sm. */
-  --text-sm: 1rem;
+  /*
+   * shadcn sets controls, rows and navigation with text-sm and small labels
+   * with text-xs. In Vantage those are 13px and 11px; body copy is 14px.
+   */
+  --text-sm: 13px;
   --text-sm--line-height: 1.5;
+  --text-xs: 11px;
+  --text-xs--line-height: 1.35;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   /*
    * Below `nav` (720px) the sidebar is a sheet and pages are one column; from
@@ -259,13 +265,14 @@
 
 /* Panel headings and field labels: label font, uppercase, wide tracking. */
 @utility label-caps {
-  font-family: var(--font-mono);
+  /* Vantage's eyebrow: the sans face, bold. Mono is for numbers. */
+  font-family: var(--font-sans);
   font-size: var(--fs-micro);
   line-height: 1.4;
-  font-weight: 500;
-  letter-spacing: 0.08em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--ink-2);
+  color: var(--ink-3);
 }
 
 @layer base {
@@ -276,7 +283,7 @@
     @apply font-sans;
   }
   body {
-    @apply bg-background text-sm text-foreground;
+    @apply bg-background text-body text-foreground;
     accent-color: var(--brand);
     caret-color: var(--brand-text);
   }
@@ -289,9 +296,10 @@
     background-color: var(--brand-soft);
     color: var(--ink);
   }
+  /* One focus ring everywhere: Vantage's 3px teal. */
   :focus-visible {
-    outline: 2px solid var(--ink);
-    outline-offset: 2px;
+    outline: none;
+    box-shadow: var(--shadow-focus);
   }
 }
 
@@ -339,3 +347,12 @@
   }
 }
 /* biome-ignore-end lint/complexity/noImportantStyles: see above */
+
+/* iOS zooms the page when a focused field's text is under 16px. */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}

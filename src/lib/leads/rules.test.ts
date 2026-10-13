@@ -27,7 +27,7 @@ test("every status in the list has a label and a tone, as spec 05 gives them", (
     flagged_suspect: "crit",
     drip_chasing: "warn",
     deck_ready: "ok",
-    needs_decision: "brand",
+    needs_decision: "warn",
     qualified: "ok",
     proposal_ready: "ok",
     not_a_fit: "crit",

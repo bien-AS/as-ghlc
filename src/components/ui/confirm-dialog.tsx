@@ -55,7 +55,7 @@ function ConfirmDialog({
         <AlertDialogFooter>
           <AlertDialogCancel variant="default">Cancel</AlertDialogCancel>
           <Button
-            variant={tone === "danger" ? "danger" : "default"}
+            variant={tone === "danger" ? "destructive" : "default"}
             onClick={() => {
               setOpen(false);
               onConfirm();

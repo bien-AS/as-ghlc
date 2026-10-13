@@ -308,7 +308,7 @@ const Missing = () => (
 
 function ClientDetails({ client }: { client: ProposalClient }) {
   return (
-    <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 gap-y-2 [&_dd]:wrap-break-word [&_dt]:text-muted-foreground">
+    <dl className="grid grid-cols-[96px_minmax(0,1fr)] gap-x-3 gap-y-2 [&_dd]:wrap-break-word [&_dt]:text-muted-foreground">
       <dt>Name</dt>
       <dd>{client.name}</dd>
       <dt>Company</dt>

@@ -237,7 +237,7 @@ function TopNavbar({
               {Boolean(unreadCount) && (
                 <span
                   aria-hidden="true"
-                  className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[0.6875rem] leading-none font-semibold text-brand-ink tabular-nums"
+                  className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 font-mono text-nano leading-none font-bold text-brand-ink tabular-nums"
                 >
                   {(unreadCount ?? 0) > 99 ? "99+" : unreadCount}
                 </span>

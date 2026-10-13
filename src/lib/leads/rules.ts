@@ -45,7 +45,7 @@ export const STATUS_META: Record<Status, { label: string; tone: Tone }> = {
   flagged_suspect: { label: "Flagged suspect", tone: "crit" },
   drip_chasing: { label: "Drip chasing the booking", tone: "warn" },
   deck_ready: { label: "Deck ready", tone: "ok" },
-  needs_decision: { label: "Needs a decision", tone: "brand" },
+  needs_decision: { label: "Needs a decision", tone: "warn" },
   qualified: { label: "Qualified", tone: "ok" },
   proposal_ready: { label: "Proposal ready", tone: "ok" },
   not_a_fit: { label: "Not a fit", tone: "crit" },

@@ -83,7 +83,7 @@ const Missing = () => (
 );
 
 const linkClass =
-  "font-semibold break-all text-brand-text underline-offset-4 hover:underline";
+  "font-semibold wrap-anywhere text-brand-text underline-offset-4 hover:underline";
 
 /**
  * Lead detail (spec 06): everything about one lead, and the one thing to do
@@ -223,7 +223,7 @@ export function LeadScreen({
       <header className="flex flex-col gap-2">
         <h1
           tabIndex={-1}
-          className="text-2xl leading-tight wrap-break-word outline-none"
+          className="text-[24px] leading-tight wrap-break-word outline-none"
         >
           {data.exit ? (
             <>
@@ -390,7 +390,7 @@ export function LeadScreen({
           title="Details"
           className="nav:self-start nav:[grid-area:details]"
         >
-          <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 gap-y-2 [&_dt]:text-muted-foreground">
+          <dl className="grid grid-cols-[96px_minmax(0,1fr)] gap-x-3 gap-y-2 [&_dt]:text-muted-foreground">
             <dt>Email</dt>
             <dd>
               {data.email ? (

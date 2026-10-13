@@ -30,7 +30,7 @@ function PageHeader({
       <div className="flex min-w-0 flex-col gap-1.5">
         <h1
           tabIndex={-1}
-          className="text-2xl leading-tight wrap-break-word outline-none"
+          className="text-[24px] leading-tight wrap-break-word outline-none"
         >
           {title}
         </h1>

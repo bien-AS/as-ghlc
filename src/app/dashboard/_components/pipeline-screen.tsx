@@ -206,7 +206,7 @@ function NeedsStrip({
           const count = summary?.needs[need];
           const body = (
             <>
-              <span className="font-heading text-xl leading-none font-bold tabular-nums">
+              <span className="font-mono text-xl leading-none font-bold tabular-nums">
                 {count ?? (
                   // No number rather than a zero when the counts are unavailable.
                   <>

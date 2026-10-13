@@ -83,7 +83,7 @@ function UserMenu({
           className="hidden text-muted-foreground wide:inline"
         />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64">
+      <DropdownMenuContent align="end" className="w-[256px]">
         <div className="flex flex-col px-1.5 py-1">
           <span title={name} className="truncate font-semibold">
             {name}
