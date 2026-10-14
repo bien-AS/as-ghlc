@@ -1,4 +1,5 @@
 import {
+  ArrowLeftRightIcon,
   BellIcon,
   Building2Icon,
   FileTextIcon,
@@ -31,6 +32,7 @@ export const PROPOSAL_BUILDER_HREF = "/dashboard/proposal-builder";
 export const USERS_HREF = "/dashboard/users";
 export const WORKSPACE_SETTINGS_HREF = "/dashboard/settings";
 export const INTEGRATIONS_HREF = "/dashboard/integrations";
+export const SYNC_LOG_HREF = "/dashboard/sync-log";
 /** Personal settings: reached from the user menu, not from the sidebar. */
 export const ACCOUNT_HREF = "/dashboard/account";
 
@@ -122,6 +124,14 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Integrations",
     href: INTEGRATIONS_HREF,
     icon: PlugIcon,
+    group: "workspace",
+    requires: "manage_connections",
+    built: true,
+  },
+  {
+    label: "Sync log",
+    href: SYNC_LOG_HREF,
+    icon: ArrowLeftRightIcon,
     group: "workspace",
     requires: "manage_connections",
     built: true,

@@ -1,5 +1,6 @@
 import { buildSampleLeads, type LeadRecord } from "@/lib/data/fixtures/leads";
 import { resetSampleData, SAMPLE_DATA, sampleStore } from "@/lib/data/sample";
+import { recordSyncWrite } from "@/lib/data/sync-log";
 import { AccessError } from "@/lib/data/users";
 import { canSeeLead, getViewer, type Viewer } from "@/lib/data/viewer";
 import { effectiveVerdict, nextStep } from "@/lib/leads/rules";
@@ -172,6 +173,23 @@ function cancelUpcomingBookings(record: LeadRecord) {
   }
 }
 
+/** The one write path to the CRM (src/lib/data/sync-log.ts); every lead change that reaches it goes through here. */
+function syncWrite(
+  record: LeadRecord,
+  actor: string,
+  kind: "stage_write" | "status_write" | "booking_cancel",
+  value: string,
+  summary: string,
+) {
+  recordSyncWrite({
+    kind,
+    summary,
+    actor,
+    idempotencyKey: `${kind}:${record.id}:${value}`,
+    lead: { id: record.id, name: record.name },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // The functions whose bodies change when real data arrives.
 // ---------------------------------------------------------------------------
@@ -300,11 +318,32 @@ export async function reviewSuspect(
       "Cleared as valid.",
       time,
     );
+    syncWrite(
+      record,
+      reviewer,
+      "status_write",
+      record.status,
+      `Status set to ${record.status} after the suspect was cleared`,
+    );
   } else {
     record.exit = "spam";
     record.status = "removed";
     cancelUpcomingBookings(record);
     addActivity(record, reviewer, "Suspect reviewed", "Marked as spam.", time);
+    syncWrite(
+      record,
+      reviewer,
+      "status_write",
+      "removed",
+      "Lead removed as spam",
+    );
+    syncWrite(
+      record,
+      reviewer,
+      "booking_cancel",
+      "spam",
+      "Upcoming discovery booking cancelled",
+    );
   }
   return toDetail(record);
 }
@@ -331,6 +370,13 @@ export async function setQualification(
       "Marked qualified after the discovery call.",
       time,
     );
+    syncWrite(
+      record,
+      actor,
+      "stage_write",
+      "qualified",
+      "Stage set to qualified",
+    );
   } else {
     record.exit = "lost";
     record.status = "not_a_fit";
@@ -340,6 +386,13 @@ export async function setQualification(
       "Not qualified",
       "Not qualified after the discovery call.",
       time,
+    );
+    syncWrite(
+      record,
+      actor,
+      "status_write",
+      "not_a_fit",
+      "Status set to not a fit",
     );
   }
   return toDetail(record);
@@ -365,6 +418,13 @@ export async function markLost(
     input.reason ? `Reason: ${input.reason}` : "No reason given.",
     new Date().toISOString(),
   );
+  syncWrite(
+    record,
+    `${user.firstName} ${user.lastName}`,
+    "stage_write",
+    "lost",
+    "Stage set to lost",
+  );
   return toDetail(record);
 }
 
@@ -385,6 +445,15 @@ export async function markSpam(leadId: string): Promise<LeadDetail> {
     "Marked spam",
     "Removed from the pipeline as spam.",
     new Date().toISOString(),
+  );
+  const actor = `${user.firstName} ${user.lastName}`;
+  syncWrite(record, actor, "status_write", "removed", "Lead removed as spam");
+  syncWrite(
+    record,
+    actor,
+    "booking_cancel",
+    "spam",
+    "Upcoming discovery booking cancelled",
   );
   return toDetail(record);
 }
