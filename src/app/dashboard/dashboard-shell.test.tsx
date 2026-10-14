@@ -115,6 +115,7 @@ test("the sidebar lists every screen in order: a rep's work, a divider, then the
     "/dashboard/settings",
     "/dashboard/integrations",
     "/dashboard/sync-log",
+    "/dashboard/validation-log",
   ]);
   // Every screen is built: nothing is marked Soon.
   expect(mainNav().textContent).not.toContain("Soon");
@@ -151,6 +152,7 @@ test.each([
   ["/dashboard/settings", "Workspace settings"],
   ["/dashboard/integrations", "Integrations"],
   ["/dashboard/sync-log", "Sync log"],
+  ["/dashboard/validation-log", "Validation log"],
 ])(
   "at %s the current screen is %s, and only it is marked current",
   async (at, label) => {
@@ -520,7 +522,7 @@ test("viewed as Admin, the sidebar is the same as the Owner's", async () => {
   viewAs("admin");
   open();
   await screen.findByRole("button", { name: "Viewing as Admin (preview)" });
-  expect(navLinks()).toHaveLength(9);
+  expect(navLinks()).toHaveLength(10);
 });
 
 test("Skip to content is the first thing focus reaches and points at the main area, which holds the screen", () => {

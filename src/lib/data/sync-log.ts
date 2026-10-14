@@ -51,6 +51,6 @@ export function recordSyncWrite(input: SyncWriteInput): SyncEntry {
 /** The log, newest first. For people who manage the CRM connection only. */
 export async function listSyncLog(): Promise<SyncLog> {
   const { role } = await getViewer();
-  if (!can(role, "manage_connections")) throw new AccessError("forbidden");
+  if (!can(role, "view_logs")) throw new AccessError("forbidden");
   return { items: store().entries.slice(0, SYNC_LOG_PAGE_SIZE) };
 }
