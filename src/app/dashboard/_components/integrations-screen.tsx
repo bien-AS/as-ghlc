@@ -16,7 +16,6 @@ import {
 } from "@/components/ui/native-select";
 import { PageHeader } from "@/components/ui/page-header";
 import { PanelSection } from "@/components/ui/panel-section";
-import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState, NotAllowedState } from "@/components/ui/state-panel";
 import { toast } from "@/components/ui/toast";
 import {
@@ -48,6 +47,7 @@ import { STAGE_LABEL } from "@/lib/leads/rules";
 import { STAGES } from "@/lib/leads/schemas";
 
 import { PIPELINE_HREF } from "../navigation";
+import { IntegrationsSkeleton } from "./skeletons";
 
 /** The 44px Touch Rule: taller below `nav` and on a coarse pointer. */
 const TOUCH = "max-nav:min-h-11 pointer-coarse:min-h-11";
@@ -455,19 +455,5 @@ function CrmProviders() {
         })}
       </ul>
     </div>
-  );
-}
-
-function IntegrationsSkeleton() {
-  return (
-    <output
-      aria-label="Loading Connections"
-      className="flex w-full max-w-3xl flex-col gap-4"
-    >
-      <Skeleton className="h-96 rounded-panel" />
-      <Skeleton className="h-28 rounded-panel" />
-      <Skeleton className="h-28 rounded-panel" />
-      <Skeleton className="h-28 rounded-panel" />
-    </output>
   );
 }

@@ -52,6 +52,7 @@ import {
   proposalHref,
   suspectHref,
 } from "../navigation";
+import { LeadSkeleton } from "./skeletons";
 
 /** How many timeline entries show before "Show earlier" (spec 06, "Long content"). */
 const TIMELINE_FIRST = 20;
@@ -681,30 +682,5 @@ function InvoicePanel({
         </p>
       )}
     </PanelSection>
-  );
-}
-
-function LeadSkeleton() {
-  return (
-    <output aria-label="Loading lead" className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-4 w-40" />
-        <div className="flex gap-2">
-          <Skeleton className="h-5 w-24 rounded-full" />
-          <Skeleton className="h-5 w-32 rounded-full" />
-          <Skeleton className="h-5 w-20 rounded-full" />
-        </div>
-      </div>
-      <div className="flex gap-3">
-        <Skeleton className="h-8 w-28" />
-        <Skeleton className="h-8 w-24" />
-      </div>
-      <div className="grid gap-4 nav:grid-cols-[minmax(0,1fr)_300px] wide:grid-cols-[270px_minmax(0,1fr)_300px]">
-        <Skeleton className="h-64 rounded-panel" />
-        <Skeleton className="h-64 rounded-panel" />
-        <Skeleton className="h-40 rounded-box" />
-      </div>
-    </output>
   );
 }

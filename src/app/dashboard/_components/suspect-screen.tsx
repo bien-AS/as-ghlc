@@ -17,7 +17,6 @@ import {
   NativeSelectOption,
 } from "@/components/ui/native-select";
 import { PageHeader } from "@/components/ui/page-header";
-import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/state-panel";
 import { toast } from "@/components/ui/toast";
 import { VerdictBox } from "@/components/ui/verdict-box";
@@ -42,6 +41,7 @@ import {
   SUSPECTS_HREF,
   suspectHref,
 } from "../navigation";
+import { ReviewSkeleton } from "./skeletons";
 
 const DAY = 24 * 3_600_000;
 
@@ -498,29 +498,5 @@ function Queue({
         {more}
       </nav>
     </>
-  );
-}
-
-function ReviewSkeleton({ withQueue = false }: { withQueue?: boolean }) {
-  const panel = (
-    <output aria-label="Loading suspect" className="flex flex-col gap-4">
-      <Skeleton className="h-7 w-56" />
-      <Skeleton className="h-9 w-full" />
-      <div className="grid gap-4 nav:grid-cols-2">
-        <Skeleton className="h-64 rounded-panel" />
-        <Skeleton className="h-48 rounded-box" />
-      </div>
-    </output>
-  );
-  if (!withQueue) return panel;
-  return (
-    <div className="grid items-start gap-4 wide:grid-cols-[270px_minmax(0,1fr)]">
-      <div className="hidden flex-col gap-2 wide:flex">
-        {["a", "b", "c", "d"].map((row) => (
-          <Skeleton key={row} className="h-16 w-full" />
-        ))}
-      </div>
-      {panel}
-    </div>
   );
 }
