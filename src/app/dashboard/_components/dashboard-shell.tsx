@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { AppSidebar } from "@/components/ui/app-sidebar";
+import { CommandPalette } from "@/components/ui/command-palette";
 import {
   RolePreview,
   type RolePreviewProps,
@@ -161,6 +162,15 @@ function Frame({
         }
       : undefined;
 
+  const goToSearch = (text: string) =>
+    router.push(
+      text ? `${PIPELINE_HREF}?q=${encodeURIComponent(text)}` : PIPELINE_HREF,
+    );
+  const paletteGroups = [
+    { label: "Go to", items: group("work") },
+    { label: "Workspace", items: group("workspace") },
+  ].filter((entry) => entry.items.length > 0);
+
   const name = me.data ? `${me.data.firstName} ${me.data.lastName}` : "Account";
 
   return (
@@ -179,17 +189,16 @@ function Frame({
           { label: "Workspace", items: group("workspace") },
         ]}
       />
+      <CommandPalette
+        groups={paletteGroups}
+        onNavigate={(href) => router.push(href)}
+        onSearch={goToSearch}
+      />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopNavbar
           crumbs={crumbs}
           searchAction={PIPELINE_HREF}
-          onSearch={(text) =>
-            router.push(
-              text
-                ? `${PIPELINE_HREF}?q=${encodeURIComponent(text)}`
-                : PIPELINE_HREF,
-            )
-          }
+          onSearch={goToSearch}
           notificationsHref={NOTIFICATIONS_HREF}
           unreadCount={unread}
           sampleDataNote={sampleData ? SAMPLE_DATA_NOTE : undefined}
