@@ -68,14 +68,16 @@ const SHARED = {
 
 /**
  * ASSUMED (spec 13, "The deck templates": not supplied). The slide set and the
- * wording of each template are invented to show the idea: Discovery frames the
- * first call, Review frames the proposal. Replace with the real templates.
+ * wording of each template are invented to show the idea: Discovery Call
+ * frames the first call, Follow Up frames the proposal, and Strategy Session
+ * frames the planning call after a signed proposal. Replace with the real
+ * templates.
  */
 const TEMPLATE_SLIDES: Record<
   DeckTemplate,
   [id: string, build: (subject: DeckSubject) => SlideContent][]
 > = {
-  discovery: [
+  discovery_call: [
     ["title", SHARED.title],
     ["what-you-told-us", (subject) => heard(subject, "What you told us")],
     ["goals", SHARED.goals],
@@ -118,7 +120,7 @@ const TEMPLATE_SLIDES: Record<
     ],
     ["book", SHARED.book],
   ],
-  review: [
+  follow_up: [
     ["title", SHARED.title],
     ["recap", (subject) => heard(subject, "What we heard on the first call")],
     ["goals", SHARED.goals],
@@ -156,6 +158,38 @@ const TEMPLATE_SLIDES: Record<
           "Weeks 1 to 2: set up tracking and agree the targets",
           "Weeks 3 to 6: launch the campaigns and the new pages",
           "Weeks 7 to 12: review results with you every two weeks",
+        ],
+      }),
+    ],
+    ["book", SHARED.book],
+  ],
+  strategy_session: [
+    ["title", SHARED.title],
+    ["where-you-are", (subject) => heard(subject, "Where things stand today")],
+    ["goals", SHARED.goals],
+    [
+      "priorities",
+      () => ({
+        kind: "content",
+        heading: "What we will do first",
+        body: "",
+        bullets: [
+          "Agree the one number we will measure together",
+          "Fix the pages and forms that lose enquiries",
+          "Switch on the campaigns that are ready to run",
+        ],
+      }),
+    ],
+    [
+      "roles",
+      () => ({
+        kind: "content",
+        heading: "Who does what",
+        body: "",
+        bullets: [
+          "We build, launch and report",
+          "You approve the wording and the budget each month",
+          "One named contact on each side",
         ],
       }),
     ],

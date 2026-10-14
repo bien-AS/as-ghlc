@@ -6,21 +6,21 @@ import type { DeckTemplate } from "@/lib/decks/schemas";
  */
 
 /**
- * ASSUMED (spec 13, "The deck templates": not supplied). Two templates by
- * purpose, named after it. The real names arrive with the templates; change
- * them here. The lead fixtures already call a sample deck's template
- * "Discovery".
+ * The three deck groups of the build packet: Discovery Call, Follow Up and
+ * Strategy Session. The names are the packet's; the slides under each are
+ * still invented (see deck-service.ts) until the real templates arrive.
  */
 export const DECK_TEMPLATE_LABEL: Record<DeckTemplate, string> = {
-  discovery: "Discovery",
-  review: "Review",
+  discovery_call: "Discovery Call",
+  follow_up: "Follow Up",
+  strategy_session: "Strategy Session",
 };
 
 /** The template a stored name refers to; an unknown name is the first template. */
 export const templateFromLabel = (label: string): DeckTemplate =>
   (Object.keys(DECK_TEMPLATE_LABEL) as DeckTemplate[]).find(
     (template) => DECK_TEMPLATE_LABEL[template] === label,
-  ) ?? "discovery";
+  ) ?? "discovery_call";
 
 /**
  * MOCK CHOICE (question 2, part 2: whose editor reps use; no assumed answer).

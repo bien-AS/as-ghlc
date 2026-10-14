@@ -109,7 +109,7 @@ test("shows the header chips, details, form answers, verdict box, the three stat
   expect(verdict?.textContent).toContain("Installer registration matches.");
 
   // Deck, proposal and invoice: where each stands, and the way into it.
-  expect(panel("Deck").getByText("Discovery template")).toBeDefined();
+  expect(panel("Deck").getByText("Discovery Call template")).toBeDefined();
   expect(
     panel("Deck").getByRole("link", { name: "Open deck" }).getAttribute("href"),
   ).toBe(`/dashboard/deck-presenter?lead=${leadId}`);
