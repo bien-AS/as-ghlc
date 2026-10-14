@@ -2,6 +2,7 @@ import {
   ArrowLeftRightIcon,
   BellIcon,
   Building2Icon,
+  ClipboardCheckIcon,
   FileTextIcon,
   LayoutListIcon,
   type LucideIcon,
@@ -33,6 +34,7 @@ export const USERS_HREF = "/dashboard/users";
 export const WORKSPACE_SETTINGS_HREF = "/dashboard/settings";
 export const INTEGRATIONS_HREF = "/dashboard/integrations";
 export const SYNC_LOG_HREF = "/dashboard/sync-log";
+export const VALIDATION_LOG_HREF = "/dashboard/validation-log";
 /** Personal settings: reached from the user menu, not from the sidebar. */
 export const ACCOUNT_HREF = "/dashboard/account";
 
@@ -133,7 +135,15 @@ export const NAV_ITEMS: NavItem[] = [
     href: SYNC_LOG_HREF,
     icon: ArrowLeftRightIcon,
     group: "workspace",
-    requires: "manage_connections",
+    requires: "view_logs",
+    built: true,
+  },
+  {
+    label: "Validation log",
+    href: VALIDATION_LOG_HREF,
+    icon: ClipboardCheckIcon,
+    group: "workspace",
+    requires: "view_logs",
     built: true,
   },
 ];

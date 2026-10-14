@@ -31,6 +31,8 @@ export const CAPABILITIES = [
   "manage_users",
   "manage_workspace",
   "manage_connections",
+  /** The sync log and the validation log. */
+  "view_logs",
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
