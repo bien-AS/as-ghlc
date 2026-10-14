@@ -466,10 +466,7 @@ test("a long timeline shows the newest 20 until Show earlier is pressed", async 
 });
 
 test("the way back to the Pipeline carries the filters the rep last had there", async () => {
-  sessionStorage.setItem(
-    "dealwright:pipeline-search",
-    "tab=qualified&q=asante",
-  );
+  sessionStorage.setItem("as:pipeline-search", "tab=qualified&q=asante");
   await open("Kwame Asante");
   expect(
     screen.getByRole("link", { name: "Pipeline" }).getAttribute("href"),
