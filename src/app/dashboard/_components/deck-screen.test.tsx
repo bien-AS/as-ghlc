@@ -88,7 +88,7 @@ test("with no lead in the address, lists the leads that have a deck, each a link
   const hannah = screen.getByRole("link", { name: /Hannah Kowalczyk/ });
   expect(hannah.getAttribute("href")).toBe(deckHref(await leadIdOf(MAYAS)));
   expect(hannah.textContent).toContain("Kowalczyk Eye Care");
-  expect(hannah.textContent).toContain("Discovery template");
+  expect(hannah.textContent).toContain("Discovery Call template");
   // A lead with no deck is not offered.
   expect(screen.queryByRole("link", { name: /Imogen Vasquez/ })).toBeNull();
   expect(document.body.textContent).not.toMatch(FORBIDDEN);
@@ -280,24 +280,24 @@ test("switching template redraws the deck, keeps an edit to a shared slide, and 
   await screen.findByText("Slide saved");
 
   const select = screen.getByLabelText<HTMLSelectElement>("Template");
-  expect(select.value).toBe("discovery");
+  expect(select.value).toBe("discovery_call");
   expect(
     within(select)
       .getAllByRole("option")
       .map((option) => option.textContent),
-  ).toEqual(["Discovery", "Review"]);
+  ).toEqual(["Discovery Call", "Follow Up", "Strategy Session"]);
   const before = outline().map((link) => link.textContent);
 
-  fireEvent.change(select, { target: { value: "review" } });
-  await screen.findByText("The deck now uses the Review template");
+  fireEvent.change(select, { target: { value: "follow_up" } });
+  await screen.findByText("The deck now uses the Follow Up template");
 
-  expect(select.value).toBe("review");
+  expect(select.value).toBe("follow_up");
   expect(outline().map((link) => link.textContent)).not.toEqual(before);
   expect(outline()[3].textContent).toBe("4The plan we propose");
   // The same place in the deck, and the rep's edit to the slide both templates share.
   expect(counter()).toBe("3 of 7");
   expect(slideHeading()).toBe("Shared edit");
-  expect((await getLead(leadId)).deck?.templateName).toBe("Review");
+  expect((await getLead(leadId)).deck?.templateName).toBe("Follow Up");
 });
 
 test("a template change that fails says so and leaves the deck as it was", async () => {
@@ -305,9 +305,9 @@ test("a template change that fails says so and leaves the deck as it was", async
   api.fail("POST", /\/template$/, 500, { once: true });
   const select = screen.getByLabelText<HTMLSelectElement>("Template");
 
-  fireEvent.change(select, { target: { value: "review" } });
+  fireEvent.change(select, { target: { value: "follow_up" } });
   await screen.findByText(/The template could not be changed/);
-  expect(select.value).toBe("discovery");
+  expect(select.value).toBe("discovery_call");
   expect(outline()[1].textContent).toBe("2What you told us");
 });
 

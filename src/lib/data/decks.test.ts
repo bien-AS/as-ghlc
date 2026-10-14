@@ -107,7 +107,7 @@ const routes = {
       new Request(`${ORIGIN}/api/decks/${leadId}/pdf`),
       context({ leadId }),
     ),
-  template: (leadId: string, body: unknown = { template: "review" }) =>
+  template: (leadId: string, body: unknown = { template: "follow_up" }) =>
     postTemplateRoute(
       json("POST", `/api/decks/${leadId}/template`, body),
       context({ leadId }),
@@ -173,7 +173,7 @@ test("invalid input answers 400 and names the field", async () => {
     ["not JSON", routes.template(leadId, "not json"), null],
     [
       "extra field",
-      routes.template(leadId, { template: "review", a: 1 }),
+      routes.template(leadId, { template: "follow_up", a: 1 }),
       null,
     ],
     [
@@ -206,7 +206,7 @@ test("invalid input answers 400 and names the field", async () => {
     if (field) expect(error.fields[field], name).toBeTruthy();
   }
   // Nothing was written.
-  expect((await getDeck(leadId)).template).toBe("discovery");
+  expect((await getDeck(leadId)).template).toBe("discovery_call");
 });
 
 test("an unknown lead, a lead with no deck and an unknown slide answer 404", async () => {
@@ -242,10 +242,13 @@ test("the picker lists exactly the visible leads that have a deck, by name", asy
   expect(await (await routes.list()).json()).toEqual(decks);
 });
 
-test("every sample deck parses against the contract, in both templates", async () => {
+test("every sample deck parses against the contract, in every template", async () => {
   expect(buildSampleDecks().size).toBe(0);
-  expect(seedDeck("Discovery")).toEqual({ template: "discovery", edits: {} });
-  expect(seedDeck("Something else").template).toBe("discovery");
+  expect(seedDeck("Discovery Call")).toEqual({
+    template: "discovery_call",
+    edits: {},
+  });
+  expect(seedDeck("Something else").template).toBe("discovery_call");
 
   for (const item of await listDecks()) {
     expect(() => deckListItemSchema.parse(item)).not.toThrow();
@@ -273,7 +276,7 @@ test("a deck is built from its lead, and never carries the deck service's id", a
   const deck = await getDeck(leadId);
 
   expect(deck.lead).toEqual({ id: leadId, name: MAYAS, company: lead.company });
-  expect(deck.template).toBe("discovery");
+  expect(deck.template).toBe("discovery_call");
   expect(deck.slides[0].heading).toBe(lead.company);
   expect(deck.slides[0].body).toContain(MAYAS);
   expect(deck.slides[1].bullets).toEqual(
@@ -346,11 +349,11 @@ test("switching template redraws the deck, keeps edits to shared slides, and the
   await updateSlide(leadId, "goals", { ...TEXT, heading: "Shared edit" });
   await updateSlide(leadId, "budget", { ...TEXT, heading: "Discovery edit" });
 
-  const response = await routes.template(leadId, { template: "review" });
+  const response = await routes.template(leadId, { template: "follow_up" });
   expect(response.status).toBe(200);
   const review = (await response.json()) as Deck;
 
-  expect(review.template).toBe("review");
+  expect(review.template).toBe("follow_up");
   expect(review.slides.map((slide) => slide.id)).not.toEqual(
     discovery.slides.map((slide) => slide.id),
   );
@@ -361,17 +364,17 @@ test("switching template redraws the deck, keeps edits to shared slides, and the
 
   // Lead detail and the timeline follow.
   const lead = await getLead(leadId);
-  expect(lead.deck?.templateName).toBe(DECK_TEMPLATE_LABEL.review);
+  expect(lead.deck?.templateName).toBe(DECK_TEMPLATE_LABEL.follow_up);
   expect(lead.activities[0]).toMatchObject({
     type: "Deck template changed",
     actor: { kind: "user", name: "Ada Lovelace" },
   });
   expect((await listDecks()).find((deck) => deck.lead.id === leadId)).toEqual(
-    expect.objectContaining({ template: "review" }),
+    expect.objectContaining({ template: "follow_up" }),
   );
 
   // Back again: the edit to the Discovery-only slide is still there.
-  const back = await switchTemplate(leadId, { template: "discovery" });
+  const back = await switchTemplate(leadId, { template: "discovery_call" });
   expect(back.slides.find((slide) => slide.id === "budget")?.heading).toBe(
     "Discovery edit",
   );
@@ -380,7 +383,7 @@ test("switching template redraws the deck, keeps edits to shared slides, and the
 test("choosing the template a deck already has changes nothing", async () => {
   const leadId = await idOf(MAYAS);
   const before = await getLead(leadId);
-  const deck = await switchTemplate(leadId, { template: "discovery" });
+  const deck = await switchTemplate(leadId, { template: "discovery_call" });
   expect(deck).toEqual(await getDeck(leadId));
   expect(await getLead(leadId)).toEqual(before);
 });
@@ -449,7 +452,7 @@ test("staff reach only their own leads' decks; another rep's deck answers not fo
   // The refused writes changed nothing.
   viewAs("owner");
   const deck = await getDeck(theirs);
-  expect(deck.template).toBe("discovery");
+  expect(deck.template).toBe("discovery_call");
   expect(deck.slides.find((slide) => slide.id === "goals")?.heading).toBe(
     "What you want to achieve",
   );

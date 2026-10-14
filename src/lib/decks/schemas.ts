@@ -11,7 +11,11 @@ import { z } from "zod";
  */
 
 /** Spec 13: "at least two templates by purpose: discovery and review". */
-export const DECK_TEMPLATES = ["discovery", "review"] as const;
+export const DECK_TEMPLATES = [
+  "discovery_call",
+  "follow_up",
+  "strategy_session",
+] as const;
 export const deckTemplateSchema = z.enum(DECK_TEMPLATES);
 export type DeckTemplate = z.infer<typeof deckTemplateSchema>;
 
