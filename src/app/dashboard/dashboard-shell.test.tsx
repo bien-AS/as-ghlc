@@ -339,7 +339,7 @@ test("the navbar shows where you are; inside a lead it is Pipeline, then the lea
 
   cleanup();
   resetNavigation("/dashboard/leads/lead-09");
-  sessionStorage.setItem("dealwright:pipeline-search", "tab=new");
+  sessionStorage.setItem("as:pipeline-search", "tab=new");
   const view = renderScreen(
     <DashboardShell sidebarOpen timeZone="UTC" sampleData>
       <h1>Screen</h1>

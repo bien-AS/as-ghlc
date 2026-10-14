@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 
-const KEY = "dealwright:pipeline-search";
+const KEY = "as:pipeline-search";
 const PIPELINE = "/dashboard";
 const subscribe = () => () => {};
 

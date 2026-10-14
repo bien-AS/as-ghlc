@@ -7,7 +7,7 @@ export const SAMPLE_DATA = true;
 // ponytail: one in-memory copy per server instance, on globalThis so Route
 // Handlers and Server Components (separate bundles) share it. Not durable and
 // not shared between instances; it disappears with the fixtures.
-const holder = globalThis as { __dealwrightSample?: Map<string, unknown> };
+const holder = globalThis as { __asSample?: Map<string, unknown> };
 
 /**
  * A named sample store for one data-access module: built from its fixtures on
@@ -16,8 +16,8 @@ const holder = globalThis as { __dealwrightSample?: Map<string, unknown> };
  */
 export function sampleStore<T>(name: string, build: () => T): () => T {
   return () => {
-    holder.__dealwrightSample ??= new Map();
-    const stores = holder.__dealwrightSample;
+    holder.__asSample ??= new Map();
+    const stores = holder.__asSample;
     if (!stores.has(name)) stores.set(name, build());
     return stores.get(name) as T;
   };
@@ -25,5 +25,5 @@ export function sampleStore<T>(name: string, build: () => T): () => T {
 
 /** Tests only: every sample store starts again from its fixtures. */
 export function resetSampleData() {
-  holder.__dealwrightSample = undefined;
+  holder.__asSample = undefined;
 }
