@@ -67,6 +67,7 @@ import {
   leadHref,
   PIPELINE_HREF,
 } from "../navigation";
+import { DeckSkeleton } from "./skeletons";
 
 /** What the server already knows is not there: the lead, or only its deck. */
 export type DeckScreenMissing = "lead" | "deck" | undefined;
@@ -767,29 +768,5 @@ function SlideEditor({
         </Button>
       </div>
     </form>
-  );
-}
-
-function DeckSkeleton() {
-  return (
-    <output aria-label="Loading deck" className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <Skeleton className="h-8 w-72 max-w-full" />
-        <Skeleton className="h-4 w-40" />
-      </div>
-      <div className="flex flex-wrap gap-3">
-        <Skeleton className="h-8 w-40" />
-        <Skeleton className="h-8 w-24 nav:ml-auto" />
-        <Skeleton className="h-8 w-32" />
-        <Skeleton className="h-8 w-40" />
-      </div>
-      <div className="grid items-start gap-4 wide:grid-cols-[minmax(0,1fr)_260px]">
-        <div className="flex flex-col items-center gap-3">
-          <Skeleton className="aspect-video w-full rounded-box" />
-          <Skeleton className="h-8 w-56" />
-        </div>
-        <Skeleton className="h-64 rounded-panel" />
-      </div>
-    </output>
   );
 }

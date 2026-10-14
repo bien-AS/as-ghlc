@@ -10,7 +10,6 @@ import { FormField } from "@/components/ui/form-field";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PanelSection } from "@/components/ui/panel-section";
-import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState, NotAllowedState } from "@/components/ui/state-panel";
 import { toast } from "@/components/ui/toast";
 import { useHydrated } from "@/hooks/use-hydrated";
@@ -34,6 +33,7 @@ import {
 } from "@/lib/workspace/schemas";
 
 import { PIPELINE_HREF, USERS_HREF } from "../navigation";
+import { WorkspaceSkeleton } from "./skeletons";
 
 /** The 44px Touch Rule: taller below `nav` and on a coarse pointer. */
 const TOUCH = "max-nav:min-h-11 pointer-coarse:min-h-11";
@@ -364,19 +364,5 @@ function JoinPanel({ domains }: { domains: string[] }) {
         </Button>
       </form>
     </PanelSection>
-  );
-}
-
-function WorkspaceSkeleton() {
-  return (
-    <output
-      aria-label="Loading Workspace settings"
-      className="flex w-full max-w-2xl flex-col gap-4"
-    >
-      <Skeleton className="h-36 rounded-panel" />
-      <Skeleton className="h-64 rounded-panel" />
-      <Skeleton className="h-8 w-32" />
-      <Skeleton className="h-56 rounded-panel" />
-    </output>
   );
 }
