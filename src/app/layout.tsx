@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono, Poppins } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { COMPANY_NAME } from "@/lib/brand";
 import { Providers } from "./providers";
@@ -34,11 +35,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${sans.variable} ${mono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <head>
-        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: static string, the documented way to set the theme before paint */}
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-      </head>
       <body className="flex min-h-full flex-col">
+        <Script id="theme-init" strategy="beforeInteractive">
+          {themeScript}
+        </Script>
         <Providers>{children}</Providers>
       </body>
     </html>
