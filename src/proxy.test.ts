@@ -1,63 +1,51 @@
 // @vitest-environment node
 import { NextRequest } from "next/server";
-import { expect, test } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
 
-import { cleanAuthAddress } from "@/lib/auth/routing";
 import { proxy } from "@/proxy";
+
+const session = vi.hoisted(() => ({ sub: null as string | null }));
+vi.mock("@supabase/ssr", () => ({
+  createServerClient: () => ({
+    auth: {
+      getClaims: async () => ({
+        data: session.sub ? { claims: { sub: session.sub } } : null,
+        error: null,
+      }),
+    },
+  }),
+}));
+
+beforeEach(() => {
+  session.sub = null;
+});
 
 const ORIGIN = "http://localhost:3000";
 const visit = (path: string) => proxy(new NextRequest(`${ORIGIN}${path}`));
-
-test("an auth page loaded with form fields in its query redirects to the same page without them, keeping a valid next", async () => {
-  const response = await visit(
-    "/sign-in?email=a@example.com&password=x&next=%2Fleads%2Flead-01",
-  );
-  expect(response.status).toBe(303);
-  const location = response.headers.get("location") ?? "";
-  expect(location).toBe(`${ORIGIN}/sign-in?next=%2Fleads%2Flead-01`);
-  expect(location).not.toContain("password");
-  expect(location).not.toContain("email");
-});
-
-test("with nothing worth keeping, the redirect goes to the bare page", async () => {
-  const response = await visit("/sign-in?email=a@example.com&password=x");
-  expect(response.status).toBe(303);
-  expect(response.headers.get("location")).toBe(`${ORIGIN}/sign-in`);
-});
-
-test("every auth page is covered, and only next and notice survive", () => {
-  for (const page of [
-    "/sign-in",
-    "/sign-up",
-    "/reset-password",
-    "/reset-password/update",
-    "/profile-setup",
-  ]) {
-    expect(cleanAuthAddress(page, "?firstName=Ada&lastName=L&password=x")).toBe(
-      page,
-    );
-  }
-  expect(
-    cleanAuthAddress("/reset-password", "?notice=link_invalid&email=a%40b.c"),
-  ).toBe("/reset-password?notice=link_invalid");
-  // An address that is already clean is left alone: no redirect loop.
-  expect(cleanAuthAddress("/sign-in", "")).toBeNull();
-  expect(cleanAuthAddress("/sign-in", "?next=%2Fdashboard")).toBeNull();
-  expect(cleanAuthAddress("/sign-in", "?notice=signed_out")).toBeNull();
-  // Other routes keep their queries.
-  expect(cleanAuthAddress("/dashboard", "?q=ada")).toBeNull();
-  expect(cleanAuthAddress("/auth/confirm", "?token_hash=abc")).toBeNull();
-});
-
-test("a next that leaves the app, or an unknown notice, is dropped rather than kept", () => {
-  expect(cleanAuthAddress("/sign-in", "?next=https%3A%2F%2Fevil.example")).toBe(
-    "/sign-in",
-  );
-  expect(cleanAuthAddress("/sign-in", "?notice=%3Cb%3Ehello")).toBe("/sign-in");
-});
 
 test("the root address has no page: it goes to the dashboard", async () => {
   const response = await visit("/");
   expect(response.status).toBe(307);
   expect(response.headers.get("location")).toBe(`${ORIGIN}/dashboard`);
+});
+
+test("a signed-out visitor to an app screen goes to /login, remembering the page", async () => {
+  const response = await visit("/leads/42?tab=notes");
+  expect(response.status).toBe(307);
+  expect(response.headers.get("location")).toBe(
+    `${ORIGIN}/login?next=%2Fleads%2F42%3Ftab%3Dnotes`,
+  );
+});
+
+test("a signed-out visitor to /login or /access-denied is let through", async () => {
+  for (const path of ["/login", "/access-denied?reason=deactivated"]) {
+    const response = await visit(path);
+    expect(response.headers.get("location"), path).toBeNull();
+  }
+});
+
+test("a signed-in visitor is let through; the pages and guards decide the rest", async () => {
+  session.sub = "auth-user-1";
+  const response = await visit("/leads/42");
+  expect(response.headers.get("location")).toBeNull();
 });

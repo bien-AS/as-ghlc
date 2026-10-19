@@ -18,34 +18,36 @@ type Claims = Record<string, unknown> | null;
  * A profiles row as the tests need it. Unset, `active` is true and `role` is
  * admin, so a test that does not care about roles sees everything.
  */
-type FakeProfile = CurrentUser & { role?: "admin" | "rep"; active?: boolean };
+type FakeProfile = CurrentUser & {
+  role?: "admin" | "rep";
+  active?: boolean;
+  firstRun?: boolean;
+};
 
 export const fake = {
   claims: null as Claims,
   users: new Map<string, FakeProfile>(),
   /** The request's cookies, as `cookies()` from next/headers reads and writes them. */
   cookies: new Map<string, string>(),
-  verifyOtp: vi.fn(),
   exchangeCodeForSession: vi.fn(),
+  signOut: vi.fn(),
 };
 
 export function resetFakes() {
   fake.claims = null;
   fake.users.clear();
   fake.cookies.clear();
-  fake.verifyOtp.mockReset().mockResolvedValue({ data: {}, error: null });
   fake.exchangeCodeForSession
     .mockReset()
     .mockResolvedValue({ data: {}, error: null });
+  fake.signOut.mockReset().mockResolvedValue({ error: null });
 }
 
-/** A verified session, as the token claims. `amr` says how it was established. */
+/** A verified session, as the token claims. */
 export function signIn(claims: Record<string, unknown> = {}) {
   fake.claims = {
     sub: "auth-user-1",
     email: "ada@example.com",
-    amr: [{ method: "password", timestamp: 1 }],
-    user_metadata: {},
     ...claims,
   };
 }
@@ -76,8 +78,8 @@ export const supabaseServerModule = {
         fake.claims
           ? { data: { claims: fake.claims }, error: null }
           : { data: null, error: null },
-      verifyOtp: fake.verifyOtp,
       exchangeCodeForSession: fake.exchangeCodeForSession,
+      signOut: fake.signOut,
     },
   }),
 };
@@ -98,13 +100,6 @@ export const headersModule = {
   }),
 };
 
-// Postgres' unique_violation, wrapped the way Drizzle wraps a failed query.
-const uniqueViolation = () =>
-  Object.assign(new Error("Failed query"), {
-    name: "DrizzleQueryError",
-    cause: { code: "23505" },
-  });
-
 const dialect = new PgDialect();
 /** The id an `eq(profiles.id, id)` condition compares with. */
 const idIn = (where: SQL) => dialect.sqlToQuery(where).params[0] as string;
@@ -118,7 +113,7 @@ const asCurrentUser = ({ id, email, firstName, lastName }: CurrentUser) => ({
 
 /**
  * The `profiles` table, for exactly the queries src/lib/data/users.ts makes:
- * a read by id, an insert and a name update, each by `eq(profiles.id, …)`.
+ * a read by id and a name update, each by `eq(profiles.id, …)`.
  */
 export const dbModule = {
   db: {
@@ -130,18 +125,6 @@ export const dbModule = {
         },
       },
     },
-    insert: () => ({
-      values: (data: FakeProfile) => ({
-        returning: async () => {
-          const emailTaken = [...fake.users.values()].some(
-            (user) => user.email === data.email,
-          );
-          if (fake.users.has(data.id) || emailTaken) throw uniqueViolation();
-          fake.users.set(data.id, { ...data });
-          return [asCurrentUser(data)];
-        },
-      }),
-    }),
     update: () => ({
       set: (data: Partial<CurrentUser>) => ({
         where: (where: SQL) => ({

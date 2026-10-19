@@ -104,7 +104,8 @@ def main() -> int:
             reg_routes[normalize(r)] = s
 
     built = {r: s for r, s in reg_routes.items() if r in pages or r in handlers}
-    unregistered = sorted(pages - set(reg_routes))
+    # /dev/* pages are development-only tools (they 404 in production), not screens.
+    unregistered = sorted(r for r in pages - set(reg_routes) if not r.startswith("/dev/"))
     not_built = [(r, s) for r, s in sorted(reg_routes.items()) if r not in built]
     drift = [(r, s) for r, s in sorted(built.items()) if s.get("status") == "planned"]
 

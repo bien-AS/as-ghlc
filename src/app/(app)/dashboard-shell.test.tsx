@@ -433,7 +433,7 @@ test("the user menu shows the signed-in user's name and email, Settings, the the
 
   fireEvent.click(within(menu).getByRole("menuitem", { name: "Sign out" }));
   await waitFor(() => expect(auth.signOut).toHaveBeenCalledTimes(1));
-  await waitFor(() => expect(navigate).toHaveBeenCalledWith("/"));
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith("/login"));
 });
 
 test("on a small screen the Sample data note moves into the user menu", async () => {

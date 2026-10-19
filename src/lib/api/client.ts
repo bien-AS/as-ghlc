@@ -1,3 +1,4 @@
+import { accessDenied, DENIED } from "@/lib/auth/routing";
 import type { ApiErrorCode } from "@/lib/auth/schemas";
 import { navigate } from "@/lib/navigate";
 
@@ -13,8 +14,8 @@ export class ApiError extends Error {
 
 /**
  * The one way client hooks call our Route Handlers. It also applies the
- * refusal contract: 401 sends the person to sign in (remembering the page),
- * 403 "profile_required" sends them to profile setup.
+ * refusal contract: 401 sends the person to /login (remembering the page),
+ * 403 "profile_required" (signed in, not provisioned) to /access-denied.
  */
 export async function apiFetch<T>(
   path: string,
@@ -35,9 +36,9 @@ export async function apiFetch<T>(
 
   if (error.status === 401) {
     const here = `${window.location.pathname}${window.location.search}`;
-    navigate(`/sign-in?next=${encodeURIComponent(here)}`);
+    navigate(`/login?next=${encodeURIComponent(here)}`);
   } else if (error.code === "profile_required") {
-    navigate("/profile-setup");
+    navigate(accessDenied(DENIED.notProvisioned));
   }
   throw error;
 }

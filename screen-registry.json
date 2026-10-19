@@ -56,7 +56,7 @@
       "dimension": "Auth & Identity",
       "tier": 1,
       "phase": 1,
-      "status": "planned",
+      "status": "built",
       "rbac": {
         "admin": "full",
         "operator": "full"
@@ -111,7 +111,7 @@
       "dimension": "Auth & Identity",
       "tier": 2,
       "phase": 1,
-      "status": "planned",
+      "status": "built",
       "rbac": {
         "admin": "full",
         "operator": "full"
@@ -172,7 +172,7 @@
       "dimension": "Auth & Identity",
       "tier": 2,
       "phase": 1,
-      "status": "planned",
+      "status": "built",
       "rbac": {
         "admin": "full",
         "operator": "full"

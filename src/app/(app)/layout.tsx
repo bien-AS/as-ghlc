@@ -17,10 +17,11 @@ import { DashboardShell } from "./_components/dashboard-shell";
 
 /*
  * Every screen in the (app) group is protected in three places:
- *  - src/proxy.ts sends signed-out visitors to /sign-in, remembering the page;
- *  - this layout applies the full table (including "no profile") when an
- *    app page is first loaded, before any of the shell renders;
- *  - every data-access function starts with `requireUser`, which is the real
+ *  - src/proxy.ts sends signed-out visitors to /login, remembering the page;
+ *  - this layout applies the full table (no profile or a deactivated one go
+ *    to /access-denied) when an app page is first loaded, before any of the
+ *    shell renders;
+ *  - every data-access function starts with `requireProfile`, which is the real
  *    line of defence: a layout does not re-run on client navigation, so each
  *    page also calls `enforceRoute` itself.
  */
@@ -31,7 +32,7 @@ export default async function AppLayout({
 }) {
   const current = await enforceRoute("/dashboard");
   // enforceRoute has redirected every other state away.
-  if (current.status !== "ready") redirect("/sign-in");
+  if (current.status !== "ready") redirect("/login");
 
   const timeZone = await getViewerTimeZone();
   // Written by the sidebar when the person collapses or expands it.

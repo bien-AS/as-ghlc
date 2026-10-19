@@ -2,5 +2,17 @@
   "attribution": {
     "commit": "",
     "pr": ""
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python scripts/routes_diff.py --guard && python scripts/validate_registry.py screen-registry.json --guard"
+          }
+        ]
+      }
+    ]
   }
 }

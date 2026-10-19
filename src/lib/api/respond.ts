@@ -6,7 +6,6 @@ import { AccessError, type AccessErrorCode } from "@/lib/data/users";
 const STATUS: Record<AccessErrorCode, number> = {
   unauthenticated: 401,
   profile_required: 403,
-  email_conflict: 409,
   not_found: 404,
   conflict: 409,
   forbidden: 403,

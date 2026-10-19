@@ -14,7 +14,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - **Parallel work:** one git worktree per parallel task; never share a working tree between agents.
 - **API:** every handler checks authentication, then ownership of the resource, via the shared guards in the data-access layer (not inline). Validate all input with zod.
 - **Data fetching:** client calls live in custom TanStack Query hooks, never inline in components. See `docs/adr/`.
-- **Database:** Drizzle (ADR-0007). Prisma 7 is still in the code until spec 01 removes it; do not add to it.
+- **Database:** Drizzle (ADR-0007).
 - **Product:** the build packet in `docs/packet/` and the screen registry (`screen-registry.json`) define what is built; specs in `docs/specs/` say how.
 - **Components:** always look for opportunities to extract reusable components (sidebars, navbars, and the like) into `src/components/ui` rather than leaving them inline in a page.
 
@@ -36,7 +36,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Commands
 
-- **Python:** this machine has `python`, not `python3`. The scripts, the agents, `/handoff` and the registry Stop hook all call `python` (it works on the CI image too).
+- **Python:** this machine has `python`, not `python3`. The scripts, the agents, `/handoff` and the registry Stop hook all call `python` (it works on the CI image too). The Stop hook in `.claude/settings.json` runs `python scripts/routes_diff.py --guard && python scripts/validate_registry.py screen-registry.json --guard`.
 - Registry: `python scripts/validate_registry.py screen-registry.json` · `python scripts/routes_diff.py`.
 - Stop hook (packet `.claude/settings.json`), **not enabled yet**: spec 01 turns it on once `routes_diff.py` lists no built-but-unregistered route. Its command: `python scripts/routes_diff.py --guard && python scripts/validate_registry.py screen-registry.json --guard`.
 - Dev server: `pnpm dev` · Tests: `pnpm test`, `pnpm test:run` · Lint/format: `pnpm lint`, `pnpm format:check` · Migrate (after spec 01 moves to Drizzle): edit `src/db/schema.ts`, `pnpm db:generate`, read the SQL, `pnpm db:migrate` with the ref announced · CI floor: `pnpm exec tsc --noEmit` (`check:deadclass` once gstack is wired) · `/session <id>` loads a session's full context · `/handoff` runs the session-end ritual.

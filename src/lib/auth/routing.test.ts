@@ -1,39 +1,35 @@
 import { expect, test } from "vitest";
 
-import { type AuthStatus, decideRedirect } from "@/lib/auth/routing";
+import {
+  type AuthStatus,
+  decideRedirect,
+  rememberedPage,
+} from "@/lib/auth/routing";
 
 const SHOWN = null;
+const NOT_SET_UP = "/access-denied?reason=not_provisioned";
+const TURNED_OFF = "/access-denied?reason=deactivated";
 
-// The "who is sent where" table from spec 02, cell by cell:
-// [route, signed out, signed in without a profile, signed in with a profile]
-const table: [string, string | null, string | null, string | null][] = [
-  ["/", SHOWN, SHOWN, SHOWN],
-  ["/sign-in", SHOWN, "/profile-setup", "/dashboard"],
-  ["/sign-up", SHOWN, "/profile-setup", "/dashboard"],
-  ["/reset-password", SHOWN, "/profile-setup", "/dashboard"],
-  [
-    "/reset-password/update",
-    "/reset-password?notice=link_invalid",
-    SHOWN,
-    SHOWN,
-  ],
-  ["/profile-setup", "/sign-in", SHOWN, "/dashboard"],
-  ["/dashboard", "/sign-in?next=%2Fdashboard", "/profile-setup", SHOWN],
-  ["/leads/42", "/sign-in?next=%2Fleads%2F42", "/profile-setup", SHOWN],
-  ["/admin/reps", "/sign-in?next=%2Fadmin%2Freps", "/profile-setup", SHOWN],
-  [
-    "/settings/profile",
-    "/sign-in?next=%2Fsettings%2Fprofile",
-    "/profile-setup",
-    SHOWN,
-  ],
-  // The API refuses with 401 / 403 itself; the return routes never redirect here.
-  ["/api/me", SHOWN, SHOWN, SHOWN],
-  ["/auth/confirm", SHOWN, SHOWN, SHOWN],
-  ["/auth/callback", SHOWN, SHOWN, SHOWN],
+// The "who is sent where" table (spec 01 section 5), cell by cell:
+// [route, signed out, no profile, deactivated, ready]
+const table: [string, ...(string | null)[]][] = [
+  ["/", SHOWN, SHOWN, SHOWN, SHOWN],
+  ["/login", SHOWN, SHOWN, SHOWN, "/dashboard"],
+  ["/access-denied", SHOWN, SHOWN, SHOWN, SHOWN],
+  ["/dashboard", "/login?next=%2Fdashboard", NOT_SET_UP, TURNED_OFF, SHOWN],
+  ["/leads/42", "/login?next=%2Fleads%2F42", NOT_SET_UP, TURNED_OFF, SHOWN],
+  ["/admin/reps", "/login?next=%2Fadmin%2Freps", NOT_SET_UP, TURNED_OFF, SHOWN],
+  // The API refuses with 401 / 403 itself; the callback never redirects here.
+  ["/api/me", SHOWN, SHOWN, SHOWN, SHOWN],
+  ["/auth/callback", SHOWN, SHOWN, SHOWN, SHOWN],
 ];
 
-const statuses: AuthStatus[] = ["signed-out", "no-profile", "ready"];
+const statuses: AuthStatus[] = [
+  "signed-out",
+  "no-profile",
+  "inactive",
+  "ready",
+];
 
 test.each(table)("%s", (route, ...expected) => {
   statuses.forEach((status, index) => {
@@ -45,16 +41,31 @@ test.each(table)("%s", (route, ...expected) => {
 
 test("remembers the whole requested address, query included", () => {
   expect(decideRedirect("/leads?stage=won&page=2", "signed-out")).toBe(
-    "/sign-in?next=%2Fleads%3Fstage%3Dwon%26page%3D2",
+    "/login?next=%2Fleads%3Fstage%3Dwon%26page%3D2",
   );
 });
 
 test("a query or trailing slash does not change which row applies", () => {
-  expect(decideRedirect("/sign-in?next=%2Fdashboard", "ready")).toBe(
+  expect(decideRedirect("/login?next=%2Fdashboard", "ready")).toBe(
     "/dashboard",
   );
-  expect(decideRedirect("/profile-setup/", "signed-out")).toBe("/sign-in");
+  expect(decideRedirect("/dashboard/", "inactive")).toBe(TURNED_OFF);
   // A route that merely starts with the same letters is not an app section.
   expect(decideRedirect("/dashboards", "signed-out")).toBeNull();
   expect(decideRedirect("/leadership", "signed-out")).toBeNull();
+});
+
+test("a remembered page is kept only when it is a safe path to an app screen", () => {
+  expect(rememberedPage("/leads/42?tab=notes")).toBe("/leads/42?tab=notes");
+  for (const value of [
+    null,
+    "",
+    "https://evil.example/dashboard",
+    "//evil.example/leads",
+    "/login",
+    "/access-denied",
+    "/api/me",
+  ]) {
+    expect(rememberedPage(value), String(value)).toBeNull();
+  }
 });

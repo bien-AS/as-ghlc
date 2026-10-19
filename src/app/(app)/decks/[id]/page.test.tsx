@@ -79,5 +79,5 @@ test("tells the screen which is missing: the lead, or only its deck", async () =
 test("signed out, the page sends the visitor to sign in", async () => {
   const { fake } = await import("@/test/server-fakes");
   fake.claims = null;
-  await expect(page("lead-17")).rejects.toThrow(/^redirect:\/sign-in/);
+  await expect(page("lead-17")).rejects.toThrow(/^redirect:\/login/);
 });
