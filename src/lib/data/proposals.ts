@@ -13,7 +13,7 @@ import {
 } from "@/lib/data/leads";
 import { createNotification } from "@/lib/data/notifications";
 import { SAMPLE_DATA, sampleStore } from "@/lib/data/sample";
-import { AccessError } from "@/lib/data/users";
+import { AccessError, requireAdmin } from "@/lib/data/users";
 import type { LeadDetail } from "@/lib/leads/schemas";
 import {
   canEditProposal,
@@ -40,7 +40,7 @@ import {
  *
  * THE SEAM. Every exported function starts with the guard: it reads the lead
  * through `getLead` / `listVisibleLeads`, which settle who is asking and apply
- * the role rule (staff reach only their own leads; another rep's lead answers
+ * `leadScope` (a rep reaches only their own leads; another rep's lead answers
  * "not_found"). Going live means replacing the bodies of the exported
  * functions below with database queries on the Proposal table, filling in
  * `src/lib/services/proposal-service.ts`, and deleting `fixtures/`. Schemas,
@@ -215,12 +215,15 @@ export async function sendProposal(leadId: string): Promise<ProposalView> {
 /**
  * Sample data only: stands in for what polling the proposal service would
  * discover (question 6). Viewing changes the status; signing also moves the
- * lead to Lead Won, drafts the invoice and raises both notifications.
+ * lead to Lead Won, drafts the invoice and raises both notifications, so a
+ * signature is refused to a rep before anything changes: a rep cannot act on
+ * invoices (spec 01). The real signature arrives from the service, not a rep.
  */
 export async function simulateProposalEvent(
   leadId: string,
   event: ProposalEvent,
 ): Promise<ProposalView> {
+  if (event === "signed") await requireAdmin();
   const { record } = await forWrite(leadId);
   // Refused once the data is real: nobody may then invent a signature.
   if (!SAMPLE_DATA) throw new AccessError("forbidden");

@@ -4,7 +4,7 @@ import {
   stageMappingInputSchema,
 } from "@/lib/connections/schemas";
 import { getStageMapping, saveStageMapping } from "@/lib/data/connections";
-import { requireCapability } from "@/lib/data/viewer";
+import { requireAdmin } from "@/lib/data/users";
 
 type Context = RouteContext<"/api/connections/[type]/stage-mapping">;
 
@@ -12,7 +12,7 @@ type Context = RouteContext<"/api/connections/[type]/stage-mapping">;
 export async function GET(_request: Request, { params }: Context) {
   try {
     // Guard first (AGENTS.md): who is asking is settled before the input is read.
-    await requireCapability("manage_connections");
+    await requireAdmin();
 
     const route = crmParamsSchema.safeParse(await params);
     if (!route.success) return invalidInput(route.error);
@@ -25,7 +25,7 @@ export async function GET(_request: Request, { params }: Context) {
 
 export async function PUT(request: Request, { params }: Context) {
   try {
-    await requireCapability("manage_connections");
+    await requireAdmin();
 
     const route = crmParamsSchema.safeParse(await params);
     if (!route.success) return invalidInput(route.error);

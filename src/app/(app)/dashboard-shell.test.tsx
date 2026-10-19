@@ -449,7 +449,7 @@ test("on a small screen the Sample data note moves into the user menu", async ()
 test("as Staff, the Admin group is left out of the sidebar", async () => {
   viewAs("staff");
   open();
-  await screen.findByText("Ada Lovelace");
+  await screen.findByText("Maya Okafor");
   await waitFor(() =>
     expect(navLinks().map((link) => link.getAttribute("href"))).toEqual([
       "/dashboard",

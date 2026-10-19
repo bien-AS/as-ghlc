@@ -1,6 +1,6 @@
 import { invalidInput, refusal } from "@/lib/api/respond";
 import { markSpam } from "@/lib/data/leads";
-import { requireUser } from "@/lib/data/users";
+import { requireProfile } from "@/lib/data/users";
 import { spamInputSchema } from "@/lib/leads/schemas";
 
 export async function POST(
@@ -10,7 +10,7 @@ export async function POST(
   try {
     // Guard first (AGENTS.md): who is asking is settled before the input is read,
     // so a signed-out request gets 401 whatever it sent.
-    await requireUser();
+    await requireProfile();
 
     const parsed = spamInputSchema.safeParse(
       await request.json().catch(() => ({})),

@@ -4,7 +4,7 @@ import {
   connectionParamsSchema,
 } from "@/lib/connections/schemas";
 import { connect, disconnect } from "@/lib/data/connections";
-import { requireCapability } from "@/lib/data/viewer";
+import { requireAdmin } from "@/lib/data/users";
 
 /** Connect. The key in the body is never stored, logged or returned. */
 export async function POST(
@@ -13,7 +13,7 @@ export async function POST(
 ) {
   try {
     // Guard first (AGENTS.md): who is asking is settled before the input is read.
-    await requireCapability("manage_connections");
+    await requireAdmin();
 
     const route = connectionParamsSchema.safeParse(await params);
     if (!route.success) return invalidInput(route.error);
@@ -34,7 +34,7 @@ export async function DELETE(
   { params }: RouteContext<"/api/connections/[type]">,
 ) {
   try {
-    await requireCapability("manage_connections");
+    await requireAdmin();
 
     const route = connectionParamsSchema.safeParse(await params);
     if (!route.success) return invalidInput(route.error);

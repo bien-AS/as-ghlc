@@ -19,7 +19,6 @@ import {
   revokeInvite,
 } from "@/lib/data/members";
 import { resetSampleData } from "@/lib/data/sample";
-import { PREVIEW_ROLE_COOKIE } from "@/lib/data/viewer";
 import { inviteExpiresAt, memberLock } from "@/lib/members/rules";
 import {
   INVITE_EXPIRES_AFTER_DAYS,
@@ -27,7 +26,7 @@ import {
   memberListSchema,
   memberSchema,
 } from "@/lib/members/schemas";
-import { fake, resetFakes, signIn } from "@/test/server-fakes";
+import { fake, resetFakes, signIn, viewAs } from "@/test/server-fakes";
 
 vi.mock(
   "@/lib/supabase/server",
@@ -56,7 +55,6 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-const viewAs = (role: string) => fake.cookies.set(PREVIEW_ROLE_COOKIE, role);
 const refusedWith = (code: string) => expect.objectContaining({ code });
 const named = (members: Member[], who: string) => {
   const found = members.find(
@@ -141,8 +139,9 @@ test("the sample Staff are exactly the reps on the sample leads", async () => {
   expect(staff.sort()).toEqual(owners.map((owner) => owner.name).sort());
 });
 
-test("the list starts with the viewer, marked as you with the previewed role, then users, then pending invites", async () => {
-  for (const role of ["owner", "admin"] as const) {
+test("the list starts with the viewer, marked as you with their role, then users, then pending invites", async () => {
+  // Only an admin reaches this list (spec 01: `requireAdmin`).
+  for (const role of ["admin"] as const) {
     viewAs(role);
     const [you, ...others] = await listMembers();
     expect(you).toEqual({
@@ -316,7 +315,7 @@ test("an unknown id is not found, and a user's routes do not act on an invite or
 });
 
 test("you cannot remove yourself or change your own role here", async () => {
-  for (const role of ["admin", "owner"] as const) {
+  for (const role of ["admin"] as const) {
     viewAs(role);
     expect((await routes.role(ada.id, { role: "staff" })).status).toBe(409);
     expect((await routes.remove(ada.id)).status).toBe(409);
@@ -365,10 +364,6 @@ test("the last owner cannot be removed or demoted; with a second owner, either c
   await expect(changeMemberRole(samir.id, "staff")).rejects.toEqual(
     refusedWith("conflict"),
   );
-
-  // Seen as an Owner, the viewer is an owner too, so Samir can be changed.
-  viewAs("owner");
-  expect((await changeMemberRole(samir.id, "staff")).length).toBeGreaterThan(0);
 });
 
 test("an invite expires a fixed number of days after it was last sent (mock choice)", () => {

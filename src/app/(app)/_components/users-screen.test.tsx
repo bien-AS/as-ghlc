@@ -7,7 +7,8 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
-import { listMembers, removeMember, revokeInvite } from "@/lib/data/members";
+import { listMembers } from "@/lib/data/members";
+import { sampleStore } from "@/lib/data/sample";
 import { ROLE_LABEL, ROLE_SEES, ROLES } from "@/lib/roles";
 import {
   api,
@@ -394,13 +395,9 @@ test("an invite that could not be sent keeps the address and says so", async () 
 });
 
 test("with nobody else: You are the only person here, with a way to the invite form", async () => {
-  viewAs("owner");
-  for (const member of await listMembers()) {
-    if (member.isViewer) continue;
-    await (member.status === "invited"
-      ? revokeInvite(member.id)
-      : removeMember(member.id));
-  }
+  // An admin cannot remove the sample Owner (the last owner, spec 12), so the
+  // sample store is emptied instead, as a new Workspace's would be.
+  sampleStore<unknown[]>("members", () => [])().splice(0);
 
   renderScreen(<UsersScreen />);
   await screen.findByText(/^You are the only person here\./);

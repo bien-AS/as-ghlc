@@ -13,15 +13,21 @@ import {
   resetSampleLeads,
 } from "@/lib/data/leads";
 import {
-  getViewer,
-  getViewerSummary,
-  PREVIEW_ROLE_COOKIE,
-  PREVIEW_STAFF_REP,
-  requireCapability,
-} from "@/lib/data/viewer";
+  leadScope,
+  type Profile,
+  requireAdmin,
+  requireProfile,
+} from "@/lib/data/users";
+import { getViewerSummary } from "@/lib/data/viewer";
 import { listLeadsQuerySchema } from "@/lib/leads/schemas";
-import { CAPABILITIES, can, viewerSchema } from "@/lib/roles";
-import { fake, resetFakes, signIn } from "@/test/server-fakes";
+import { viewerSchema } from "@/lib/roles";
+import {
+  fake,
+  resetFakes,
+  SAMPLE_REP,
+  signIn,
+  viewAs,
+} from "@/test/server-fakes";
 
 vi.mock(
   "@/lib/supabase/server",
@@ -51,101 +57,101 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-const viewAs = (role: string) => fake.cookies.set(PREVIEW_ROLE_COOKIE, role);
 const everyLead = () =>
   listLeads(listLeadsQuerySchema.parse({ tab: "open", limit: "100" }));
 const refusedWith = (code: string) => expect.objectContaining({ code });
 
-// --- the role ----------------------------------------------------------------
+// --- the guards (spec 01 section 4) --------------------------------------------
 
-test("with no preview chosen the viewer is an Owner; a preview cookie picks the role; a bad value is ignored", async () => {
-  expect((await getViewer()).role).toBe("owner");
+test("requireProfile: signed out is 401, no profile is 403, a deactivated profile is 403, else the profile", async () => {
+  expect(await requireProfile()).toEqual({
+    ...ada,
+    role: "admin",
+    active: true,
+  });
+
+  fake.users.set(ada.id, { ...ada, active: false });
+  await expect(requireProfile()).rejects.toEqual(refusedWith("forbidden"));
+  fake.users.clear();
+  await expect(requireProfile()).rejects.toEqual(
+    refusedWith("profile_required"),
+  );
+  fake.claims = null;
+  await expect(requireProfile()).rejects.toEqual(
+    refusedWith("unauthenticated"),
+  );
+});
+
+test("requireAdmin: an admin passes, a rep is refused, and a deactivated admin is refused", async () => {
+  expect((await requireAdmin()).role).toBe("admin");
+  viewAs("staff");
+  await expect(requireAdmin()).rejects.toEqual(refusedWith("forbidden"));
+  viewAs("admin");
+  fake.users.set(ada.id, { ...ada, active: false });
+  await expect(requireAdmin()).rejects.toEqual(refusedWith("forbidden"));
+});
+
+test("leadScope: an admin reaches every lead, a rep only the leads assigned to them", () => {
+  const profile = (role: Profile["role"]): Profile => ({
+    ...ada,
+    role,
+    active: true,
+  });
+  const theirs = { owner: { id: ada.id } };
+  const someoneElses = { owner: { id: "other" } };
+  expect(leadScope(profile("admin"))(someoneElses)).toBe(true);
+  expect(leadScope(profile("rep"))(theirs)).toBe(true);
+  expect(leadScope(profile("rep"))(someoneElses)).toBe(false);
+});
+
+test("the viewer summary draws a rep as staff with their own leads, and an admin as admin", async () => {
   expect(await getViewerSummary()).toEqual({
-    role: "owner",
+    role: "admin",
     preview: true,
     staffRep: null,
   });
-
-  viewAs("admin");
-  expect((await getViewer()).role).toBe("admin");
-
   viewAs("staff");
-  expect(await getViewer()).toMatchObject({
+  expect(await getViewerSummary()).toEqual({
     role: "staff",
-    repId: PREVIEW_STAFF_REP.id,
-    user: ada,
+    preview: true,
+    staffRep: { id: SAMPLE_REP.id, name: "Maya Okafor" },
   });
-  expect((await getViewerSummary()).staffRep).toEqual(PREVIEW_STAFF_REP);
-
-  viewAs("superuser");
-  expect((await getViewer()).role).toBe("owner");
 });
 
-test("the role is resolved after the real guard: signed out and profile-less callers are refused whatever the cookie says", async () => {
-  viewAs("owner");
-  fake.users.clear();
-  await expect(getViewer()).rejects.toEqual(refusedWith("profile_required"));
-  fake.claims = null;
-  await expect(getViewer()).rejects.toEqual(refusedWith("unauthenticated"));
-});
+// --- what a role sees of the leads ---------------------------------------------
 
-test("staff can do none of the admin things; admin and owner can do all of them (question 7, proposed)", async () => {
-  for (const capability of CAPABILITIES) {
-    expect(can("staff", capability)).toBe(false);
-    expect(can("admin", capability)).toBe(true);
-    expect(can("owner", capability)).toBe(true);
-
-    viewAs("staff");
-    await expect(requireCapability(capability)).rejects.toEqual(
-      refusedWith("forbidden"),
-    );
-    viewAs("admin");
-    expect((await requireCapability(capability)).role).toBe("admin");
-  }
-});
-
-test("the staff preview's rep is one of the sample reps, so a Staff view is never empty", async () => {
-  const { owners } = await getPipelineSummary({ tz: "UTC" });
-  expect(owners).toContainEqual(PREVIEW_STAFF_REP);
-});
-
-// --- what a role sees of the leads (spec 12) -------------------------------------
-
-test("an owner and an admin see every lead; staff see only the leads they own, in the list, the counts and the rep filter", async () => {
+test("an admin sees every lead; a rep sees only the leads assigned to them, in the list, the counts and the rep filter", async () => {
   const all = await everyLead();
   const summary = await getPipelineSummary({ tz: "UTC" });
   expect(summary.owners.length).toBeGreaterThan(1);
-
-  viewAs("admin");
-  expect((await everyLead()).total).toBe(all.total);
 
   viewAs("staff");
   const mine = await everyLead();
   expect(mine.total).toBeGreaterThan(0);
   expect(mine.total).toBeLessThan(all.total);
-  expect(
-    mine.items.every((lead) => lead.owner.id === PREVIEW_STAFF_REP.id),
-  ).toBe(true);
+  expect(mine.items.every((lead) => lead.owner.id === SAMPLE_REP.id)).toBe(
+    true,
+  );
 
   const staffSummary = await getPipelineSummary({ tz: "UTC" });
   expect(staffSummary.open).toBe(mine.total);
-  expect(staffSummary.owners).toEqual([PREVIEW_STAFF_REP]);
+  expect(staffSummary.owners).toEqual([
+    { id: SAMPLE_REP.id, name: "Maya Okafor" },
+  ]);
   expect(
-    (await listVisibleLeads()).every(
-      (lead) => lead.owner.id === PREVIEW_STAFF_REP.id,
-    ),
+    (await listVisibleLeads()).every((lead) => lead.owner.id === SAMPLE_REP.id),
   ).toBe(true);
 });
 
-test("staff asking for another rep's lead, or changing it, are told it does not exist, and nothing changes", async () => {
+test("a rep asking for another rep's lead, or changing it, is told it does not exist, and nothing changes", async () => {
   const other = (await everyLead()).items.find(
-    (lead) => lead.owner.id !== PREVIEW_STAFF_REP.id,
+    (lead) => lead.owner.id !== SAMPLE_REP.id,
   );
   if (!other) throw new Error("no lead owned by another rep");
   const own = (await everyLead()).items.find(
-    (lead) => lead.owner.id === PREVIEW_STAFF_REP.id,
+    (lead) => lead.owner.id === SAMPLE_REP.id,
   );
-  if (!own) throw new Error("no lead owned by the previewed rep");
+  if (!own) throw new Error("no lead owned by the sample rep");
 
   viewAs("staff");
   expect((await getLead(own.id)).id).toBe(own.id);
@@ -154,7 +160,7 @@ test("staff asking for another rep's lead, or changing it, are told it does not 
     refusedWith("not_found"),
   );
 
-  viewAs("owner");
+  viewAs("admin");
   expect((await getLead(other.id)).exit).toBeNull();
 });
 
@@ -162,7 +168,7 @@ test("staff asking for another rep's lead, or changing it, are told it does not 
 
 test("GET /api/viewer answers with the role, and 401 when signed out", async () => {
   const response = await getViewerRoute();
-  expect(viewerSchema.parse(await response.json()).role).toBe("owner");
+  expect(viewerSchema.parse(await response.json()).role).toBe("admin");
 
   fake.claims = null;
   expect((await getViewerRoute()).status).toBe(401);

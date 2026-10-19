@@ -4,7 +4,7 @@ import {
   getAccountPreferences,
   updateAccountPreferences,
 } from "@/lib/data/account";
-import { requireUser } from "@/lib/data/users";
+import { requireProfile } from "@/lib/data/users";
 
 export async function GET() {
   try {
@@ -17,7 +17,7 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     // Guard first (AGENTS.md): who is asking is settled before the input is read.
-    await requireUser();
+    await requireProfile();
     const parsed = accountPreferencesSchema.safeParse(
       await request.json().catch(() => null),
     );

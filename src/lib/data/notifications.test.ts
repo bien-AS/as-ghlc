@@ -15,7 +15,6 @@ import {
   listNotifications,
   markNotificationRead,
 } from "@/lib/data/notifications";
-import { PREVIEW_ROLE_COOKIE, PREVIEW_STAFF_REP } from "@/lib/data/viewer";
 import { notificationText } from "@/lib/notifications/rules";
 import {
   NOTIFICATION_TYPES,
@@ -24,7 +23,13 @@ import {
   notificationPageSchema,
   unreadCountSchema,
 } from "@/lib/notifications/schemas";
-import { fake, resetFakes, signIn } from "@/test/server-fakes";
+import {
+  fake,
+  resetFakes,
+  SAMPLE_REP,
+  signIn,
+  viewAs,
+} from "@/test/server-fakes";
 
 vi.mock(
   "@/lib/supabase/server",
@@ -56,7 +61,6 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-const viewAs = (role: string) => fake.cookies.set(PREVIEW_ROLE_COOKIE, role);
 const everything = async () => (await listNotifications({ limit: 100 })).items;
 const refusedWith = (code: string) => expect.objectContaining({ code });
 const key = (n: Notification) => `${n.lead.id}:${n.type}`;
@@ -254,7 +258,7 @@ test("for staff, another rep's notification is not found: it cannot be marked re
     (item) =>
       !item.read &&
       leads.find((lead) => lead.id === item.lead.id)?.owner.id !==
-        PREVIEW_STAFF_REP.id,
+        SAMPLE_REP.id,
   ) as Notification;
 
   viewAs("staff");
@@ -319,7 +323,7 @@ test("a notification cannot be raised for an unknown lead, or by staff for anoth
   ).rejects.toEqual(refusedWith("not_found"));
 
   const theirs = (await listVisibleLeads()).find(
-    (lead) => lead.owner.id !== PREVIEW_STAFF_REP.id,
+    (lead) => lead.owner.id !== SAMPLE_REP.id,
   );
   viewAs("staff");
   await expect(

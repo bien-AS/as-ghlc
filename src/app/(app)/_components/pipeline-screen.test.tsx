@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
+import { SAMPLE_REPS } from "@/lib/data/fixtures/leads";
 import { getPipelineSummary } from "@/lib/data/leads";
 import {
   api,
@@ -18,6 +19,8 @@ import {
 import { address, router } from "@/test/navigation";
 
 import { PipelineScreen } from "./pipeline-screen";
+
+const MAYA = SAMPLE_REPS[0].id;
 
 vi.mock(
   "@/lib/supabase/server",
@@ -177,9 +180,9 @@ test("the verdict and rep filters narrow the list, combine, and survive a reload
   );
 
   fireEvent.change(screen.getByRole("combobox", { name: "Rep" }), {
-    target: { value: "rep-maya" },
+    target: { value: MAYA },
   });
-  expect(address()).toBe("/leads?verdict=suspect&owner=rep-maya");
+  expect(address()).toBe(`/leads?verdict=suspect&owner=${MAYA}`);
   await screen.findByText("2 leads match");
   expect(
     rows().every((link) => link.textContent?.includes("Maya Okafor")),
@@ -187,7 +190,7 @@ test("the verdict and rep filters narrow the list, combine, and survive a reload
 
   // The same address, opened fresh, is the same view.
   cleanup();
-  startDashboard("/leads?verdict=suspect&owner=rep-maya");
+  startDashboard(`/leads?verdict=suspect&owner=${MAYA}`);
   renderScreen(<PipelineScreen />);
   await screen.findByText("2 leads match");
   expect(
@@ -195,7 +198,7 @@ test("the verdict and rep filters narrow the list, combine, and survive a reload
   ).toBe("suspect");
   expect(
     screen.getByRole<HTMLSelectElement>("combobox", { name: "Rep" }).value,
-  ).toBe("rep-maya");
+  ).toBe(MAYA);
 });
 
 test("each needs-you count is a button that filters to those leads; suspects opens Suspect review; zero is inactive", async () => {

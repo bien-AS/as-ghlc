@@ -1,6 +1,6 @@
 import type { AccountPreferences } from "@/lib/account/schemas";
 import { sampleStore } from "@/lib/data/sample";
-import { requireUser } from "@/lib/data/users";
+import { requireProfile } from "@/lib/data/users";
 import {
   NOTIFICATION_TYPES,
   type NotificationType,
@@ -10,7 +10,7 @@ import {
  * Data access for account preferences: what one person has chosen for
  * themselves. (Their name is on the User row: `updateProfile` in users.ts.)
  *
- * THE SEAM. Every exported function starts with the guard (`requireUser`) and
+ * THE SEAM. Every exported function starts with the guard (`requireProfile`) and
  * then reads or changes the sample store, which is keyed by user id, so a
  * person only ever reaches their own preferences. Going live means replacing
  * the bodies of the exported functions below with queries on a preferences
@@ -35,7 +35,7 @@ const defaults = (): AccountPreferences => ({
 
 /** The current user's preferences. */
 export async function getAccountPreferences(): Promise<AccountPreferences> {
-  const user = await requireUser();
+  const user = await requireProfile();
   return structuredClone(store().get(user.id) ?? defaults());
 }
 
@@ -43,7 +43,7 @@ export async function getAccountPreferences(): Promise<AccountPreferences> {
 export async function updateAccountPreferences(
   input: AccountPreferences,
 ): Promise<AccountPreferences> {
-  const user = await requireUser();
+  const user = await requireProfile();
   store().set(user.id, structuredClone(input));
   return structuredClone(input);
 }

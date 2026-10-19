@@ -20,11 +20,16 @@ import type {
 /** A lead as stored. The effective verdict and the next call are derived on read. */
 export type LeadRecord = Omit<LeadDetail, "verdict" | "nextBooking">;
 
+/**
+ * The reps the sample leads are assigned to. Their ids are profile ids: a rep
+ * sees a sample lead only when their profile has its owner's id (spec 01,
+ * `leadScope`), which is how the isolation suite seeds rep A and rep B.
+ */
 export const SAMPLE_REPS = [
-  { id: "rep-maya", name: "Maya Okafor" },
-  { id: "rep-daniel", name: "Daniel Reyes" },
-  { id: "rep-priya", name: "Priya Nair" },
-  { id: "rep-tom", name: "Tom Lindqvist" },
+  { id: "5a3c1d2e-7b4f-4c8a-9e10-000000000a01", name: "Maya Okafor" },
+  { id: "5a3c1d2e-7b4f-4c8a-9e10-000000000a02", name: "Daniel Reyes" },
+  { id: "5a3c1d2e-7b4f-4c8a-9e10-000000000a03", name: "Priya Nair" },
+  { id: "5a3c1d2e-7b4f-4c8a-9e10-000000000a04", name: "Tom Lindqvist" },
 ] as const;
 
 type Call = [

@@ -1,88 +1,25 @@
-import { cookies } from "next/headers";
-
-import type { CurrentUser } from "@/lib/auth/schemas";
 import { SAMPLE_DATA } from "@/lib/data/sample";
-import { AccessError, requireUser } from "@/lib/data/users";
-import {
-  type Capability,
-  can,
-  type Role,
-  roleSchema,
-  type ViewerSummary,
-} from "@/lib/roles";
+import { requireProfile } from "@/lib/data/users";
+import type { ViewerSummary } from "@/lib/roles";
 
 /*
- * Who is asking, and as which role (spec 12; question 7, ASSUMED).
+ * Who is asking, for the screens: GET /api/viewer and the shell's prefetch.
+ * The role is `profiles.role` (spec 01), read by `requireProfile`. Access is
+ * never decided here; the guards in src/lib/data/users.ts decide it.
  *
- * THE SEAM. `getViewer` is the one function that resolves the viewer's role.
- * Today there is no membership, so every viewer is an owner. The role preview
- * ("Viewing as") is deleted (spec 01); ponytail: `resolveRole` still reads the
- * cookie it left, which nothing in the app sets any more, so the tests can
- * view as another role. Spec 01 S4 replaces it with `profiles.role`. Screens,
- * hooks and handlers ask this module and never read the cookie.
- *
- * A role here is not access control. The real guard is `requireUser`, which
- * `getViewer` calls first; a role here only narrows what sample data is shown.
+ * ponytail: the screens still speak the mockups' role names, so an admin is
+ * drawn as "admin" and a rep as "staff". The shell (spec 01, S5) moves the
+ * screens to `admin` and `rep` and this mapping goes.
  */
-
-export const PREVIEW_ROLE_COOKIE = "dw_preview_role";
-
-/** With no preview chosen the viewer sees everything, as before roles existed. */
-const DEFAULT_ROLE: Role = "owner";
-
-/**
- * A Staff preview needs leads that are "theirs". The signed-in person owns no
- * sample lead, so Staff is shown one sample rep's leads. Change the rep here.
- */
-export const PREVIEW_STAFF_REP = { id: "rep-maya", name: "Maya Okafor" };
-
-export type Viewer = {
-  user: CurrentUser;
-  role: Role;
-  /** The rep whose leads are this viewer's own; null when they own none. */
-  repId: string | null;
-};
-
-async function resolveRole(): Promise<Role> {
-  if (!SAMPLE_DATA) return DEFAULT_ROLE;
-  const value = (await cookies()).get(PREVIEW_ROLE_COOKIE)?.value;
-  return roleSchema.catch(DEFAULT_ROLE).parse(value);
-}
-
-/** The guard for role-aware data: authenticated with a profile, then the role. */
-export async function getViewer(): Promise<Viewer> {
-  const user = await requireUser();
-  const role = await resolveRole();
-  return {
-    user,
-    role,
-    repId: role === "staff" ? PREVIEW_STAFF_REP.id : null,
-  };
-}
-
-/** The guard for an admin resource: refuses with "forbidden" (403). */
-export async function requireCapability(
-  capability: Capability,
-): Promise<Viewer> {
-  const viewer = await getViewer();
-  if (!can(viewer.role, capability)) throw new AccessError("forbidden");
-  return viewer;
-}
-
-/**
- * The role rule for a lead (spec 12: "one function of role, user, resource"):
- * staff may see and act on only the leads they own.
- */
-export function canSeeLead(viewer: Viewer, lead: { owner: { id: string } }) {
-  return can(viewer.role, "see_all_leads") || lead.owner.id === viewer.repId;
-}
-
-/** For GET /api/viewer and the shell's prefetch. */
 export async function getViewerSummary(): Promise<ViewerSummary> {
-  const viewer = await getViewer();
+  const profile = await requireProfile();
+  const rep = profile.role === "rep";
   return {
-    role: viewer.role,
+    role: rep ? "staff" : "admin",
+    // Drives the sample-data-only controls (the proposal signature simulator).
     preview: SAMPLE_DATA,
-    staffRep: viewer.role === "staff" ? PREVIEW_STAFF_REP : null,
+    staffRep: rep
+      ? { id: profile.id, name: `${profile.firstName} ${profile.lastName}` }
+      : null,
   };
 }

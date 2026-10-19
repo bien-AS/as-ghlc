@@ -4,8 +4,8 @@ import { apiError, invalidInput, refusal } from "@/lib/api/respond";
 import { profileSchema } from "@/lib/auth/schemas";
 import {
   createProfile,
+  requireProfile,
   requireSession,
-  requireUser,
   updateProfile,
 } from "@/lib/data/users";
 
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     // Guard first (AGENTS.md): who is asking is settled before the input is read.
-    await requireUser();
+    await requireProfile();
     // Strict: an id, an email or any other extra field is rejected, not ignored.
     const parsed = profileSchema.safeParse(
       await request.json().catch(() => null),

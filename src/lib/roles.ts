@@ -1,11 +1,11 @@
 import { z } from "zod";
 
 /*
- * Roles and what each may do (spec 12, "Roles"). Question 7: the three role
- * names are decided; what each role sees and can do is PROPOSED, not decided.
- * This file is the one place that answer lives: the server's guards
- * (`src/lib/data/viewer.ts`) and the screens that hide what a role cannot use
- * both ask `can`. Client-safe: no server-only imports (ADR-0003).
+ * The mockups' role names, which the screens use to hide what a role cannot
+ * use. Access itself is decided by the guards in src/lib/data/users.ts on
+ * `profiles.role` (admin or rep, spec 01); src/lib/data/viewer.ts maps it to
+ * these names until the shell moves to admin and rep (spec 01, S5).
+ * Client-safe: no server-only imports (ADR-0003).
  */
 
 export const ROLES = ["owner", "admin", "staff"] as const;

@@ -20,7 +20,7 @@ import {
   viewAs,
 } from "@/test/dashboard";
 import { field, press, resetClientFakes, type } from "@/test/render";
-import { fake } from "@/test/server-fakes";
+import { fake, SAMPLE_REP } from "@/test/server-fakes";
 
 import { AccountScreen } from "./account-screen";
 
@@ -268,5 +268,5 @@ test("viewed as Staff, account settings are the same: they are personal, not the
   type("First name", "Augusta");
   press("Save name");
   expect(await screen.findByText("Saved.")).toBeDefined();
-  expect(fake.users.get(ada.id)?.firstName).toBe("Augusta");
+  expect(fake.users.get(SAMPLE_REP.id)?.firstName).toBe("Augusta");
 });

@@ -7,7 +7,7 @@ import { getLead, recordInvoiceDraft } from "@/lib/data/leads";
 // proposal drafts the invoice, and the invoice is built from that proposal.
 import { getProposal } from "@/lib/data/proposals";
 import { sampleStore } from "@/lib/data/sample";
-import { AccessError } from "@/lib/data/users";
+import { AccessError, requireAdmin } from "@/lib/data/users";
 import {
   type Invoice,
   type InvoiceLine,
@@ -20,9 +20,10 @@ import { createInvoiceDraft as createInService } from "@/lib/services/invoice-se
 /*
  * Data access for invoices (spec 15; ADR-0006).
  *
- * THE SEAM. Every exported function starts with the guard: it reads the lead
- * through `getLead`, which settles who is asking and applies the role rule
- * (staff reach only their own leads; another rep's lead answers "not_found").
+ * THE SEAM. Every exported function starts with the guard. A read goes through
+ * `getLead`, which settles who is asking and applies `leadScope` (a rep reads
+ * only their own leads' invoices; another rep's lead answers "not_found"). A
+ * write starts with `requireAdmin`: a rep cannot act on invoices (spec 01).
  * Going live means replacing the bodies of the exported functions below with
  * queries on the Invoice table, filling in
  * `src/lib/services/invoice-service.ts`, and deleting `fixtures/`. Schemas,
@@ -103,6 +104,7 @@ export async function getInvoice(leadId: string): Promise<Invoice | null> {
  * the proposals module, never by a Route Handler (spec 15, "Started by").
  */
 export async function createInvoiceDraft(leadId: string): Promise<Invoice> {
+  await requireAdmin();
   const proposal = signed((await getProposal(leadId)).proposal);
   if (records().has(leadId)) throw new AccessError("conflict");
   const lines = invoiceLinesFrom(proposal.snapshot);

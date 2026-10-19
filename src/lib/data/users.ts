@@ -14,12 +14,16 @@ import {
 import { createClient } from "@/lib/supabase/server";
 
 /*
- * Data access for the signed-in person's profile, and the shared guards every other
- * data-access function calls first (ADR-0002, AGENTS.md).
+ * Data access for the signed-in person's profile, and THE GUARDS (spec 01
+ * section 4; ADR-0002). Every data-access function calls one first:
  *
- * Server only: this module reads the session cookies and the database. The
- * ownership half of the guard (membership of the owning Workspace) has nothing
- * to check until spec 12; `requireUser` is where it will go.
+ *  - `requireProfile()`: a verified session and an active profile;
+ *  - `requireAdmin()`: the same, with the admin role;
+ *  - `leadScope(profile)`, applied by every lead read: an admin sees every
+ *    lead, a rep only the leads assigned to them. Anything that belongs to a
+ *    lead is reached through the lead, so through its scope.
+ *
+ * Server only: this module reads the session cookies and the database.
  */
 
 /** Sign-up stores the typed names on the auth user under keys Google does not use. */
@@ -40,10 +44,16 @@ export type SessionIdentity = {
   methods: string[];
 };
 
+/** The signed-in person's profile row, as the guards read it. */
+export type Profile = CurrentUser & {
+  role: "admin" | "rep";
+  active: boolean;
+};
+
 export type CurrentUserResult =
   | { status: "signed-out" }
   | { status: "no-profile"; identity: SessionIdentity }
-  | { status: "ready"; identity: SessionIdentity; user: CurrentUser };
+  | { status: "ready"; identity: SessionIdentity; user: Profile };
 
 export type AccessErrorCode =
   | "unauthenticated"
@@ -52,7 +62,7 @@ export type AccessErrorCode =
   // The resource does not exist, or its current state does not allow the write.
   | "not_found"
   | "conflict"
-  // Signed in, but the role does not allow this resource (spec 12).
+  // Signed in, but the role does not allow this, or the profile is deactivated.
   | "forbidden";
 
 /** A data-access function refused. Route Handlers turn the code into 401 / 403 / 404 / 409. */
@@ -117,11 +127,25 @@ const CURRENT_USER = {
   lastName: profiles.lastName,
 };
 
-const findProfile = (id: string) =>
+const findProfile = (id: string): Promise<Profile | undefined> =>
   db.query.profiles.findFirst({
     where: eq(profiles.id, id),
-    columns: { id: true, email: true, firstName: true, lastName: true },
+    columns: {
+      id: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      role: true,
+      active: true,
+    },
   });
+
+const toCurrentUser = ({ id, email, firstName, lastName }: CurrentUser) => ({
+  id,
+  email,
+  firstName,
+  lastName,
+});
 
 /** Postgres' unique_violation, under the error Drizzle wraps it in. */
 const isUniqueViolation = (error: unknown) =>
@@ -143,24 +167,44 @@ export const getCurrentUser = cache(async (): Promise<CurrentUserResult> => {
 });
 
 /**
- * The guard for application data: authenticated, then has a profile. Every
- * data-access function that serves application data starts here, and a Route
- * Handler that takes input calls it before reading that input, so the order
- * of refusals is always 401, 403, then 400.
+ * The guard for application data: a verified session, a profile, and the
+ * profile active (ADR-0008: a deactivated rep's next request is refused). Every
+ * data-access function starts here, and a Route Handler that takes input calls
+ * it before reading that input, so the order of refusals is always 401, 403,
+ * then 400.
  *
  * ponytail: outside a server render `cache` does not memoise, so such a
  * handler resolves the session twice (here and in the data function): one
- * extra token check and one read by primary key. Pass the resolved user into
- * the data functions if that ever shows up in timings.
+ * extra token check and one read by primary key. Pass the resolved profile
+ * into the data functions if that ever shows up in timings.
  */
-export async function requireUser(): Promise<CurrentUser> {
+export async function requireProfile(): Promise<Profile> {
   const current = await getCurrentUser();
   if (current.status === "signed-out") throw new AccessError("unauthenticated");
   if (current.status === "no-profile") {
     throw new AccessError("profile_required");
   }
+  if (!current.user.active) throw new AccessError("forbidden");
   return current.user;
 }
+
+/** The guard for the admin cluster (reps, integrations) and invoice actions. */
+export async function requireAdmin(): Promise<Profile> {
+  const profile = await requireProfile();
+  if (profile.role !== "admin") throw new AccessError("forbidden");
+  return profile;
+}
+
+/**
+ * The leads a profile may reach: an admin every lead, a rep only those
+ * assigned to them. ponytail: a predicate over the sample leads (ADR-0006);
+ * it becomes `eq(leads.assignedTo, profile.id)` (or nothing, for an admin)
+ * when leads are read from the table (spec 06).
+ */
+export const leadScope =
+  (profile: Profile) =>
+  (lead: { owner: { id: string } }): boolean =>
+    profile.role === "admin" || lead.owner.id === profile.id;
 
 /**
  * The guard for the one write a person without a profile may make (creating
@@ -176,7 +220,7 @@ export async function requireSession(): Promise<
 
 /** The current User, for GET /api/me and for server prefetch (ADR-0001). */
 export async function getMe(): Promise<CurrentUser> {
-  return requireUser();
+  return toCurrentUser(await requireProfile());
 }
 
 /**
@@ -190,7 +234,7 @@ export async function getMe(): Promise<CurrentUser> {
  */
 export async function createProfile(input: ProfileInput): Promise<CurrentUser> {
   const current = await requireSession();
-  if (current.status === "ready") return current.user;
+  if (current.status === "ready") return toCurrentUser(current.user);
 
   const { id, email } = current.identity;
   try {
@@ -210,7 +254,7 @@ export async function createProfile(input: ProfileInput): Promise<CurrentUser> {
     // Unique violation: either a second submit won the race (same id, fine),
     // or another profile already uses this email.
     const existing = await findProfile(id);
-    if (existing) return existing;
+    if (existing) return toCurrentUser(existing);
     throw new AccessError("email_conflict");
   }
 }
@@ -221,7 +265,7 @@ export async function createProfile(input: ProfileInput): Promise<CurrentUser> {
  * names only, so the email and the id cannot be changed here.
  */
 export async function updateProfile(input: ProfileInput): Promise<CurrentUser> {
-  const user = await requireUser();
+  const user = await requireProfile();
   const [updated] = await db
     .update(profiles)
     .set({ firstName: input.firstName, lastName: input.lastName })
@@ -274,7 +318,7 @@ export async function createProfileSilently(): Promise<CurrentUser | null> {
     if (current.status === "signed-out") {
       throw new AccessError("unauthenticated");
     }
-    if (current.status === "ready") return current.user;
+    if (current.status === "ready") return toCurrentUser(current.user);
 
     const names = silentProfileNames(current.identity);
     if (!names) return null;

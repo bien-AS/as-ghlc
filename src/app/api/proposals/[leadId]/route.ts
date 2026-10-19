@@ -1,6 +1,6 @@
 import { invalidInput, refusal } from "@/lib/api/respond";
 import { getProposal, saveProposalDraft } from "@/lib/data/proposals";
-import { requireUser } from "@/lib/data/users";
+import { requireProfile } from "@/lib/data/users";
 import { proposalDraftInputSchema } from "@/lib/proposals/schemas";
 
 export async function GET(
@@ -21,7 +21,7 @@ export async function PUT(
 ) {
   try {
     // Guard first (AGENTS.md): who is asking is settled before the input is read.
-    await requireUser();
+    await requireProfile();
 
     const parsed = proposalDraftInputSchema.safeParse(
       await request.json().catch(() => null),

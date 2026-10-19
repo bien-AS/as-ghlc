@@ -27,7 +27,6 @@ import {
   simulateProposalEvent,
 } from "@/lib/data/proposals";
 import { AccessError } from "@/lib/data/users";
-import { PREVIEW_ROLE_COOKIE, PREVIEW_STAFF_REP } from "@/lib/data/viewer";
 import { invoiceResponseSchema, invoiceSchema } from "@/lib/invoices/schemas";
 import {
   catalogueServiceSchema,
@@ -36,7 +35,13 @@ import {
   proposalViewSchema,
 } from "@/lib/proposals/schemas";
 import { toAppStatus } from "@/lib/services/proposal-service";
-import { fake, resetFakes, signIn } from "@/test/server-fakes";
+import {
+  fake,
+  resetFakes,
+  SAMPLE_REP,
+  signIn,
+  viewAs,
+} from "@/test/server-fakes";
 
 vi.mock(
   "@/lib/supabase/server",
@@ -84,7 +89,6 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 const refusedWith = (code: AccessError["code"]) => new AccessError(code);
-const viewAs = (role: string) => fake.cookies.set(PREVIEW_ROLE_COOKIE, role);
 
 /** The id of the sample lead with this name. */
 async function idOf(name: string) {
@@ -524,15 +528,13 @@ test("staff reach only their own leads' proposals and invoices; another rep's an
   const kwame = await idOf("Kwame Asante");
   const anneliese = await idOf("Anneliese Brandt");
   const ingrid = await idOf("Ingrid Aaltonen");
-  expect(ownerOf(anneliese)).toBe(PREVIEW_STAFF_REP.id);
+  expect(ownerOf(anneliese)).toBe(SAMPLE_REP.id);
 
   viewAs("staff");
   const mine = await listProposalLeads();
   expect(mine.length).toBeGreaterThan(0);
   expect(mine.length).toBeLessThan(all.length);
-  expect(mine.every((lead) => ownerOf(lead.id) === PREVIEW_STAFF_REP.id)).toBe(
-    true,
-  );
+  expect(mine.every((lead) => ownerOf(lead.id) === SAMPLE_REP.id)).toBe(true);
 
   for (const [name, call] of [
     ...everyRoute(kwame).slice(1, 6),
@@ -541,8 +543,9 @@ test("staff reach only their own leads' proposals and invoices; another rep's an
     const response = await call();
     expect(response.status, name).toBe(404);
   }
+  // A rep cannot act on invoices at all (spec 01), whoever's lead it is.
   await expect(createInvoiceDraft(jonas)).rejects.toEqual(
-    refusedWith("not_found"),
+    refusedWith("forbidden"),
   );
 
   // Their own: readable, and theirs to act on.

@@ -14,8 +14,7 @@ import {
 } from "@/lib/data/account";
 import { resetSampleLeads } from "@/lib/data/leads";
 import { updateProfile } from "@/lib/data/users";
-import { PREVIEW_ROLE_COOKIE } from "@/lib/data/viewer";
-import { fake, resetFakes, signIn } from "@/test/server-fakes";
+import { fake, resetFakes, signIn, viewAs } from "@/test/server-fakes";
 
 vi.mock(
   "@/lib/supabase/server",
@@ -90,15 +89,16 @@ test("until a person chooses otherwise every notification type is on, and the de
   expect(await mutedNotificationTypes()).toEqual(new Set());
 });
 
-test("a saved choice shows in a later read, for every role the person previews", async () => {
+test("a saved choice shows in a later read, for an admin and for a rep", async () => {
   expect(await updateAccountPreferences(NO_INVOICES)).toEqual(NO_INVOICES);
   expect(await getAccountPreferences()).toEqual(NO_INVOICES);
   expect(await mutedNotificationTypes()).toEqual(
     new Set(["invoice_draft_ready"]),
   );
 
-  // Personal, not a Workspace resource: staff have it too, and it is the same person's.
-  fake.cookies.set(PREVIEW_ROLE_COOKIE, "staff");
+  // Personal, not a Workspace resource: a rep has preferences too.
+  viewAs("staff");
+  expect(await updateAccountPreferences(NO_INVOICES)).toEqual(NO_INVOICES);
   expect(await getAccountPreferences()).toEqual(NO_INVOICES);
 });
 

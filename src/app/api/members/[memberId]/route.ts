@@ -1,6 +1,6 @@
 import { invalidInput, refusal } from "@/lib/api/respond";
 import { changeMemberRole, removeMember } from "@/lib/data/members";
-import { requireCapability } from "@/lib/data/viewer";
+import { requireAdmin } from "@/lib/data/users";
 import { changeRoleInputSchema } from "@/lib/members/schemas";
 
 /** Changes a user's role, or the role a pending invite will give. */
@@ -10,7 +10,7 @@ export async function PATCH(
 ) {
   try {
     // Guard first (AGENTS.md): who is asking is settled before the input is read.
-    await requireCapability("manage_users");
+    await requireAdmin();
 
     const parsed = changeRoleInputSchema.safeParse(
       await request.json().catch(() => null),

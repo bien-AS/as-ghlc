@@ -1,8 +1,7 @@
 import { mutedNotificationTypes } from "@/lib/data/account";
 import { listVisibleLeads } from "@/lib/data/leads";
 import { sampleStore } from "@/lib/data/sample";
-import { AccessError } from "@/lib/data/users";
-import { getViewer, type Viewer } from "@/lib/data/viewer";
+import { AccessError, type Profile, requireProfile } from "@/lib/data/users";
 import type { LeadDetail } from "@/lib/leads/schemas";
 import type {
   ListNotificationsQuery,
@@ -11,13 +10,13 @@ import type {
   NotificationType,
   UnreadCount,
 } from "@/lib/notifications/schemas";
-import { can } from "@/lib/roles";
 
 /*
  * Data access for notifications (spec 08; ADR-0006).
  *
- * THE SEAM. Every exported function starts with the guard (`getViewer`: the
- * current user, then their role) and then reads or changes the sample store.
+ * THE SEAM. Every exported function starts with the guard (`requireProfile`)
+ * and reaches leads only through `listVisibleLeads`, so through their scope,
+ * then reads or changes the sample store.
  * Going live means replacing the bodies of the exported functions below with
  * queries on the Notification table, filtered by the current user, and
  * deleting `seed`. `createNotification` then also sends the "refetch now"
@@ -35,10 +34,9 @@ import { can } from "@/lib/roles";
  */
 const ADMINS_AND_OWNERS_NOTIFIED_FOR_EVERY_LEAD = true;
 
-const isNotified = (viewer: Viewer, lead: LeadDetail) =>
-  lead.owner.id === viewer.repId ||
-  (ADMINS_AND_OWNERS_NOTIFIED_FOR_EVERY_LEAD &&
-    can(viewer.role, "see_all_leads"));
+const isNotified = (profile: Profile, lead: LeadDetail) =>
+  lead.owner.id === profile.id ||
+  (ADMINS_AND_OWNERS_NOTIFIED_FOR_EVERY_LEAD && profile.role === "admin");
 
 type Stored = {
   id: string;
@@ -105,7 +103,7 @@ async function visibleLeads() {
 }
 
 /** The viewer's notifications with their leads, newest first. */
-async function mine(viewer: Viewer) {
+async function mine(viewer: Profile) {
   const leads = await visibleLeads();
   return store()
     .items.flatMap((item, order) => {
@@ -121,7 +119,7 @@ async function mine(viewer: Viewer) {
 }
 
 /** Without the types this person has switched off. */
-async function shown(viewer: Viewer) {
+async function shown(viewer: Profile) {
   const muted = await mutedNotificationTypes();
   return (await mine(viewer)).filter(({ item }) => !muted.has(item.type));
 }
@@ -148,7 +146,7 @@ const toNotification = ({
 export async function listNotifications(
   query: ListNotificationsQuery,
 ): Promise<NotificationPage> {
-  const all = await shown(await getViewer());
+  const all = await shown(await requireProfile());
 
   // The cursor is the id of the last notification already shown, so a
   // notification that arrives in between moves nothing the user is reading.
@@ -166,7 +164,7 @@ export async function listNotifications(
 
 /** How many of the current user's notifications are unread. */
 export async function getUnreadCount(): Promise<UnreadCount> {
-  const all = await shown(await getViewer());
+  const all = await shown(await requireProfile());
   return { count: all.filter(({ item }) => !item.read).length };
 }
 
@@ -177,7 +175,7 @@ export async function getUnreadCount(): Promise<UnreadCount> {
 export async function markNotificationRead(
   notificationId: string,
 ): Promise<Notification> {
-  const found = (await mine(await getViewer())).find(
+  const found = (await mine(await requireProfile())).find(
     ({ item }) => item.id === notificationId,
   );
   if (!found) throw new AccessError("not_found");
@@ -195,7 +193,7 @@ export async function createNotification(input: {
   leadId: string;
   type: NotificationType;
 }): Promise<void> {
-  await getViewer();
+  await requireProfile();
   // Deriving first means a lead seen here for the first time is not given the
   // same notification twice (once from its state, once from this call).
   const leads = await visibleLeads();

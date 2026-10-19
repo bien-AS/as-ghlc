@@ -7,7 +7,7 @@ import {
   createProfileSilently,
   getCurrentUser,
   getMe,
-  requireUser,
+  requireProfile,
   silentProfileNames,
 } from "@/lib/data/users";
 import { dbModule, fake, resetFakes, signIn } from "@/test/server-fakes";
@@ -35,7 +35,7 @@ const ada = {
 
 test("no session: signed out, and the guard refuses as unauthenticated", async () => {
   expect(await getCurrentUser()).toEqual({ status: "signed-out" });
-  await expect(requireUser()).rejects.toMatchObject({
+  await expect(requireProfile()).rejects.toMatchObject({
     code: "unauthenticated",
   });
   await expect(getMe()).rejects.toBeInstanceOf(AccessError);
@@ -45,7 +45,7 @@ test("session without a User row: no profile, and the guard refuses as profile r
   signIn();
   const current = await getCurrentUser();
   expect(current.status).toBe("no-profile");
-  await expect(requireUser()).rejects.toMatchObject({
+  await expect(requireProfile()).rejects.toMatchObject({
     code: "profile_required",
   });
 });
@@ -54,7 +54,11 @@ test("session with a User row: the User, and the guard passes", async () => {
   signIn();
   fake.users.set(ada.id, ada);
   expect(await getCurrentUser()).toMatchObject({ status: "ready", user: ada });
-  expect(await requireUser()).toEqual(ada);
+  expect(await requireProfile()).toEqual({
+    ...ada,
+    role: "admin",
+    active: true,
+  });
   expect(await getMe()).toEqual(ada);
 });
 

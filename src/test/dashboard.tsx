@@ -9,9 +9,7 @@ import { GET as getMe } from "@/app/api/me/route";
 import { GET as getSummary } from "@/app/api/pipeline/summary/route";
 import { Toaster } from "@/components/ui/toast";
 import { listLeads, resetSampleLeads } from "@/lib/data/leads";
-import { PREVIEW_ROLE_COOKIE } from "@/lib/data/viewer";
 import { listLeadsQuerySchema } from "@/lib/leads/schemas";
-import type { Role } from "@/lib/roles";
 import { resetNavigation } from "@/test/navigation";
 import { renderPage } from "@/test/render";
 import { fake, resetFakes, signIn } from "@/test/server-fakes";
@@ -157,10 +155,8 @@ export const api = {
   },
 };
 
-/** Views as another role through the cookie `getViewer` still reads (src/lib/data/viewer.ts). Call after `startDashboard`. */
-export function viewAs(role: Role) {
-  fake.cookies.set(PREVIEW_ROLE_COOKIE, role);
-}
+/** Signs in with another role (src/test/server-fakes.ts). Call after `startDashboard`. */
+export { viewAs } from "@/test/server-fakes";
 
 /** Call in `beforeEach`: a signed-in user with a profile, fresh sample leads, a clean address. */
 export function startDashboard(at = "/dashboard") {

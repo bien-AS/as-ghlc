@@ -15,7 +15,6 @@ import {
 } from "@/lib/data/decks";
 import { buildSampleDecks, seedDeck } from "@/lib/data/fixtures/decks";
 import { getLead, listVisibleLeads, resetSampleLeads } from "@/lib/data/leads";
-import { PREVIEW_ROLE_COOKIE } from "@/lib/data/viewer";
 import { DECK_TEMPLATE_LABEL } from "@/lib/decks/rules";
 import {
   bookingSlotSchema,
@@ -26,7 +25,7 @@ import {
   parseDeckAddress,
   slideFormSchema,
 } from "@/lib/decks/schemas";
-import { fake, resetFakes, signIn } from "@/test/server-fakes";
+import { fake, resetFakes, signIn, viewAs } from "@/test/server-fakes";
 
 vi.mock(
   "@/lib/supabase/server",
@@ -64,15 +63,14 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const viewAs = (role: string) => fake.cookies.set(PREVIEW_ROLE_COOKIE, role);
 const refusedWith = (code: string) => expect.objectContaining({ code });
 
-/** The id of the sample lead with this name. Asked as an owner, who sees every lead. */
+/** The id of the sample lead with this name. Asked as an admin, who sees every lead. */
 async function idOf(name: string) {
-  const role = fake.cookies.get(PREVIEW_ROLE_COOKIE);
-  fake.cookies.delete(PREVIEW_ROLE_COOKIE);
+  const claims = fake.claims;
+  viewAs("admin");
   const lead = (await listVisibleLeads()).find((item) => item.name === name);
-  if (role) fake.cookies.set(PREVIEW_ROLE_COOKIE, role);
+  fake.claims = claims;
   if (!lead) throw new Error(`no sample lead called ${name}`);
   return lead.id;
 }
@@ -457,7 +455,7 @@ test("staff reach only their own leads' decks; another rep's deck answers not fo
 
 test("an admin and an owner reach every deck", async () => {
   const theirs = await idOf(DANIELS);
-  for (const role of ["admin", "owner"]) {
+  for (const role of ["admin", "owner"] as const) {
     viewAs(role);
     expect((await getDeck(theirs)).lead.name).toBe(DANIELS);
   }

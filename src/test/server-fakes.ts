@@ -3,6 +3,7 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import { vi } from "vitest";
 
 import type { CurrentUser } from "@/lib/auth/schemas";
+import { SAMPLE_REPS } from "@/lib/data/fixtures/leads";
 
 /*
  * Stand-ins for the two server boundaries: Supabase Auth (stubbed at its
@@ -13,8 +14,11 @@ import type { CurrentUser } from "@/lib/auth/schemas";
 
 type Claims = Record<string, unknown> | null;
 
-/** A profiles row as the tests need it; unset columns take the table's defaults. */
-type FakeProfile = CurrentUser & { active?: boolean };
+/**
+ * A profiles row as the tests need it. Unset, `active` is true and `role` is
+ * admin, so a test that does not care about roles sees everything.
+ */
+type FakeProfile = CurrentUser & { role?: "admin" | "rep"; active?: boolean };
 
 export const fake = {
   claims: null as Claims,
@@ -44,6 +48,25 @@ export function signIn(claims: Record<string, unknown> = {}) {
     user_metadata: {},
     ...claims,
   };
+}
+
+/** The rep the role tests sign in as: the first sample rep, who owns sample leads. */
+export const SAMPLE_REP = {
+  id: SAMPLE_REPS[0].id,
+  email: "maya@example.com",
+  firstName: "Maya",
+  lastName: "Okafor",
+};
+
+/**
+ * Signs in with a role (`profiles.role`, spec 01). "staff", the screens' name
+ * for a rep, is the first sample rep; "admin" and "owner" are the default
+ * signed-in person, whose profile is an admin.
+ */
+export function viewAs(role: "owner" | "admin" | "staff") {
+  if (role !== "staff") return signIn();
+  fake.users.set(SAMPLE_REP.id, { ...SAMPLE_REP, role: "rep" });
+  signIn({ sub: SAMPLE_REP.id, email: SAMPLE_REP.email });
 }
 
 export const supabaseServerModule = {
@@ -103,7 +126,7 @@ export const dbModule = {
       profiles: {
         findFirst: async ({ where }: { where: SQL }) => {
           const user = fake.users.get(idIn(where));
-          return user && asCurrentUser(user);
+          return user && { role: "admin", active: true, ...user };
         },
       },
     },

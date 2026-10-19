@@ -42,10 +42,9 @@ import {
 import { buildSampleConnections } from "@/lib/data/fixtures/connections";
 import { listVisibleLeads } from "@/lib/data/leads";
 import { resetSampleData } from "@/lib/data/sample";
-import { PREVIEW_ROLE_COOKIE } from "@/lib/data/viewer";
 import { STAGES } from "@/lib/leads/schemas";
 import * as crm from "@/lib/services/crm";
-import { fake, resetFakes, signIn } from "@/test/server-fakes";
+import { fake, resetFakes, signIn, viewAs } from "@/test/server-fakes";
 
 vi.mock(
   "@/lib/supabase/server",
@@ -79,7 +78,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const viewAs = (role: string) => fake.cookies.set(PREVIEW_ROLE_COOKIE, role);
 const refusedWith = (code: string) => expect.objectContaining({ code });
 
 const request = (path: string, method: string, body?: unknown) =>

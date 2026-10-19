@@ -27,8 +27,9 @@ import { exportPdf, generateSlides } from "@/lib/services/deck-service";
  *
  * THE SEAM. Every exported function starts with the guard and then reads or
  * changes the sample store. The guard is the lead's: each function reaches the
- * lead through `getLead` or `listVisibleLeads` (which call `getViewer`), so a
- * signed-out caller is refused and staff reach only their own leads' decks;
+ * lead through `getLead` or `listVisibleLeads` (`requireProfile`, then
+ * `leadScope`), so a signed-out caller is refused and a rep reaches only
+ * their own leads' decks;
  * another rep's lead answers `not_found`. Going live means replacing the
  * bodies of the exported functions below with queries on the Deck table and
  * calls to the deck service, and deleting `fixtures/`. Schemas, Route

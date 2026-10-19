@@ -1,6 +1,6 @@
 import { invalidInput, refusal } from "@/lib/api/respond";
 import { simulateProposalEvent } from "@/lib/data/proposals";
-import { requireUser } from "@/lib/data/users";
+import { requireProfile } from "@/lib/data/users";
 import { simulateInputSchema } from "@/lib/proposals/schemas";
 
 /**
@@ -13,7 +13,7 @@ export async function POST(
 ) {
   try {
     // Guard first (AGENTS.md): who is asking is settled before the input is read.
-    await requireUser();
+    await requireProfile();
 
     const parsed = simulateInputSchema.safeParse(
       await request.json().catch(() => null),
