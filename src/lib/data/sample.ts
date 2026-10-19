@@ -1,5 +1,5 @@
 /**
- * Drives the "Sample data" label and the role preview. False once the
+ * Drives the "Sample data" label and the sample-only proposal simulator. False once the
  * data-access function bodies query the database (ADR-0006).
  */
 export const SAMPLE_DATA = true;
