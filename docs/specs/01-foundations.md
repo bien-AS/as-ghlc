@@ -3,9 +3,10 @@ title: Foundations on this repo
 status: ready
 sessions: S1, S2, S3, S4, S5 (packet build plan, adapted by ADR-0007)
 registry: login, auth-callback, access-denied, empty-state-library, error-state-library
-waiting_on:
-  - Google OAuth client for the Supabase project (whoever administers the Google Workspace)
-  - Membership of the john.smith Supabase org and the Vercel AS team (Zachery)
+waiting_on: []
+done_by_owner:
+  - Google OAuth client created and the Google provider switched on in Supabase (checked 20 October)
+  - Supabase test org and the team's Vercel access
 ---
 
 # 01. Foundations on this repo
@@ -101,7 +102,7 @@ Per ADR-0008.
 - **Seed:** `pnpm seed:admins` creates the auth users and admin profiles for the emails in `SEED_ADMIN_EMAILS`. Provisioning from the screen is spec 15.
 - Sign-out stays in the user menu.
 
-**Owner steps, not code:** create the Google OAuth client (Google Cloud, internal to the Workspace), enter its id and secret in Supabase's Google provider, add `http://localhost:3000/auth/callback` and each deployed callback to the redirect allow-list, and turn off email sign-ups in Supabase.
+**Owner steps, not code:** the Google OAuth client and Supabase's Google provider are done. Still to do: add `http://localhost:3000/auth/callback` and each deployed callback to Supabase's redirect allow-list, and, once Google sign-in has shipped, turn off "Allow new users to sign up" and the email provider in Supabase. With sign-ups off, only the auth users that provisioning creates can sign in, even with a company Google account.
 
 ## 6. Shell and state libraries (S5)
 

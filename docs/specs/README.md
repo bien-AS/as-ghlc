@@ -20,8 +20,8 @@ An assumption is never a requirement. "Assumed" means waiting for someone to con
 
 | Spec                                                                       | Sessions | Registry screens                                                                                                           | Status              | Waiting on                                                                         |
 | -------------------------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------- | ---------------------------------------------------------------------------------- |
-| [01 Foundations](01-foundations.md)                                        | S1 to S5 | login, auth-callback, access-denied, empty and error state libraries                                                       | ready               | Google OAuth client; Supabase org and Vercel team access (owner steps, not code)   |
-| [06 GHL connector](06-ghl-connector.md)                                    | S6       | sync-log                                                                                                                   | blocked             | Lee: dev location, token, ids, webhooks                                            |
+| [01 Foundations](01-foundations.md)                                        | S1 to S5 | login, auth-callback, access-denied, empty and error state libraries                                                       | ready               | None: Google sign-in, Supabase and Vercel are set up (20 October)                  |
+| [06 GHL connector](06-ghl-connector.md)                                    | S6       | sync-log                                                                                                                   | needs-clarification | Bien: read-only token; Lee: webhooks, intake (C1 is a draft), a dev sub-account    |
 | [07 Leads, research, dashboard](07-leads-research-dashboard.md)            | S7       | dashboard, lead-list, lead-detail                                                                                          | needs-clarification | Spec 06; research sources (Zachery)                                                |
 | [08 Validation and review queue](08-validation-and-review-queue.md)        | S8       | suspect-review-queue, validation-log                                                                                       | blocked             | Typeform export (Bien, needs access)                                               |
 | [09 Decks on Presenton](09-decks-presenton.md)                             | S9, S10  | deck-generate, deck-detail, deck-edit, deck-library, first-value-celebration                                               | needs-clarification | Render deploy (Bien); enhanced templates (Mitchell, Zachery); calendar embed (Lee) |
@@ -53,7 +53,7 @@ ADR-0004 (open sign-up) is superseded by 0008.
 
 **Lee**
 
-1. The dev location: its Private Integration Token, ids, and the four outbound webhooks (06).
+1. The four outbound webhooks, pointed at a deployed preview; whether intake runs while C1 is a draft; whether a dev sub-account can be made, and a supervised session for the first real writes (06).
 2. Who moves leads on silence, and the thresholds (14). Assumed: GHL moves them, the app mirrors.
 3. The proposal link contact field (06, 12).
 4. Which workflow fires when the app writes Qualified, Proposal Sent or Lead Won, so no client gets two emails (06, 13).
