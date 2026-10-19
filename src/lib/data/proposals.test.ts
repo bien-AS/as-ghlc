@@ -519,7 +519,7 @@ test("a lead that is not Qualified yet, or has left the pipeline, takes no propo
 
 // --- roles ------------------------------------------------------------------------
 
-test("staff reach only their own leads' proposals and invoices; another rep's answer 404", async () => {
+test("a rep reaches only their own leads' proposals and invoices; another rep's answer 404", async () => {
   const all = await listProposalLeads();
   const leads = await listVisibleLeads();
   const ownerOf = (id: string) =>
@@ -530,7 +530,7 @@ test("staff reach only their own leads' proposals and invoices; another rep's an
   const ingrid = await idOf("Ingrid Aaltonen");
   expect(ownerOf(anneliese)).toBe(SAMPLE_REP.id);
 
-  viewAs("staff");
+  viewAs("rep");
   const mine = await listProposalLeads();
   expect(mine.length).toBeGreaterThan(0);
   expect(mine.length).toBeLessThan(all.length);
@@ -556,7 +556,7 @@ test("staff reach only their own leads' proposals and invoices; another rep's an
   );
 
   // Nothing of the other rep's changed.
-  viewAs("owner");
+  viewAs("admin");
   expect((await getProposal(kwame)).proposal?.status).toBe("draft");
   expect((await getLead(kwame)).stage).toBe("qualified");
 });

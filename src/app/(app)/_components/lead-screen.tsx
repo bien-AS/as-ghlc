@@ -127,8 +127,9 @@ export function LeadScreen({
   if (notFound) {
     return (
       <EmptyState
+        variant="empty"
         title="This lead does not exist"
-        description="It may have been removed, or the link may be wrong."
+        body="It may have been removed, or the link may be wrong."
         action={backButton}
       />
     );

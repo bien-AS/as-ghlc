@@ -4,6 +4,7 @@ import { vi } from "vitest";
 
 import type { CurrentUser } from "@/lib/auth/schemas";
 import { SAMPLE_REPS } from "@/lib/data/fixtures/leads";
+import type { Role } from "@/lib/roles";
 
 /*
  * Stand-ins for the two server boundaries: Supabase Auth (stubbed at its
@@ -61,12 +62,11 @@ export const SAMPLE_REP = {
 };
 
 /**
- * Signs in with a role (`profiles.role`, spec 01). "staff", the screens' name
- * for a rep, is the first sample rep; "admin" and "owner" are the default
- * signed-in person, whose profile is an admin.
+ * Signs in with a role (`profiles.role`, spec 01). A rep is the first sample
+ * rep; an admin is the default signed-in person.
  */
-export function viewAs(role: "owner" | "admin" | "staff") {
-  if (role !== "staff") return signIn();
+export function viewAs(role: Role) {
+  if (role === "admin") return signIn();
   fake.users.set(SAMPLE_REP.id, { ...SAMPLE_REP, role: "rep" });
   signIn({ sub: SAMPLE_REP.id, email: SAMPLE_REP.email });
 }

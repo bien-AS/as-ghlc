@@ -105,7 +105,9 @@ def main() -> int:
 
     built = {r: s for r, s in reg_routes.items() if r in pages or r in handlers}
     # /dev/* pages are development-only tools (they 404 in production), not screens.
-    unregistered = sorted(r for r in pages - set(reg_routes) if not r.startswith("/dev/"))
+    # A Next special file (not-found, forbidden, unauthorized) with no registered route is a state, not a screen.
+    unregistered = sorted(r for r in pages - set(reg_routes)
+                          if not r.startswith("/dev/") and not SPECIAL.match(r.rsplit("/", 1)[-1] + ".tsx"))
     not_built = [(r, s) for r, s in sorted(reg_routes.items()) if r not in built]
     drift = [(r, s) for r, s in sorted(built.items()) if s.get("status") == "planned"]
 

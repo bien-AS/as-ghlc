@@ -216,8 +216,8 @@ const leadCalls = (
 const adminCalls = (): Calls => ({
   listMembers,
   inviteMember: () =>
-    inviteMember({ email: "new@isolation.test", role: "staff" }),
-  changeMemberRole: () => changeMemberRole("user-x", "staff"),
+    inviteMember({ email: "new@isolation.test", role: "rep" }),
+  changeMemberRole: () => changeMemberRole("user-x", "rep"),
   removeMember: () => removeMember("user-x"),
   revokeInvite: () => revokeInvite("invite-x"),
   resendInvite: () => resendInvite("invite-x"),

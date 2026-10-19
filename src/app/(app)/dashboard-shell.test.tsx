@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import {
   cleanup,
   fireEvent,
@@ -15,6 +18,7 @@ import {
   listNotifications,
   markNotificationRead,
 } from "@/lib/data/notifications";
+import { isLive } from "@/lib/flags";
 import { leadOptions } from "@/lib/queries/leads";
 import {
   api,
@@ -28,6 +32,7 @@ import { address, resetNavigation } from "@/test/navigation";
 import { auth, navigate, resetClientFakes } from "@/test/render";
 import { DashboardShell } from "./_components/dashboard-shell";
 import { NotificationsScreen } from "./_components/notifications-screen";
+import { NAV_ITEMS, navItemsFor } from "./navigation";
 
 vi.mock(
   "@/lib/supabase/server",
@@ -245,9 +250,9 @@ test("marking a notification read lowers the count in the navigation by one, wit
   expect(address()).toBe("/notifications");
 });
 
-test("as Staff, the unread count is for that rep's own leads", async () => {
+test("as a rep, the unread count is for that rep's own leads", async () => {
   const everyone = (await getUnreadCount()).count;
-  viewAs("staff");
+  viewAs("rep");
   const { count } = await getUnreadCount();
   expect(count).toBeLessThan(everyone);
   open();
@@ -444,10 +449,10 @@ test("on a small screen the Sample data note moves into the user menu", async ()
   expect(within(menu).getByText(/The leads shown are examples/)).toBeDefined();
 });
 
-// --- roles (spec 12, question 7: proposed roles) --------------------------------
+// --- roles: the registry's nav gating matrix (spec 01, section 6) ------------------
 
-test("as Staff, the Admin group is left out of the sidebar", async () => {
-  viewAs("staff");
+test("as a rep, the Admin group and its links are not in the page at all", async () => {
+  viewAs("rep");
   open();
   await screen.findByText("Maya Okafor");
   await waitFor(() =>
@@ -458,15 +463,54 @@ test("as Staff, the Admin group is left out of the sidebar", async () => {
       "/notifications",
     ]),
   );
+  // Omitted, not hidden: nothing for the Admin group exists in the DOM.
   expect(mainNav().textContent).not.toContain("Admin");
   expect(mainNav().querySelector('[data-slot="sidebar-separator"]')).toBeNull();
+  expect(document.querySelector('a[href^="/admin"]')).toBeNull();
+  expect(document.body.textContent).not.toMatch(/Reps|Integrations/);
 });
 
-test("as Admin, the sidebar is the same as the Owner's", async () => {
+test("as an admin, the Admin group follows a divider, with its live screens", async () => {
   viewAs("admin");
   open();
   await within(mainNav()).findByRole("link", { name: "Integrations" });
-  expect(navLinks()).toHaveLength(6);
+  expect(within(mainNav()).getByText("Admin")).toBeDefined();
+  expect(
+    navLinks()
+      .slice(4)
+      .map((link) => link.getAttribute("href")),
+  ).toEqual(["/admin/reps", "/admin/integrations"]);
+});
+
+test("the nav table is the registry's matrix: its entries, in order, at the registered routes", () => {
+  const registry = JSON.parse(
+    readFileSync(join(process.cwd(), "screen-registry.json"), "utf8"),
+  ) as { screens: { id: string; route?: string }[] };
+  const routeOf = new Map(registry.screens.map((s) => [s.id, s.route]));
+  for (const item of NAV_ITEMS) {
+    expect(routeOf.get(item.screen), item.label).toBe(item.href);
+  }
+  expect(NAV_ITEMS.map((item) => item.label)).toEqual([
+    "Dashboard",
+    "Leads",
+    "Review Queue",
+    "Pipeline",
+    "Decks",
+    "Proposals",
+    "Invoices",
+    "Recordings",
+    "Notifications",
+    "Reps",
+    "Integrations",
+    "Templates",
+    "Statuses",
+    "Logs",
+  ]);
+  // A planned screen is never listed, whatever the role.
+  const listed = navItemsFor("admin").map((item) => item.screen);
+  expect(listed).not.toContain("pipeline-board");
+  expect(listed).not.toContain("sync-log");
+  expect(listed.every(isLive)).toBe(true);
 });
 
 // --- phase flags (spec 01, section 3) ----------------------------------------------
@@ -474,6 +518,9 @@ test("as Admin, the sidebar is the same as the Owner's", async () => {
 test("in production no link to a mockup is rendered: the sidebar is the Dashboard alone, with no search, bell or Settings", async () => {
   vi.stubEnv("NODE_ENV", "production");
   try {
+    expect(navItemsFor("admin").map((item) => item.href)).toEqual([
+      "/dashboard",
+    ]);
     open("/leads/lead-09");
     await screen.findByText("Ada Lovelace");
     expect(navLinks().map((link) => link.getAttribute("href"))).toEqual([

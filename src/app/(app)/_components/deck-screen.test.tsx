@@ -100,8 +100,8 @@ test("with no lead in the address, lists the leads that have a deck, each a link
   expect(document.body.textContent).not.toMatch(FORBIDDEN);
 });
 
-test("the picker shows only a staff member's own leads' decks", async () => {
-  viewAs("staff");
+test("the picker shows only a rep's own leads' decks", async () => {
+  viewAs("rep");
   renderScreen(<Page />);
   await screen.findByRole("link", { name: /Hannah Kowalczyk/ });
   expect(screen.queryByRole("link", { name: /Reuben Castellanos/ })).toBeNull();
@@ -471,12 +471,11 @@ test("a lead with no deck yet says decks generate on their own, and offers no wa
   await screen.findByText(`${NO_DECK} has no deck yet`);
 });
 
-test("another rep's deck does not exist for a staff member", async () => {
-  viewAs("staff");
-  // `leadIdOf` asks as staff too, so the id is found as an owner first.
-  viewAs("owner");
+test("another rep's deck does not exist for a rep", async () => {
+  // `leadIdOf` asks as the signed-in role, so the id is found as an admin first.
+  viewAs("admin");
   const leadId = await leadIdOf(DANIELS);
-  viewAs("staff");
+  viewAs("rep");
   resetNavigation(deckHref(leadId));
   renderScreen(<Page />);
   await screen.findByText("This lead does not exist");

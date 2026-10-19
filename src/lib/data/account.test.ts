@@ -97,7 +97,7 @@ test("a saved choice shows in a later read, for an admin and for a rep", async (
   );
 
   // Personal, not a Workspace resource: a rep has preferences too.
-  viewAs("staff");
+  viewAs("rep");
   expect(await updateAccountPreferences(NO_INVOICES)).toEqual(NO_INVOICES);
   expect(await getAccountPreferences()).toEqual(NO_INVOICES);
 });

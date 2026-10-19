@@ -248,7 +248,7 @@ test("with nothing to show, the empty state says nothing needs you and what will
   });
   renderScreen(<NotificationsScreen />);
 
-  expect(await screen.findByText("Nothing needs you right now")).toBeDefined();
+  expect(await screen.findByText("All caught up")).toBeDefined();
   expect(
     screen.getByText(
       "Suspects to review, signed proposals and invoice drafts for your leads appear here.",
@@ -319,19 +319,19 @@ test("returning to the window brings in what was raised meanwhile, at the top, w
   expect(await screen.findByText(`${count + 1} unread`)).toBeDefined();
 });
 
-test("viewed as Staff, the list holds only the notifications for that rep's own leads", async () => {
-  const forOwner = await everything();
-  viewAs("staff");
-  const forStaff = await everything();
-  expect(forStaff.length).toBeGreaterThan(0);
-  expect(forStaff.length).toBeLessThan(forOwner.length);
+test("viewed as a rep, the list holds only the notifications for that rep's own leads", async () => {
+  const forAdmin = await everything();
+  viewAs("rep");
+  const forRep = await everything();
+  expect(forRep.length).toBeGreaterThan(0);
+  expect(forRep.length).toBeLessThan(forAdmin.length);
 
   renderScreen(<NotificationsScreen />);
   await loaded();
   expect(rows().map((row) => row.getAttribute("href"))).toEqual(
-    forStaff.map((item) => `/leads/${item.lead.id}`),
+    forRep.map((item) => `/leads/${item.lead.id}`),
   );
-  const unread = forStaff.filter((item) => !item.read).length;
+  const unread = forRep.filter((item) => !item.read).length;
   expect(
     await screen.findByText(unread ? `${unread} unread` : "All read"),
   ).toBeDefined();

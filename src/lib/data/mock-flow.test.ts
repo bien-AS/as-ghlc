@@ -97,7 +97,7 @@ test("signing a proposal wins the lead, drafts its invoice and raises both notif
 test("leadScope narrows every mockup the same way: a rep reaches only their own leads, decks, proposals and notifications", async () => {
   const everyNotification = (await firstPage()).items.length;
 
-  viewAs("staff");
+  viewAs("rep");
   const own = new Set(
     (
       await listLeads(listLeadsQuerySchema.parse({ tab: "open", limit: "100" }))
@@ -107,13 +107,13 @@ test("leadScope narrows every mockup the same way: a rep reaches only their own 
   expect(notified.length).toBeLessThan(everyNotification);
   expect(notified.every((item) => own.has(item.lead.id))).toBe(true);
 
-  viewAs("owner");
+  viewAs("admin");
   const other = (
     await listLeads(listLeadsQuerySchema.parse({ tab: "open", limit: "100" }))
   ).items.find((lead) => !own.has(lead.id));
   if (!other) throw new Error("no lead owned by another rep");
 
-  viewAs("staff");
+  viewAs("rep");
   for (const call of [
     () => getDeck(other.id),
     () => generateProposal(other.id),

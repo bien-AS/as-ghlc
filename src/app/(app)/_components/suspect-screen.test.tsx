@@ -293,11 +293,9 @@ test("clearing the last suspect shows the empty state, confirming the queue is c
   expect(queueNames()).toEqual([names[0]]);
 
   fireEvent.click(button("Clear as valid"));
-  await screen.findByText("No suspects to review");
+  await screen.findByText("Queue clear");
   expect(
-    screen.getByText(
-      "The queue is clear. Leads the AI is unsure about appear here.",
-    ),
+    screen.getByText("Suspects land here when the classifier is unsure."),
   ).toBeDefined();
   expect(address()).toBe("/review-queue");
   expect(
@@ -313,9 +311,9 @@ test("an empty queue says where suspects come from, with no review panel", async
     await reviewSuspect(await leadIdOf(name), { outcome: "cleared" });
   }
   await open();
-  await screen.findByText("No suspects to review");
+  await screen.findByText("Queue clear");
   expect(
-    screen.getByText("Leads the AI is unsure about appear here."),
+    screen.getByText("Suspects land here when the classifier is unsure."),
   ).toBeDefined();
   expect(screen.queryByRole("region", { name: "Review" })).toBeNull();
 });

@@ -4,6 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { AppSidebar } from "@/components/ui/app-sidebar";
+import { OfflineBanner } from "@/components/ui/offline-banner";
 
 import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { type Crumb, TopNavbar } from "@/components/ui/top-navbar";
@@ -15,14 +16,13 @@ import { usePipelineHref } from "@/hooks/use-pipeline-href";
 import { TimeZoneProvider } from "@/hooks/use-time-zone";
 import { useViewer } from "@/hooks/use-viewer";
 import { isLive } from "@/lib/flags";
-import { can } from "@/lib/roles";
 
 import {
   DASHBOARD_HREF,
   LEADS_HREF,
-  NAV_ITEMS,
   NOTIFICATIONS_HREF,
   navItemFor,
+  navItemsFor,
   PROFILE_SETTINGS_HREF,
   REVIEW_QUEUE_HREF,
   titleFor,
@@ -128,30 +128,26 @@ function Frame({
           ]
         : [{ label: title }];
 
-  // Hiding is not the control (spec 12): the server refuses a role that types
-  // the address. Until the role is known, only what every role has is listed.
-  // An entry is listed only while its screen is live (spec 01, phase flags).
-  const role = viewer.data?.role;
+  // Leaving the Admin group out is not the control (spec 01): the server
+  // refuses a rep who types the address. Only live screens are listed.
+  const shown = navItemsFor(viewer.data?.role);
   const group = (name: "work" | "admin") =>
-    NAV_ITEMS.filter(
-      (entry) =>
-        entry.group === name &&
-        isLive(entry.screen) &&
-        (!entry.requires || (role !== undefined && can(role, entry.requires))),
-    ).map(({ label, href, icon }) => ({
-      label,
-      href,
-      icon,
-      built: true,
-      // No count rather than a zero or an error when it is unavailable.
-      ...(href === REVIEW_QUEUE_HREF && {
-        count: summary.data?.needs.suspects,
-      }),
-      ...(href === NOTIFICATIONS_HREF && {
-        count: unread,
-        countLabel: "unread",
-      }),
-    }));
+    shown
+      .filter((entry) => entry.group === name)
+      .map(({ label, href, icon }) => ({
+        label,
+        href,
+        icon,
+        built: true,
+        // No count rather than a zero or an error when it is unavailable.
+        ...(href === REVIEW_QUEUE_HREF && {
+          count: summary.data?.needs.suspects,
+        }),
+        ...(href === NOTIFICATIONS_HREF && {
+          count: unread,
+          countLabel: "unread",
+        }),
+      }));
 
   const name = me.data ? `${me.data.firstName} ${me.data.lastName}` : "Account";
   const searchable = isLive("lead-list");
@@ -200,6 +196,8 @@ function Frame({
             />
           }
         />
+        {/* Stays in view under the sticky navbar (its height is h-12). */}
+        <OfflineBanner className="sticky top-12 z-[8]" />
         <main
           ref={main}
           id="main-content"

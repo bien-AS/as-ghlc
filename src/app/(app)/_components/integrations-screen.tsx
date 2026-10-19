@@ -17,7 +17,7 @@ import {
 import { PageHeader } from "@/components/ui/page-header";
 import { PanelSection } from "@/components/ui/panel-section";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ErrorState, NotAllowedState } from "@/components/ui/state-panel";
+import { ErrorState, ForbiddenState } from "@/components/ui/state-panel";
 import { toast } from "@/components/ui/toast";
 import {
   useConnect,
@@ -69,9 +69,9 @@ function WriteFailure({ error }: { error: unknown }) {
 }
 
 /**
- * Integrations (spec 16, split from Workspace settings by owner decision): the
- * Workspace's Connections, one panel per type. For admins and owners; the
- * server refuses everyone else, and this only says so. The one screen that
+ * Integrations (spec 16, split from Workspace settings): the Workspace's
+ * Connections, one panel per type. For admins; the server refuses a rep,
+ * and this only says so. The one screen that
  * names providers by brand, and every name comes from the provider table.
  */
 export function IntegrationsScreen({
@@ -97,7 +97,7 @@ export function IntegrationsScreen({
     return (
       <>
         {header}
-        <NotAllowedState
+        <ForbiddenState
           action={
             <LinkButton href={LEADS_HREF}>Back to the Pipeline</LinkButton>
           }

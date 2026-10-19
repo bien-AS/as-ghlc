@@ -9,7 +9,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { listMembers } from "@/lib/data/members";
 import { sampleStore } from "@/lib/data/sample";
-import { ROLE_LABEL, ROLE_SEES, ROLES } from "@/lib/roles";
+import { ROLE_LABEL, ROLE_SEES, ROLES, type Role } from "@/lib/roles";
 import {
   api,
   FORBIDDEN,
@@ -46,10 +46,10 @@ afterEach(() => {
 
 const JONAS = "jonas.weber@northgate.example";
 
-async function open(role: "owner" | "admin" | "staff" = "admin") {
+async function open(role: Role = "admin") {
   viewAs(role);
   renderScreen(<UsersScreen />);
-  if (role !== "staff") await screen.findByText("Maya Okafor");
+  if (role !== "rep") await screen.findByText("Maya Okafor");
 }
 const rows = () =>
   within(
@@ -104,7 +104,7 @@ test("lists you first, then the people with access and their roles, then pending
   ).toBeTruthy();
   expect(within(listed[0]).queryByRole("button")).toBeNull();
 
-  expect(roleOf("Maya Okafor").value).toBe("staff");
+  expect(roleOf("Maya Okafor").value).toBe("rep");
   expect(roleOf("Samir Haddad").value).toBe("admin");
   expect(
     within(row("Maya Okafor")).getByText("maya.okafor@northgate.example"),
@@ -125,7 +125,7 @@ test("lists you first, then the people with access and their roles, then pending
 });
 
 test("explains what each role sees from the one roles table and says it is proposed, with no link to the deleted Workspace settings", async () => {
-  await open("owner");
+  await open("admin");
 
   const panel = screen.getByRole("region", { name: "What each role sees" });
   for (const role of ROLES) {
@@ -136,10 +136,10 @@ test("explains what each role sees from the one roles table and says it is propo
   expect(within(panel).queryByRole("link")).toBeNull();
 });
 
-test("viewed as Staff: the not-allowed state, no list and no invite form, and the API refused", async () => {
-  await open("staff");
+test("viewed as a rep: the not-allowed state, no list and no invite form, and the API refused", async () => {
+  await open("rep");
 
-  await screen.findByText("You do not have access to this screen");
+  await screen.findByText("You do not have access");
   expect(screen.queryByText(/^People with access/)).toBeNull();
   expect(screen.queryByLabelText("Email")).toBeNull();
   expect(screen.queryByText("Maya Okafor")).toBeNull();
@@ -148,17 +148,15 @@ test("viewed as Staff: the not-allowed state, no list and no invite form, and th
 });
 
 test("when the server has already refused, the screen says so without asking again", async () => {
-  viewAs("staff");
+  viewAs("rep");
   renderScreen(<UsersScreen notAllowed />);
 
-  expect(
-    screen.getByText("You do not have access to this screen"),
-  ).toBeTruthy();
+  expect(screen.getByText("You do not have access")).toBeTruthy();
   expect(api.calls()).toEqual([]);
 });
 
 test("shows skeleton rows while loading, and an error with Try again that loads the list", async () => {
-  viewAs("owner");
+  viewAs("admin");
   api.fail("GET", /^\/api\/members$/, 500, { once: true });
   const release = api.hold("GET", /^\/api\/members$/);
   renderScreen(<UsersScreen />);
@@ -194,7 +192,7 @@ test("changing a role saves on change, shows the row saving, and the new role is
   expect(roleOf("Maya Okafor").disabled).toBe(true);
   expect(button("Remove Maya Okafor").disabled).toBe(true);
   // Nothing is assumed before the server answers.
-  expect((await stored("Maya Okafor"))?.role).toBe("staff");
+  expect((await stored("Maya Okafor"))?.role).toBe("rep");
 
   release();
   await waitFor(() =>
@@ -213,20 +211,20 @@ test("a refused role change puts the old value back and says why", async () => {
   await open("admin");
 
   api.fail("PATCH", /^\/api\/members\//, 409, { once: true });
-  fireEvent.change(roleOf("Daniel Reyes"), { target: { value: "owner" } });
+  fireEvent.change(roleOf("Daniel Reyes"), { target: { value: "admin" } });
   const refused = await within(row("Daniel Reyes")).findByRole("alert");
   expect(refused.textContent).toBe(
-    "The role was not changed. A Workspace must keep at least one owner.",
+    "The role was not changed. You cannot change your own access here.",
   );
-  expect(roleOf("Daniel Reyes").value).toBe("staff");
-  expect((await stored("Daniel Reyes"))?.role).toBe("staff");
+  expect(roleOf("Daniel Reyes").value).toBe("rep");
+  expect((await stored("Daniel Reyes"))?.role).toBe("rep");
 
   api.fail("PATCH", /^\/api\/members\//, 500, { once: true });
   fireEvent.change(roleOf("Daniel Reyes"), { target: { value: "admin" } });
   await within(row("Daniel Reyes")).findByText(
     "The role was not changed. Try again.",
   );
-  expect(roleOf("Daniel Reyes").value).toBe("staff");
+  expect(roleOf("Daniel Reyes").value).toBe("rep");
 
   // The next change on the row withdraws the message.
   fireEvent.change(roleOf("Daniel Reyes"), { target: { value: "admin" } });
@@ -236,26 +234,21 @@ test("a refused role change puts the old value back and says why", async () => {
   );
 });
 
-test("the last owner's role and Remove are disabled with the reason; a second owner frees them", async () => {
+test("only your own row is locked: another admin's role and Remove stay available", async () => {
   await open("admin");
 
-  const helena = row("Helena Brandt");
-  expect(roleOf("Helena Brandt").value).toBe("owner");
-  expect(roleOf("Helena Brandt").disabled).toBe(true);
-  expect(button("Remove Helena Brandt").disabled).toBe(true);
-  const reason = within(helena).getByText(/^The only owner\./);
-  expect(roleOf("Helena Brandt").getAttribute("aria-describedby")).toBe(
+  const you = row("Ada Lovelace");
+  const reason = within(you).getByText(/^This is you\./);
+  expect(roleOf("Ada Lovelace").getAttribute("aria-describedby")).toBe(
     reason.id,
   );
-
-  fireEvent.change(roleOf("Samir Haddad"), { target: { value: "owner" } });
-  await waitFor(() => expect(roleOf("Helena Brandt").disabled).toBe(false));
+  expect(roleOf("Helena Brandt").value).toBe("admin");
+  expect(roleOf("Helena Brandt").disabled).toBe(false);
   expect(button("Remove Helena Brandt").disabled).toBe(false);
-  expect(within(row("Helena Brandt")).queryByText(/The only owner/)).toBeNull();
 });
 
 test("Remove asks first, naming the person and saying they lose access at once; Cancel changes nothing", async () => {
-  await open("owner");
+  await open("admin");
 
   fireEvent.click(button("Remove Tom Lindqvist"));
   const dialog = screen.getByRole("alertdialog", {
@@ -279,7 +272,7 @@ test("Remove asks first, naming the person and saying they lose access at once; 
 });
 
 test("a removal that fails leaves the person listed and says so on their row", async () => {
-  await open("owner");
+  await open("admin");
   api.fail("DELETE", /^\/api\/members\//);
 
   fireEvent.click(button("Remove Priya Nair"));
@@ -334,7 +327,7 @@ test("inviting adds a pending row with the chosen role, empties the form, and ke
   });
 
   expect(screen.getByLabelText<HTMLInputElement>("Email").value).toBe("");
-  expect(screen.getByLabelText<HTMLSelectElement>("Role").value).toBe("staff");
+  expect(screen.getByLabelText<HTMLSelectElement>("Role").value).toBe("rep");
   expect(screen.getByText("Sample data: no email is sent.")).toBeTruthy();
   expect(
     screen
@@ -377,7 +370,7 @@ test("the invite form names what is wrong with the address, and editing the fiel
 });
 
 test("an invite that could not be sent keeps the address and says so", async () => {
-  await open("owner");
+  await open("admin");
   api.fail("POST", /^\/api\/members\/invites$/, 500, { once: true });
 
   invite("late@northgate.example");
@@ -395,8 +388,7 @@ test("an invite that could not be sent keeps the address and says so", async () 
 });
 
 test("with nobody else: You are the only person here, with a way to the invite form", async () => {
-  // An admin cannot remove the sample Owner (the last owner, spec 12), so the
-  // sample store is emptied instead, as a new Workspace's would be.
+  // The sample store is emptied, as a new Workspace's would be.
   sampleStore<unknown[]>("members", () => [])().splice(0);
 
   renderScreen(<UsersScreen />);

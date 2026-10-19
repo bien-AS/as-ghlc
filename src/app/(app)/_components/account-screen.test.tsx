@@ -258,8 +258,8 @@ test("while the preferences load a skeleton stands in; if they cannot be loaded,
   ).toBeDefined();
 });
 
-test("viewed as Staff, account settings are the same: they are personal, not the Workspace's", async () => {
-  viewAs("staff");
+test("viewed as a rep, account settings are the same: they are personal, not the Workspace's", async () => {
+  viewAs("rep");
   renderScreen(<AccountScreen />);
   await loaded();
 

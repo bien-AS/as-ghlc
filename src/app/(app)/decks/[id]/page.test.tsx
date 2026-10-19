@@ -70,9 +70,9 @@ test("tells the screen which is missing: the lead, or only its deck", async () =
     prefetched: [`leads/detail/${noDeck}`],
   });
 
-  // Another rep's lead does not exist for a staff member.
+  // Another rep's lead does not exist for a rep.
   const theirs = await leadIdOf("Reuben Castellanos");
-  viewAs("staff");
+  viewAs("rep");
   expect((await page(theirs)).missing).toBe("lead");
 });
 

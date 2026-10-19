@@ -424,10 +424,10 @@ test("the PDF route answers a PDF download named after the lead, one page per sl
 
 // --- roles -------------------------------------------------------------------
 
-test("staff reach only their own leads' decks; another rep's deck answers not found", async () => {
+test("a rep reaches only their own leads' decks; another rep's deck answers not found", async () => {
   const mine = await idOf(MAYAS);
   const theirs = await idOf(DANIELS);
-  viewAs("staff");
+  viewAs("rep");
 
   const decks = await listDecks();
   expect(decks.length).toBeGreaterThan(0);
@@ -445,7 +445,7 @@ test("staff reach only their own leads' decks; another rep's deck answers not fo
   }
 
   // The refused writes changed nothing.
-  viewAs("owner");
+  viewAs("admin");
   const deck = await getDeck(theirs);
   expect(deck.template).toBe("discovery");
   expect(deck.slides.find((slide) => slide.id === "goals")?.heading).toBe(
@@ -453,12 +453,10 @@ test("staff reach only their own leads' decks; another rep's deck answers not fo
   );
 });
 
-test("an admin and an owner reach every deck", async () => {
+test("an admin reaches every deck", async () => {
   const theirs = await idOf(DANIELS);
-  for (const role of ["admin", "owner"] as const) {
-    viewAs(role);
-    expect((await getDeck(theirs)).lead.name).toBe(DANIELS);
-  }
+  viewAs("admin");
+  expect((await getDeck(theirs)).lead.name).toBe(DANIELS);
 });
 
 // --- the contract's two readers ----------------------------------------------

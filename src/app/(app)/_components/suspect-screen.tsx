@@ -63,7 +63,6 @@ export function SuspectScreen({ leadId }: { leadId?: string }) {
   const [now] = useState(() => Date.now());
   // The lead just decided: it stays out of view while the screen moves on.
   const [decided, setDecided] = useState<string>();
-  const [clearedHere, setClearedHere] = useState(false);
   const [problem, setProblem] = useState<"failed" | "taken">();
   const [lastOutcome, setLastOutcome] = useState<"cleared" | "spam">();
 
@@ -88,7 +87,6 @@ export function SuspectScreen({ leadId }: { leadId?: string }) {
   const moveOn = (from: string) => {
     setDecided(from);
     moved.current = true;
-    if (!upNext) setClearedHere(true);
     router.replace(upNext ? suspectHref(upNext.id) : REVIEW_QUEUE_HREF);
   };
 
@@ -163,13 +161,11 @@ export function SuspectScreen({ leadId }: { leadId?: string }) {
       <>
         {title}
         {takenNote}
+        {/* Copy: the registry's suspect-review-queue states.empty. */}
         <EmptyState
-          title="No suspects to review"
-          description={
-            clearedHere
-              ? "The queue is clear. Leads the AI is unsure about appear here."
-              : "Leads the AI is unsure about appear here."
-          }
+          variant="empty"
+          title="Queue clear"
+          body="Suspects land here when the classifier is unsure."
           action={<LinkButton href={LEADS_HREF}>Go to the Pipeline</LinkButton>}
         />
       </>
@@ -218,8 +214,9 @@ export function SuspectScreen({ leadId }: { leadId?: string }) {
           ) : lead.isError && !data ? (
             lead.error instanceof ApiError && lead.error.status === 404 ? (
               <EmptyState
+                variant="empty"
                 title="This lead does not exist"
-                description="It may have been removed, or the link may be wrong."
+                body="It may have been removed, or the link may be wrong."
               />
             ) : (
               <ErrorState
@@ -231,8 +228,9 @@ export function SuspectScreen({ leadId }: { leadId?: string }) {
             )
           ) : data && !reviewable ? (
             <EmptyState
+              variant="empty"
               title="Nothing to decide on this lead"
-              description="It has already been decided, or it is not a suspect."
+              body="It has already been decided, or it is not a suspect."
               action={
                 <LinkButton href={leadHref(data.id)}>
                   Open {data.name}

@@ -141,8 +141,8 @@ test("with no lead in the address, the picker lists each lead with its stage and
   expect(document.body.textContent).not.toMatch(FORBIDDEN);
 });
 
-test("staff see only their own leads in the picker", async () => {
-  viewAs("staff");
+test("a rep sees only their own leads in the picker", async () => {
+  viewAs("rep");
   renderScreen(<Page />);
   const rows = within(
     await screen.findByRole("region", { name: "Leads" }),
@@ -555,7 +555,7 @@ test("a lost proposal, and a proposal whose lead left the pipeline, are read-onl
 
 // --- not found, loading, failing -------------------------------------------------------
 
-test("an unknown lead, and another rep's lead for staff, show not found", async () => {
+test("an unknown lead, and another rep's lead for a rep, show not found", async () => {
   resetNavigation(`${BUILDER}/lead-999`);
   renderScreen(<Page />);
   await screen.findByText("This lead does not exist");
@@ -572,7 +572,7 @@ test("an unknown lead, and another rep's lead for staff, show not found", async 
 
   cleanup();
   const kwame = await leadIdOf("Kwame Asante");
-  viewAs("staff");
+  viewAs("rep");
   resetNavigation(`${BUILDER}/${kwame}`);
   renderScreen(<Page />);
   await screen.findByText("This lead does not exist");

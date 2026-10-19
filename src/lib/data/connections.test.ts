@@ -227,16 +227,16 @@ test("the assumed answers: the app pushes the stage out (question 1), fixed tool
 // --- the guards ----------------------------------------------------------------
 
 test.each(EVERY_ROUTE)(
-  "%s: signed out is 401, no profile is 403 profile_required, staff is 403 forbidden",
+  "%s: signed out is 401, no profile is 403 profile_required, a rep is 403 forbidden",
   async (_name, call) => {
     const before = await listConnections();
 
-    viewAs("staff");
-    const asStaff = await call();
-    expect(asStaff.status).toBe(403);
-    expect(await code(asStaff)).toBe("forbidden");
+    viewAs("rep");
+    const asRep = await call();
+    expect(asRep.status).toBe(403);
+    expect(await code(asRep)).toBe("forbidden");
 
-    viewAs("owner");
+    viewAs("admin");
     fake.users.clear();
     const noProfile = await call();
     expect(noProfile.status).toBe(403);
@@ -254,21 +254,15 @@ test.each(EVERY_ROUTE)(
   },
 );
 
-test.each(EVERY_ROUTE)(
-  "%s: admin and owner are allowed",
-  async (_name, call) => {
-    viewAs("admin");
-    expect((await call()).status).toBe(200);
-    resetSampleData();
-    viewAs("owner");
-    expect((await call()).status).toBe(200);
-  },
-);
+test.each(EVERY_ROUTE)("%s: an admin is allowed", async (_name, call) => {
+  viewAs("admin");
+  expect((await call()).status).toBe(200);
+});
 
 test.each(EVERY_FUNCTION)(
-  "%s refuses staff, a caller without a profile and a signed-out caller, and allows an admin",
+  "%s refuses a rep, a caller without a profile and a signed-out caller, and allows an admin",
   async (_name, call) => {
-    viewAs("staff");
+    viewAs("rep");
     await expect(call()).rejects.toEqual(refusedWith("forbidden"));
     viewAs("admin");
     await expect(call()).resolves.toBeDefined();
@@ -280,8 +274,8 @@ test.each(EVERY_FUNCTION)(
   },
 );
 
-test("a refusal comes before validation: staff sending nonsense get 403, not 400", async () => {
-  viewAs("staff");
+test("a refusal comes before validation: a rep sending nonsense gets 403, not 400", async () => {
+  viewAs("rep");
   expect((await api.connect("nonsense", "not json")).status).toBe(403);
   expect((await api.sync("decks")).status).toBe(403);
   expect((await api.putMapping({ nonsense: true })).status).toBe(403);
@@ -469,7 +463,7 @@ test("no response of any route contains a credential, a reference to one, or the
     await api.disconnect("decks"),
     await api.list(),
   ];
-  viewAs("staff");
+  viewAs("rep");
   responses.push(await api.connect("decks"), await api.list()); // 403
 
   expect(responses.map((response) => response.status)).toEqual([
@@ -489,7 +483,7 @@ test("no response of any route contains a credential, a reference to one, or the
   // and not the store (a later read is what the store holds, minus the reference).
   expect(connectSpy).toHaveBeenCalledExactlyOnceWith(KEY);
   for (const log of logs) expect(log).not.toHaveBeenCalled();
-  viewAs("owner");
+  viewAs("admin");
   expect(JSON.stringify(await listConnections())).not.toMatch(LOOKS_LIKE_A_KEY);
 });
 

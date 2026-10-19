@@ -5,7 +5,7 @@ import type { Member } from "@/lib/members/schemas";
  * by the data-access layer and its tests only. Everyone is invented and every
  * address uses a reserved example domain.
  *
- * The four Staff are the reps on the sample leads. Lead fixtures belong to the
+ * The four reps are the reps on the sample leads. Lead fixtures belong to the
  * leads module, so the names are repeated here; `members.test.ts` checks them
  * against the Pipeline's rep list.
  */
@@ -52,13 +52,13 @@ const invite = (
 // "Send again", resets them.
 export function buildSampleMembers(now: number): MemberRecord[] {
   return [
-    user("helena", "Helena Brandt", "owner"),
+    user("helena", "Helena Brandt", "admin"),
     user("samir", "Samir Haddad", "admin"),
-    user("maya", "Maya Okafor", "staff"),
-    user("daniel", "Daniel Reyes", "staff"),
-    user("priya", "Priya Nair", "staff"),
-    user("tom", "Tom Lindqvist", "staff"),
-    invite("jonas", "jonas.weber@northgate.example", "staff", now - 2 * DAY),
+    user("maya", "Maya Okafor", "rep"),
+    user("daniel", "Daniel Reyes", "rep"),
+    user("priya", "Priya Nair", "rep"),
+    user("tom", "Tom Lindqvist", "rep"),
+    invite("jonas", "jonas.weber@northgate.example", "rep", now - 2 * DAY),
     invite("amira", "amira.soto@fieldhouse.example", "admin", now - 5 * DAY),
   ];
 }

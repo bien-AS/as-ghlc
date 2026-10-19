@@ -20,30 +20,18 @@ export const MEMBER_STATUS_META: Record<
 };
 
 /** Why a person's role cannot be changed, and why they cannot be removed. */
-export type MemberLock = "self" | "last_owner";
+export type MemberLock = "self";
 
 /**
- * Spec 12, "Last owner": the only owner cannot be removed or demoted. And
- * nobody removes themselves or changes their own role on this screen. An
- * invited owner has not joined, so does not count as an owner yet.
+ * Nobody removes themselves or changes their own role on this screen. Only
+ * an admin reaches it, so an admin always remains: no "last admin" rule.
  */
-export function memberLock(
-  members: readonly Member[],
-  member: Member,
-): MemberLock | null {
-  if (member.isViewer) return "self";
-  const owners = members.filter(
-    (other) => other.status === "active" && other.role === "owner",
-  );
-  return owners.length === 1 && owners[0].id === member.id
-    ? "last_owner"
-    : null;
+export function memberLock(member: Member): MemberLock | null {
+  return member.isViewer ? "self" : null;
 }
 
 export const MEMBER_LOCK_REASON: Record<MemberLock, string> = {
   self: "This is you. You cannot change your own role.",
-  last_owner:
-    "The only owner. Make someone else an owner before changing or removing this one.",
 };
 
 /** When an invite stops working (MOCK CHOICE, see INVITE_EXPIRES_AFTER_DAYS). */

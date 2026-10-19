@@ -17,7 +17,7 @@ import {
 import { PageHeader } from "@/components/ui/page-header";
 import { PanelSection } from "@/components/ui/panel-section";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ErrorState, NotAllowedState } from "@/components/ui/state-panel";
+import { ErrorState, ForbiddenState } from "@/components/ui/state-panel";
 import { toast } from "@/components/ui/toast";
 import { useHydrated } from "@/hooks/use-hydrated";
 import {
@@ -54,7 +54,7 @@ const TOUCH_SELECT =
 /** Why a write did not happen, in plain words. The list has been reloaded. */
 function whyNot(error: unknown, what: string) {
   if (error instanceof ApiError && error.status === 409) {
-    return `${what} A Workspace must keep at least one owner.`;
+    return `${what} You cannot change your own access here.`;
   }
   if (error instanceof ApiError && error.status === 404) {
     return `${what} They are no longer on this list.`;
@@ -70,8 +70,8 @@ const roleOptions = ROLES.map((role) => (
 
 /**
  * Users and roles (spec 12): who has access to the Workspace and with which
- * role, with invite, change role and remove. For admins and owners; the
- * server refuses anyone else whatever this screen shows.
+ * role, with invite, change role and remove. For admins; the server refuses
+ * a rep whatever this screen shows.
  */
 export function UsersScreen({
   notAllowed = false,
@@ -96,7 +96,7 @@ export function UsersScreen({
     return (
       <>
         {title}
-        <NotAllowedState
+        <ForbiddenState
           action={<LinkButton href={LEADS_HREF}>Go to the Pipeline</LinkButton>}
         />
       </>
@@ -136,7 +136,7 @@ export function UsersScreen({
           <>
             <ul className="divide-y divide-border">
               {people.map((member) => (
-                <MemberRow key={member.id} member={member} members={people} />
+                <MemberRow key={member.id} member={member} />
               ))}
             </ul>
             {people.length === 1 && (
@@ -277,7 +277,7 @@ function InviteForm({ ref }: { ref: React.Ref<HTMLFormElement> }) {
             <NativeSelect
               id={roleId}
               name="role"
-              defaultValue={"staff" satisfies Role}
+              defaultValue={"rep" satisfies Role}
               disabled={pending}
               className={cn("w-full", TOUCH_SELECT)}
             >
@@ -304,7 +304,7 @@ function InviteForm({ ref }: { ref: React.Ref<HTMLFormElement> }) {
   );
 }
 
-function MemberRow({ member, members }: { member: Member; members: Member[] }) {
+function MemberRow({ member }: { member: Member }) {
   const change = useChangeMemberRole();
   const remove = useRemoveMember();
   const revoke = useRevokeInvite();
@@ -313,7 +313,7 @@ function MemberRow({ member, members }: { member: Member; members: Member[] }) {
 
   const invited = member.status === "invited";
   const who = member.name ?? member.email;
-  const lock = memberLock(members, member);
+  const lock = memberLock(member);
   const busy =
     change.isPending ||
     remove.isPending ||

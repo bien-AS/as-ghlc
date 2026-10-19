@@ -353,7 +353,7 @@ function Filters({
           ))}
         </NativeSelect>
         {/* Spec 12: the rep filter is for a role that sees more than one
-            rep's leads. Staff are sent only their own rep, so it is left out. */}
+            rep's leads. A rep is sent only their own, so it is left out. */}
         {owners.length > 1 && (
           <NativeSelect
             aria-label="Rep"
@@ -433,19 +433,27 @@ function LeadList({
     if (filtered) {
       return (
         <EmptyState
+          variant="filtered"
           title="No leads match"
-          description={`Nothing in ${tabLabel(tab)} matches ${describeFilters()}.`}
+          body={`Nothing in ${tabLabel(tab)} matches ${describeFilters()}.`}
           action={<Button onClick={onClear}>Clear filters</Button>}
         />
       );
     }
+    // Copy: the registry's lead-list states.empty.
     return pipelineEmpty ? (
       <EmptyState
+        variant="empty"
         title="No leads yet"
-        description="Leads appear here when they come in from your CRM."
+        body="New form fills land here automatically."
       />
     ) : (
-      <EmptyState title={`No leads in ${tabLabel(tab)}.`} />
+      // A tab is a stage, not a filter: nothing is hiding leads here.
+      <EmptyState
+        variant="empty"
+        title={`No leads in ${tabLabel(tab)}`}
+        body="Leads appear here when they reach this stage."
+      />
     );
   }
 

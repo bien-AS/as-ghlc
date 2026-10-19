@@ -28,15 +28,15 @@ import type {
  */
 
 /**
- * Question 7 (ASSUMED; undecided for admins and owners): a notification goes
- * to the lead's owner, and admins and owners also see every lead's. False
- * means only the lead's owner is notified.
+ * Question 7 (ASSUMED; undecided for admins): a notification goes to the
+ * lead's rep, and admins also see every lead's. False means only the lead's
+ * rep is notified.
  */
-const ADMINS_AND_OWNERS_NOTIFIED_FOR_EVERY_LEAD = true;
+const ADMINS_NOTIFIED_FOR_EVERY_LEAD = true;
 
 const isNotified = (profile: Profile, lead: LeadDetail) =>
   lead.owner.id === profile.id ||
-  (ADMINS_AND_OWNERS_NOTIFIED_FOR_EVERY_LEAD && profile.role === "admin");
+  (ADMINS_NOTIFIED_FOR_EVERY_LEAD && profile.role === "admin");
 
 type Stored = {
   id: string;
@@ -87,7 +87,7 @@ function seed(lead: LeadDetail): Stored[] {
 /**
  * The leads the viewer may see, by id, after deriving the notifications of any
  * lead not seen before. `listVisibleLeads` is filtered by role, so the store
- * cannot be built from one call: a Staff preview sees fewer leads than an Owner.
+ * cannot be built from one call: a rep sees fewer leads than an admin.
  */
 async function visibleLeads() {
   const { seeded, items } = store();

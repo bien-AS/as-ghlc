@@ -2296,7 +2296,7 @@
       "dimension": "State Coverage",
       "tier": 1,
       "phase": 1,
-      "status": "planned",
+      "status": "built",
       "rbac": {
         "admin": "full",
         "operator": "full"
@@ -2336,7 +2336,7 @@
       "dimension": "State Coverage",
       "tier": 1,
       "phase": 1,
-      "status": "planned",
+      "status": "built",
       "rbac": {
         "admin": "full",
         "operator": "full"

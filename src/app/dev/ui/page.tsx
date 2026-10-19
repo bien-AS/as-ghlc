@@ -38,7 +38,7 @@ import { SlideFrame } from "@/components/ui/slide-frame";
 import {
   EmptyState,
   ErrorState,
-  NotAllowedState,
+  ForbiddenState,
 } from "@/components/ui/state-panel";
 import { StatusLine } from "@/components/ui/status-line";
 import { Switch } from "@/components/ui/switch";
@@ -347,9 +347,21 @@ export default function DevUiPage() {
         </ul>
         <div className="grid gap-4 md:grid-cols-2">
           <EmptyState
+            variant="empty"
+            title="No leads yet"
+            body="New form fills land here automatically."
+          />
+          <EmptyState
+            variant="filtered"
             title="No leads match"
-            description="Nothing in All open matches the search."
+            body="Nothing in All open matches the search."
             action={<Button>Clear filters</Button>}
+          />
+          <EmptyState
+            variant="notConnected"
+            provider="CRM"
+            title="Not connected yet"
+            body="Connect it in Integrations to see its data here."
           />
           <ErrorState
             title="The leads could not be loaded"
@@ -367,7 +379,7 @@ export default function DevUiPage() {
               are rows with dividers.
             </p>
           </PanelSection>
-          <NotAllowedState />
+          <ForbiddenState />
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <SlideFrame

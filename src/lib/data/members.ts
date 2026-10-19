@@ -83,18 +83,10 @@ function find(id: string, status?: Member["status"]): MemberRecord {
   return record;
 }
 
-/**
- * Refuses a change to yourself (your own row is not in the store: your role
- * follows the preview) and to the last owner (spec 12). `keepsOwner` is a
- * change that leaves the last owner an owner, which there is no reason to refuse.
- */
-function refuseIfLocked(viewer: Profile, id: string, keepsOwner = false) {
-  const members = toList(viewer);
-  const member = members.find((candidate) => candidate.id === id);
-  const lock = member ? memberLock(members, member) : null;
-  if (lock === "self" || (lock === "last_owner" && !keepsOwner)) {
-    throw new AccessError("conflict");
-  }
+/** Refuses a change to yourself: your own row is not in the store. */
+function refuseIfLocked(viewer: Profile, id: string) {
+  const member = toList(viewer).find((candidate) => candidate.id === id);
+  if (member && memberLock(member)) throw new AccessError("conflict");
 }
 
 function drop(record: MemberRecord) {
@@ -153,7 +145,7 @@ export async function changeMemberRole(
   role: Role,
 ): Promise<Member[]> {
   const viewer = await requireAdmin();
-  refuseIfLocked(viewer, id, role === "owner");
+  refuseIfLocked(viewer, id);
   find(id).role = role;
   return toList(viewer);
 }

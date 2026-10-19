@@ -250,6 +250,8 @@ test("a search that matches nothing says so, restates the search and offers Clea
   renderScreen(<PipelineScreen />);
 
   await screen.findByText("No leads match");
+  // The empty-state library's filtered variant says so in words.
+  expect(screen.getByText("Filtered view")).toBeDefined();
   expect(
     screen.getByText("Nothing in All open matches “zzzz”, verdict Valid."),
   ).toBeDefined();
@@ -280,8 +282,9 @@ test("a tab with no leads says so, without blaming a filter", async () => {
         }),
   );
   renderScreen(<PipelineScreen />);
-  await screen.findByText("No leads in Nurture.");
+  await screen.findByText("No leads in Nurture");
   expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
+  expect(screen.queryByText("Filtered view")).toBeNull();
 });
 
 test("with no leads at all, the empty state says where leads come from", async () => {
@@ -306,7 +309,7 @@ test("with no leads at all, the empty state says where leads come from", async (
   renderScreen(<PipelineScreen />);
   await screen.findByText("No leads yet");
   expect(
-    screen.getByText("Leads appear here when they come in from your CRM."),
+    screen.getByText("New form fills land here automatically."),
   ).toBeDefined();
 });
 

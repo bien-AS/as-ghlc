@@ -146,8 +146,9 @@ function DeckPicker() {
       <>
         {header}
         <EmptyState
+          variant="empty"
           title="No decks yet"
-          description="Decks generate on their own for valid leads. When one of your leads has a deck, it is listed here."
+          body="Decks generate on their own for valid leads. When one of your leads has a deck, it is listed here."
           action={<LinkButton href={LEADS_HREF}>Go to the Pipeline</LinkButton>}
         />
       </>
@@ -215,8 +216,9 @@ function DeckPresenter({
   if (missing === "lead" || is404(lead.error)) {
     return (
       <EmptyState
+        variant="empty"
         title="This lead does not exist"
-        description="It may have been removed, or the link may be wrong."
+        body="It may have been removed, or the link may be wrong."
         action={allDecks}
       />
     );
@@ -225,8 +227,9 @@ function DeckPresenter({
     if (lead.isPending) return <DeckSkeleton />;
     return (
       <EmptyState
+        variant="empty"
         title={`${lead.data?.name ?? "This lead"} has no deck yet`}
-        description="Decks generate on their own for valid leads. There is nothing to start by hand: when this lead's deck is ready, it opens here."
+        body="Decks generate on their own for valid leads. There is nothing to start by hand: when this lead's deck is ready, it opens here."
         action={
           <span className="flex flex-wrap justify-center gap-3">
             <LinkButton href={leadHref(leadId)}>Open the lead</LinkButton>

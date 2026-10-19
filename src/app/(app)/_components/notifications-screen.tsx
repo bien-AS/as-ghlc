@@ -60,9 +60,11 @@ function NotificationList() {
 
   if (items.length === 0) {
     return (
+      // Title: the registry's notifications-center states.empty.
       <EmptyState
-        title="Nothing needs you right now"
-        description="Suspects to review, signed proposals and invoice drafts for your leads appear here."
+        variant="empty"
+        title="All caught up"
+        body="Suspects to review, signed proposals and invoice drafts for your leads appear here."
       />
     );
   }

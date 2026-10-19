@@ -131,8 +131,9 @@ function Picker() {
       <>
         {header}
         <EmptyState
+          variant="empty"
           title="No lead is ready for a proposal"
-          description="A lead appears here once it is marked Qualified after its discovery call."
+          body="A lead appears here once it is marked Qualified after its discovery call."
           action={<LinkButton href={LEADS_HREF}>Go to the Pipeline</LinkButton>}
         />
       </>
@@ -200,8 +201,9 @@ function Builder({ leadId, missing }: { leadId: string; missing: boolean }) {
   if (notFound) {
     return (
       <EmptyState
+        variant="empty"
         title="This lead does not exist"
-        description="It may have been removed, the link may be wrong, or it may belong to another rep."
+        body="It may have been removed, the link may be wrong, or it may belong to another rep."
         action={chooseALead}
       />
     );
@@ -252,8 +254,9 @@ function Builder({ leadId, missing }: { leadId: string; missing: boolean }) {
           <NotStarted view={view} write={write} />
         ) : (
           <EmptyState
+            variant="empty"
             title="This lead cannot have a proposal yet"
-            description={proposalBlockedReason(lead)}
+            body={proposalBlockedReason(lead)}
             action={
               <LinkButton href={leadHref(lead.id)}>Back to the lead</LinkButton>
             }

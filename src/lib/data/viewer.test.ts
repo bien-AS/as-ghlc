@@ -84,7 +84,7 @@ test("requireProfile: signed out is 401, no profile is 403, a deactivated profil
 
 test("requireAdmin: an admin passes, a rep is refused, and a deactivated admin is refused", async () => {
   expect((await requireAdmin()).role).toBe("admin");
-  viewAs("staff");
+  viewAs("rep");
   await expect(requireAdmin()).rejects.toEqual(refusedWith("forbidden"));
   viewAs("admin");
   fake.users.set(ada.id, { ...ada, active: false });
@@ -104,18 +104,10 @@ test("leadScope: an admin reaches every lead, a rep only the leads assigned to t
   expect(leadScope(profile("rep"))(someoneElses)).toBe(false);
 });
 
-test("the viewer summary draws a rep as staff with their own leads, and an admin as admin", async () => {
-  expect(await getViewerSummary()).toEqual({
-    role: "admin",
-    preview: true,
-    staffRep: null,
-  });
-  viewAs("staff");
-  expect(await getViewerSummary()).toEqual({
-    role: "staff",
-    preview: true,
-    staffRep: { id: SAMPLE_REP.id, name: "Maya Okafor" },
-  });
+test("the viewer summary carries the profile's own role, admin or rep", async () => {
+  expect(await getViewerSummary()).toEqual({ role: "admin", preview: true });
+  viewAs("rep");
+  expect(await getViewerSummary()).toEqual({ role: "rep", preview: true });
 });
 
 // --- what a role sees of the leads ---------------------------------------------
@@ -125,7 +117,7 @@ test("an admin sees every lead; a rep sees only the leads assigned to them, in t
   const summary = await getPipelineSummary({ tz: "UTC" });
   expect(summary.owners.length).toBeGreaterThan(1);
 
-  viewAs("staff");
+  viewAs("rep");
   const mine = await everyLead();
   expect(mine.total).toBeGreaterThan(0);
   expect(mine.total).toBeLessThan(all.total);
@@ -133,9 +125,9 @@ test("an admin sees every lead; a rep sees only the leads assigned to them, in t
     true,
   );
 
-  const staffSummary = await getPipelineSummary({ tz: "UTC" });
-  expect(staffSummary.open).toBe(mine.total);
-  expect(staffSummary.owners).toEqual([
+  const repSummary = await getPipelineSummary({ tz: "UTC" });
+  expect(repSummary.open).toBe(mine.total);
+  expect(repSummary.owners).toEqual([
     { id: SAMPLE_REP.id, name: "Maya Okafor" },
   ]);
   expect(
@@ -153,7 +145,7 @@ test("a rep asking for another rep's lead, or changing it, is told it does not e
   );
   if (!own) throw new Error("no lead owned by the sample rep");
 
-  viewAs("staff");
+  viewAs("rep");
   expect((await getLead(own.id)).id).toBe(own.id);
   await expect(getLead(other.id)).rejects.toEqual(refusedWith("not_found"));
   await expect(markLost(other.id, {})).rejects.toEqual(

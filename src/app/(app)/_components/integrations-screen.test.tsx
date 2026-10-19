@@ -418,10 +418,10 @@ test("a write that fails says nothing was changed; one refused because the Conne
   await waitFor(() => expect(chip("Decks")).toBe("Not connected"));
 });
 
-test("Staff are told they do not have access, whether the server page or the API refused", async () => {
-  viewAs("staff");
+test("a rep is told they do not have access, whether the server page or the API refused", async () => {
+  viewAs("rep");
   const first = renderScreen(<IntegrationsScreen />);
-  await screen.findByText("You do not have access to this screen");
+  await screen.findByText("You do not have access");
   expect(panels()).toEqual([]);
   expect(document.body.textContent).not.toMatch(FORBIDDEN);
   expect(
@@ -435,23 +435,18 @@ test("Staff are told they do not have access, whether the server page or the API
   // The page already knows: the screen asks for nothing.
   vi.mocked(fetch).mockClear();
   renderScreen(<IntegrationsScreen notAllowed />);
-  expect(
-    screen.getByText("You do not have access to this screen"),
-  ).toBeDefined();
+  expect(screen.getByText("You do not have access")).toBeDefined();
   expect(
     screen.getByRole("heading", { level: 1, name: "Integrations" }),
   ).toBeDefined();
   expect(api.calls()).toEqual([]);
 });
 
-test.each(["admin", "owner"] as const)(
-  "%s sees the Connections",
-  async (role) => {
-    viewAs(role);
-    await open();
-    expect(panels()).toHaveLength(4);
-  },
-);
+test("an admin sees the Connections", async () => {
+  viewAs("admin");
+  await open();
+  expect(panels()).toHaveLength(4);
+});
 
 test("shows a skeleton while loading, and an error with Try again when the read fails", async () => {
   const release = api.hold("GET", /^\/api\/connections$/);
