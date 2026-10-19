@@ -15,10 +15,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  RolePreviewGroup,
-  type RolePreviewProps,
-} from "@/components/ui/role-preview";
 import { setTheme, type Theme, useTheme } from "@/hooks/use-theme";
 
 const initials = (name: string) =>
@@ -32,8 +28,8 @@ const initials = (name: string) =>
 /**
  * The signed-in user's menu (spec 04): their name and email, Settings (their
  * own account settings), the theme, and Sign out. `compact` is the
- * small-screen form, where the navbar has no room for the role preview and the
- * Sample data label, so both move in here.
+ * small-screen form, where the navbar has no room for the Sample data label,
+ * so it moves in here.
  */
 function UserMenu({
   name,
@@ -43,19 +39,16 @@ function UserMenu({
   signingOut = false,
   compact = false,
   sampleDataNote,
-  rolePreview,
 }: {
   name: string;
   email: string;
-  /** The person's own account settings. */
-  settingsHref: string;
+  /** The person's own account settings. No Settings entry when left out. */
+  settingsHref?: string;
   onSignOut: () => void;
   signingOut?: boolean;
   compact?: boolean;
   /** Shown in the compact menu while the dashboard runs on sample data. */
   sampleDataNote?: string;
-  /** Shown in the compact menu while a role can be previewed. */
-  rolePreview?: RolePreviewProps;
 }) {
   const theme = useTheme();
   return (
@@ -92,11 +85,15 @@ function UserMenu({
             {email}
           </span>
         </div>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem render={<Link href={settingsHref} />}>
-          <SettingsIcon aria-hidden="true" />
-          Settings
-        </DropdownMenuItem>
+        {settingsHref && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem render={<Link href={settingsHref} />}>
+              <SettingsIcon aria-hidden="true" />
+              Settings
+            </DropdownMenuItem>
+          </>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuLabel>Theme</DropdownMenuLabel>
@@ -115,12 +112,6 @@ function UserMenu({
             </DropdownMenuRadioItem>
           </DropdownMenuRadioGroup>
         </DropdownMenuGroup>
-        {compact && rolePreview && (
-          <>
-            <DropdownMenuSeparator />
-            <RolePreviewGroup {...rolePreview} />
-          </>
-        )}
         {compact && sampleDataNote && (
           <>
             <DropdownMenuSeparator />

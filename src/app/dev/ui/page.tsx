@@ -51,8 +51,6 @@ import {
 } from "@/components/ui/tooltip";
 import { VerdictBox } from "@/components/ui/verdict-box";
 
-import { RolePreviewDemo } from "./role-preview-demo";
-
 export const metadata: Metadata = {
   title: "UI foundations · Authority Solutions",
 };
@@ -383,12 +381,6 @@ export default function DevUiPage() {
             bullets={["A point on the slide.", "A second point."]}
             footer="Discovery · 2 of 7"
           />
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <RolePreviewDemo />
-          <span className="text-muted-foreground">
-            The role preview, shown only on sample data.
-          </span>
         </div>
         <PlaceholderPanel
           name="A screen that is not built"

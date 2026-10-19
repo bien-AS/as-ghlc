@@ -92,10 +92,9 @@ function SearchField({
 
 /**
  * The dashboard's top bar (spec 04): where you are, the lead search, the
- * Sample data label, the notifications entry with its unread count, the role
- * preview and the user menu. Below the `nav` breakpoint the search becomes an
- * icon that opens the field, and the role preview and Sample data label live
- * in the user menu. The theme is chosen in the user menu at every width.
+ * Sample data label, the notifications entry with its unread count and the
+ * user menu. Below the `nav` breakpoint the search becomes an icon that opens
+ * the field, and the Sample data label lives in the user menu. The theme is chosen in the user menu at every width.
  */
 function TopNavbar({
   crumbs,
@@ -104,19 +103,17 @@ function TopNavbar({
   notificationsHref,
   unreadCount,
   sampleDataNote,
-  rolePreview,
   userMenu,
 }: {
   /** The current screen last; earlier entries with an `href` are links. */
   crumbs: Crumb[];
-  /** The page the search opens: the Pipeline, which reads `q` from its address. */
-  searchAction: string;
+  /** The page the search opens, which reads `q` from its address. No search when left out. */
+  searchAction?: string;
   onSearch: (text: string) => void;
-  notificationsHref: string;
+  /** No notifications entry when left out. */
+  notificationsHref?: string;
   /** Unread notifications. Left out when unknown; zero shows no mark. */
   unreadCount?: number;
-  /** The "Viewing as" control, while a role can be previewed. Hidden below `nav`. */
-  rolePreview?: React.ReactNode;
   /** Set while the dashboard runs on sample data: what the label explains. */
   sampleDataNote?: string;
   userMenu: React.ReactNode;
@@ -135,7 +132,7 @@ function TopNavbar({
       data-slot="top-navbar"
       className="sticky top-0 z-[9] flex h-12 shrink-0 items-center gap-2 border-b border-border bg-background px-2 nav:px-4"
     >
-      {searching ? (
+      {searching && searchAction ? (
         // Small screens: the field takes the whole bar until it is closed.
         <div
           className="flex flex-1 items-center gap-2"
@@ -190,20 +187,24 @@ function TopNavbar({
             </BreadcrumbList>
           </Breadcrumb>
 
-          <SearchField
-            action={searchAction}
-            onSearch={submit}
-            className="hidden w-44 nav:block wide:w-64"
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Search leads"
-            className="nav:hidden"
-            onClick={() => setSearching(true)}
-          >
-            <SearchIcon aria-hidden="true" />
-          </Button>
+          {searchAction && (
+            <>
+              <SearchField
+                action={searchAction}
+                onSearch={submit}
+                className="hidden w-44 nav:block wide:w-64"
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Search leads"
+                className="nav:hidden"
+                onClick={() => setSearching(true)}
+              >
+                <SearchIcon aria-hidden="true" />
+              </Button>
+            </>
+          )}
 
           {sampleDataNote && (
             <Tooltip>
@@ -221,32 +222,32 @@ function TopNavbar({
             </Tooltip>
           )}
 
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <LinkButton
-                  variant="ghost"
-                  size="icon"
-                  aria-label={bellName}
-                  href={notificationsHref}
-                  className="relative"
-                />
-              }
-            >
-              <BellIcon aria-hidden="true" />
-              {Boolean(unreadCount) && (
-                <span
-                  aria-hidden="true"
-                  className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 font-mono text-nano leading-none font-bold text-brand-ink tabular-nums"
-                >
-                  {(unreadCount ?? 0) > 99 ? "99+" : unreadCount}
-                </span>
-              )}
-            </TooltipTrigger>
-            <TooltipContent side="bottom">{bellName}</TooltipContent>
-          </Tooltip>
-
-          {rolePreview && <div className="hidden nav:block">{rolePreview}</div>}
+          {notificationsHref && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <LinkButton
+                    variant="ghost"
+                    size="icon"
+                    aria-label={bellName}
+                    href={notificationsHref}
+                    className="relative"
+                  />
+                }
+              >
+                <BellIcon aria-hidden="true" />
+                {Boolean(unreadCount) && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 font-mono text-nano leading-none font-bold text-brand-ink tabular-nums"
+                  >
+                    {(unreadCount ?? 0) > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </TooltipTrigger>
+              <TooltipContent side="bottom">{bellName}</TooltipContent>
+            </Tooltip>
+          )}
           {userMenu}
         </>
       )}

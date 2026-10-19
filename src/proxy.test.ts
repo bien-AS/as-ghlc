@@ -10,13 +10,11 @@ const visit = (path: string) => proxy(new NextRequest(`${ORIGIN}${path}`));
 
 test("an auth page loaded with form fields in its query redirects to the same page without them, keeping a valid next", async () => {
   const response = await visit(
-    "/sign-in?email=a@example.com&password=x&next=%2Fdashboard%2Fleads%2Flead-01",
+    "/sign-in?email=a@example.com&password=x&next=%2Fleads%2Flead-01",
   );
   expect(response.status).toBe(303);
   const location = response.headers.get("location") ?? "";
-  expect(location).toBe(
-    `${ORIGIN}/sign-in?next=%2Fdashboard%2Fleads%2Flead-01`,
-  );
+  expect(location).toBe(`${ORIGIN}/sign-in?next=%2Fleads%2Flead-01`);
   expect(location).not.toContain("password");
   expect(location).not.toContain("email");
 });
@@ -56,4 +54,10 @@ test("a next that leaves the app, or an unknown notice, is dropped rather than k
     "/sign-in",
   );
   expect(cleanAuthAddress("/sign-in", "?notice=%3Cb%3Ehello")).toBe("/sign-in");
+});
+
+test("the root address has no page: it goes to the dashboard", async () => {
+  const response = await visit("/");
+  expect(response.status).toBe(307);
+  expect(response.headers.get("location")).toBe(`${ORIGIN}/dashboard`);
 });

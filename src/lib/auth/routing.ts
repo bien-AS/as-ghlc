@@ -21,6 +21,32 @@ const AUTH_PAGES = [
 const NOTICE_CODES: string[] = Object.values(NOTICE);
 
 /**
+ * The first segment of every registry screen in the (app) route group
+ * (`screen-registry.json`). A signed-out visitor is sent to sign-in from any
+ * address under one of them, so a screen added to the registry is protected
+ * without being listed here.
+ */
+const APP_SECTIONS = [
+  "/dashboard",
+  "/leads",
+  "/review-queue",
+  "/pipeline",
+  "/decks",
+  "/proposals",
+  "/invoices",
+  "/recordings",
+  "/notifications",
+  "/reports",
+  "/settings",
+  "/welcome",
+  "/admin",
+];
+const inApp = (pathname: string) =>
+  APP_SECTIONS.some(
+    (section) => pathname === section || pathname.startsWith(`${section}/`),
+  );
+
+/**
  * Defence in depth for an address that carries form fields (a password, an
  * email, a name), which is what a form submitted by the browser itself with
  * GET would produce. An auth page accepts two query parameters and nothing
@@ -53,8 +79,7 @@ export function cleanAuthAddress(pathname: string, search: string) {
  * the one place that knows the requested address); pages apply it again with
  * the full state through `enforceRoute`.
  *
- * Everything under /dashboard is covered by the prefix rule, so new dashboard
- * routes are protected without being listed here.
+ * Every app screen is covered by the section rule (`APP_SECTIONS`).
  */
 export function decideRedirect(
   path: string,
@@ -80,7 +105,7 @@ export function decideRedirect(
     return null;
   }
 
-  if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) {
+  if (inApp(pathname)) {
     if (status === "signed-out") {
       return `/sign-in?next=${encodeURIComponent(path)}`;
     }

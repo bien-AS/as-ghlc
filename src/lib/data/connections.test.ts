@@ -528,20 +528,13 @@ test("no file of these two screens names a provider by brand, except the provide
     "src/lib/data/fixtures/connections.ts",
     "src/lib/queries/connections.ts",
     "src/hooks/use-connections.ts",
-    "src/app/dashboard/_components/integrations-screen.tsx",
-    "src/app/dashboard/integrations/page.tsx",
+    "src/app/(app)/_components/integrations-screen.tsx",
+    "src/app/(app)/admin/integrations/page.tsx",
     "src/app/api/connections/route.ts",
     "src/app/api/connections/[type]/route.ts",
     "src/app/api/connections/[type]/sync/route.ts",
     "src/app/api/connections/[type]/import/route.ts",
     "src/app/api/connections/[type]/stage-mapping/route.ts",
-    "src/lib/workspace/schemas.ts",
-    "src/lib/workspace/rules.ts",
-    "src/lib/data/workspace.ts",
-    "src/lib/data/fixtures/workspace.ts",
-    "src/hooks/use-workspace.ts",
-    "src/app/dashboard/_components/workspace-screen.tsx",
-    "src/app/dashboard/settings/page.tsx",
   ];
   for (const file of files) {
     expect(readFileSync(file, "utf8").match(brands), file).toBeNull();

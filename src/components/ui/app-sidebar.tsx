@@ -126,7 +126,7 @@ function AppSidebar({
       <SidebarHeader className="h-12 justify-center border-b border-sidebar-border px-3 group-data-[collapsible=icon]:px-2">
         <Link
           href={homeHref}
-          aria-label="Go to the Pipeline"
+          aria-label="Go to the Dashboard"
           onClick={closeSheet}
           // Collapsed to icons, the link clips the lockup to its shield.
           className="flex h-8 items-center overflow-hidden rounded-md px-1 group-data-[collapsible=icon]:w-7 group-data-[collapsible=icon]:px-0"

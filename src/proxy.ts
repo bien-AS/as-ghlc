@@ -12,7 +12,7 @@ import { cleanAuthAddress, decideRedirect } from "@/lib/auth/routing";
  *    place a refresh can be persisted during a page load.
  * 2. Redirects signed-out visitors according to the "who is sent where" table.
  *    It is the one place that knows the requested address, so it is what
- *    remembers the page for /dashboard and everything below it.
+ *    remembers the page for every app screen.
  *
  * 0. Strips every query parameter except a valid `next` and `notice` from the
  *    auth pages, so a leaked form field never stays in the address bar.
@@ -29,6 +29,12 @@ export async function proxy(request: NextRequest) {
   );
   if (clean) {
     return NextResponse.redirect(new URL(clean, request.nextUrl.origin), 303);
+  }
+
+  // There is no public page: the app is internal. The root has no page of its
+  // own (routes match the screen registry), so it is sent to the dashboard.
+  if (request.nextUrl.pathname === "/") {
+    return NextResponse.redirect(new URL("/dashboard", request.nextUrl.origin));
   }
 
   let response = NextResponse.next({ request });

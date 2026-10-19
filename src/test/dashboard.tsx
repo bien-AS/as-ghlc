@@ -157,7 +157,7 @@ export const api = {
   },
 };
 
-/** Previews a role, as the "Viewing as" control would have left it. Call after `startDashboard`. */
+/** Views as another role through the cookie `getViewer` still reads (src/lib/data/viewer.ts). Call after `startDashboard`. */
 export function viewAs(role: Role) {
   fake.cookies.set(PREVIEW_ROLE_COOKIE, role);
 }
