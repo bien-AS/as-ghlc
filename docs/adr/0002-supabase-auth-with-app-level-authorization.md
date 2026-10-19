@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted; amended by ADR-0007 (Drizzle replaces Prisma; RLS default-deny is on as a seatbelt)
 ---
 
 # Supabase Auth for identity; authorization in our data-access layer, not RLS

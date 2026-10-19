@@ -14,7 +14,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - **Parallel work:** one git worktree per parallel task; never share a working tree between agents.
 - **API:** every handler checks authentication, then ownership of the resource, via the shared guards in the data-access layer (not inline). Validate all input with zod.
 - **Data fetching:** client calls live in custom TanStack Query hooks, never inline in components. See `docs/adr/`.
-- **Database:** Prisma 7.
+- **Database:** Drizzle (ADR-0007). Prisma 7 is still in the code until spec 01 removes it; do not add to it.
+- **Product:** the build packet in `docs/packet/` and the screen registry (`screen-registry.json`) define what is built; specs in `docs/specs/` say how.
 - **Components:** always look for opportunities to extract reusable components (sidebars, navbars, and the like) into `src/components/ui` rather than leaving them inline in a page.
 
 ## Design workflow

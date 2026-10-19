@@ -1,117 +1,84 @@
-# Dealwright
+# AS Sales App
 
-A sales workspace that takes a lead from web form to signed deal, with AI doing the checking and the paperwork. A rep works entirely in the app and never opens the CRM behind it.
+An internal Authority Solutions tool that takes a lead from web form to signed deal on top of GoHighLevel, with AI doing the checking and the paperwork. A rep works entirely in the app and never opens GoHighLevel. The app has no product name; the Authority Solutions logo stands in for one.
 
 ## Language
 
-### The product
-
-**Dealwright**:
-The product's public name, shown as "Dealwright by Authority Solutions" while it is early. Internally it is called ASCRM, which never appears in anything a user sees.
-_Avoid_: ASCRM (in user-facing text), the CRM, Sales App
-
-### People and customers
-
-**Workspace**:
-One customer of the product. Users, leads and connections belong to a workspace.
-_Avoid_: Tenant, account, organisation, org
-
-**Workspace settings**:
-Settings that belong to a workspace and are changed by its admins and owners, reached from the sidebar.
-_Avoid_: Org settings, company settings
-
-**Account settings**:
-One user's own settings (profile, theme, notification preferences), reached from the user menu.
-_Avoid_: Profile page, user settings, preferences
-
-**Role**:
-What a user may see and do in a workspace: owner, admin or staff.
-_Avoid_: Permission level, access level
-
-**User**:
-A person who signs in to the app.
-_Avoid_: Member, account
+### People
 
 **Rep**:
-A person on a sales team who works leads in the app.
-_Avoid_: Salesperson, agent, seller
+A salesperson who works leads in the app. Sees their own assigned leads; invoices and recordings are read-only. The screen registry calls this persona "operator".
+_Avoid_: Agent, seller, staff, operator (in copy)
 
-**CRM**:
-The customer's own system of record for contacts, forms, calendars and sequences, which sits behind the app and is never named to a rep.
-_Avoid_: Backend, the engine
+**Admin**:
+Zachery and Mitchell, and whoever they make admin. Sees every lead and the admin screens, and approves invoices.
+_Avoid_: Owner, manager
+
+**Profile**:
+The app's record of one person who may sign in: email, name, role, active or not. Created by an admin before the person's first sign-in.
+_Avoid_: User account, member
 
 ### Leads and the pipeline
 
 **Lead**:
-The record of one prospect, held by the app. A lead never signs in.
-_Avoid_: Contact, prospect, opportunity, deal
-
-**Owner**:
-The rep a lead is assigned to.
-_Avoid_: Assignee
-
-**Pipeline**:
-The six stages a lead moves through in order, together with the three exits.
-_Avoid_: Funnel, board
+One prospect, held in GoHighLevel as a contact with an opportunity, and copied into the app.
+_Avoid_: Contact (in copy), prospect, deal
 
 **Stage**:
-A lead's position in the pipeline: New lead, Discovery Call Booked, Qualified, Proposal Review Booked, Proposal Sent or Lead Won.
-_Avoid_: Step, phase, column
+Where a lead's card sits in the New Lead Pipeline: New Lead, Discovery Call Booked, Qualified, Proposal Review Booked, Proposal Sent, Lead Won, Lead Lost or Nurturing.
+_Avoid_: Step, column
 
-**Status**:
-A finer description of where a lead stands inside its stage, shown as one line to the rep.
-_Avoid_: State, sub-stage
+**Lead Status**:
+Why the lead is where it is: one of 28 values in GoHighLevel's Lead Status field (for example Awaiting Confirmation, No Show, Proposal No Win), in seven groups.
+_Avoid_: Sub-stage, state
 
-**Exit**:
-One of the three ways a lead leaves the pipeline before winning: Spam, Nurture or Lead Lost.
-_Avoid_: Closed, archived, dead
-
-**Nurture**:
-The exit for a lead that has gone quiet, after which another team takes over.
-_Avoid_: Drip, cold
+**Silence path**:
+What happens when a lead goes quiet: did not book, cancelled, rescheduled, no-show, Nurturing, Lost.
 
 **Booking**:
-A scheduled call with a lead, either a discovery call or a proposal review.
-_Avoid_: Appointment, meeting, session
+A scheduled call: a discovery call or a proposal review, made on a GoHighLevel calendar.
+_Avoid_: Appointment (in copy), meeting (for the booking itself)
 
-**Activity**:
-One entry in a lead's timeline, recording something a user, the system or the CRM did.
-_Avoid_: Event, log entry, write
+**Write**:
+One change the app sends to GoHighLevel (W1 to W6 in the connector spec). Every write is logged.
+_Avoid_: Sync, push
 
-**Notification**:
-An in-app alert for a user that links to a lead.
-_Avoid_: Alert, message
+**Sync log**:
+The record of every write and every attempt. The visible seam between the app and GoHighLevel.
 
 ### Checking a lead
 
 **Verdict**:
-The AI's judgment of whether a lead is genuine: valid, suspect or spam.
-_Avoid_: Score, validation status, rating
+The AI's judgment of a new lead: Valid, Suspect or Spam.
+_Avoid_: Score, rating
 
 **Suspect**:
-A verdict that means the AI is unsure, so a rep must decide.
-_Avoid_: Flagged, pending
+The verdict that means the AI is unsure; a rep decides, in the review queue.
+
+**Research brief**:
+What the AI found about a lead's business (site, rankings, competitors), shown to the rep and written to GoHighLevel with the verdict.
 
 ### Working a lead
 
 **Deck**:
-A presentation generated for a lead, which the rep presents on a call and sends afterwards.
+A presentation generated for a lead from one of three groups: Discovery Call, Follow Up, Strategy Session. Its last slide carries the booking calendar.
 _Avoid_: Slides, presentation
 
+**Meeting**:
+A recorded call from Fathom, matched to a lead and a booking, with its transcript and notes.
+_Avoid_: Recording (for the whole thing), call notes
+
+**Transcript**:
+The words of a meeting, by speaker. Feeds the proposal.
+
 **Proposal**:
-The priced offer a rep builds and sends to a lead, which the lead signs to win the deal.
-_Avoid_: Quote, estimate, contract
+The priced offer, built in the app from the transcript and created in Smart Pricing Table, which the lead signs there.
+_Avoid_: Quote, contract
 
-### Connecting services
+**Invoice pair**:
+The two invoices drafted when a proposal is signed: a one-time upfront invoice and a monthly recurring one. An admin approves and sends them.
+_Avoid_: Bill
 
-**Adapter**:
-The part of the app that holds everything specific to one CRM and meets the one contract every CRM is connected through.
-_Avoid_: Gateway, integration, connector
-
-**Connection**:
-A workspace's link to one external service.
-_Avoid_: Integration (for the link itself), credential
-
-**Integrations**:
-The name of the screen where an admin or owner manages a workspace's connections. It names a screen only; each thing on it is a connection.
-_Avoid_: Using "integration" for a single connection or for an adapter
+**Notification**:
+An in-app alert for a person that links to what needs them.
+_Avoid_: Alert, message

@@ -23,3 +23,7 @@ prisma/migrations
 
 # rewritten by the impeccable design hook on every edit
 .impeccable/hook.cache.json
+
+# copied verbatim from the 7 October build packet; the registry is rewritten only by its validator
+docs/packet
+screen-registry.json

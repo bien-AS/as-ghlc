@@ -1,0 +1,2768 @@
+{
+  "product": "as-sales-app",
+  "generated": "2026-10-07",
+  "generator": "1-man-as-saas",
+  "product_context": {
+    "concept": "A sales app stacked on GoHighLevel: reps run the whole funnel (validated leads, research, decks, transcript-fed proposals, drafted invoices) without ever touching the CRM.",
+    "owner": "authority-solutions",
+    "primary_persona": "operator (sales rep)",
+    "gating_decisions": {
+      "distribution": "internal invite-only (admin provisions reps; Workspace-restricted Google OAuth)",
+      "workspace_model": "single-workspace, role-scoped RLS",
+      "pricing": "none (internal tool; M2 = Internal GA)",
+      "reseller": false,
+      "mobile": "responsive desktop-first",
+      "ai_depth": "autonomous pipelines with approval queues + interactive proposal tweak area",
+      "compliance": "smb",
+      "trial": "none",
+      "api_access": "none",
+      "i18n": "english-only",
+      "onboarding_depth": "minimal"
+    },
+    "core_features": [
+      "Lead list and validation",
+      "Lead research briefs",
+      "Deck generation (Discovery Call, Follow Up, Strategy Session)",
+      "Pipeline status tracking",
+      "Proposal builder",
+      "Invoice drafting and approval"
+    ],
+    "integrations": [
+      "GoHighLevel",
+      "Presenton",
+      "Smart Pricing Table",
+      "Invoice Ninja",
+      "Fathom",
+      "Typeform",
+      "OpenRouter"
+    ]
+  },
+  "personas": [
+    "admin",
+    "operator"
+  ],
+  "phases": {
+    "1": "Demoable (M1)",
+    "2": "Internal GA (M2)",
+    "3": "unused (reseller = no)",
+    "4": "Full Platform"
+  },
+  "screens": [
+    {
+      "id": "login",
+      "name": "Login",
+      "type": "screen",
+      "route": "/login",
+      "dimension": "Auth & Identity",
+      "tier": 1,
+      "phase": 1,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "full"
+      },
+      "purpose": "Single entry: Google sign-in restricted to the company Workspace domain.",
+      "rationale": "T1 P1: distribution is internal invite-only, so login is the only auth door; no signup, no password flows.",
+      "layout": "Centered card on the dark shell background: AS shield mark, product name, one Google button, quiet footnote naming the Workspace restriction.",
+      "data_deps": {
+        "tables": [
+          "profiles"
+        ],
+        "queries": [
+          "session check redirects authenticated users to /dashboard"
+        ],
+        "mutations": [
+          "Supabase Auth signInWithOAuth(google)"
+        ],
+        "realtime": [],
+        "jobs": []
+      },
+      "components": [
+        "Card",
+        "Button",
+        "Eyebrow"
+      ],
+      "affordances": [
+        {
+          "label": "Sign in with Google",
+          "kind": "button",
+          "dest": "auth-callback"
+        }
+      ],
+      "modals": [],
+      "states": {
+        "empty": "n/a (static entry screen)",
+        "loading": "button spinner during OAuth redirect",
+        "error": "inline banner: OAuth failure or non-Workspace account, with retry; session-expired arrivals show a 'signed out' banner here (rolled in, not a separate screen)",
+        "edit": "n/a",
+        "success": "redirect to /dashboard (or /welcome on first run)",
+        "mobile": "card centers at full width below 768px"
+      },
+      "entitlement_gate": "none (internal tool)",
+      "cc_notes": "Supabase Auth with hd (hosted domain) restriction server-verified in the callback, never trusted from the client. Pattern: as-vantage-domain-finder auth flow. Middleware guards every (app) route.",
+      "variants": [],
+      "session_hint": "S5"
+    },
+    {
+      "id": "auth-callback",
+      "name": "Auth Callback",
+      "type": "route",
+      "route": "/auth/callback",
+      "dimension": "Auth & Identity",
+      "tier": 2,
+      "phase": 1,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "full"
+      },
+      "purpose": "OAuth code exchange handler; verifies Workspace domain and provisioning, then routes.",
+      "rationale": "T2 P1: handler-only route the login flow passes through; required for OAuth to function at all.",
+      "layout": "n/a (route handler, never rendered)",
+      "data_deps": {
+        "tables": [
+          "profiles"
+        ],
+        "queries": [
+          "profile lookup by auth user id to check provisioning + role"
+        ],
+        "mutations": [
+          "exchangeCodeForSession"
+        ],
+        "realtime": [],
+        "jobs": []
+      },
+      "components": [],
+      "affordances": [
+        {
+          "label": "Verified + provisioned",
+          "kind": "redirect",
+          "dest": "dashboard"
+        },
+        {
+          "label": "First login",
+          "kind": "redirect",
+          "dest": "welcome-first-run"
+        },
+        {
+          "label": "Not provisioned or wrong domain",
+          "kind": "redirect",
+          "dest": "access-denied"
+        }
+      ],
+      "modals": [],
+      "states": {
+        "empty": "n/a",
+        "loading": "n/a (server redirect)",
+        "error": "redirect to /login with error param",
+        "edit": "n/a",
+        "success": "redirect per affordances",
+        "mobile": "n/a"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "route.ts handler (routes_diff.py expects a handler, not a page). Server-side hd claim check plus profiles row existence: both must pass.",
+      "variants": [],
+      "session_hint": "S5"
+    },
+    {
+      "id": "access-denied",
+      "name": "Access Denied",
+      "type": "screen",
+      "route": "/access-denied",
+      "dimension": "Auth & Identity",
+      "tier": 2,
+      "phase": 1,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "full"
+      },
+      "purpose": "Lands Workspace members who are not provisioned as reps or admins; names the fix.",
+      "rationale": "T2 P1: invite-only distribution means a valid Google account is not enough; this screen replaces a silent 403 loop.",
+      "layout": "Centered EmptyState (variant: not-connected): message naming admin provisioning, two actions.",
+      "data_deps": {
+        "tables": [
+          "profiles"
+        ],
+        "queries": [
+          "none beyond the failed provisioning check that routed here"
+        ],
+        "mutations": [],
+        "realtime": [],
+        "jobs": []
+      },
+      "components": [
+        "EmptyState",
+        "Button"
+      ],
+      "affordances": [
+        {
+          "label": "Ask an admin in #as_ghl",
+          "kind": "link",
+          "dest": "external:slack-as-ghl"
+        },
+        {
+          "label": "Try a different account",
+          "kind": "button",
+          "dest": "login"
+        }
+      ],
+      "modals": [],
+      "states": {
+        "empty": "n/a (the screen is itself a state)",
+        "loading": "n/a",
+        "error": "n/a",
+        "edit": "n/a",
+        "success": "n/a",
+        "mobile": "stacks at full width"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "EmptyState variant not-connected per DS rules (empty, filtered, not-connected are different facts). Sign-out runs before the try-different-account redirect.",
+      "variants": [],
+      "session_hint": "S5"
+    },
+    {
+      "id": "dashboard",
+      "name": "Dashboard",
+      "type": "screen",
+      "route": "/dashboard",
+      "dimension": "Reporting & Analytics",
+      "tier": 1,
+      "phase": 1,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "full"
+      },
+      "purpose": "Rep home: funnel KPIs, what needs attention now, recent activity.",
+      "rationale": "T1 P1: the post-login landing; the M1 demo starts here.",
+      "layout": "Sidebar shell; KPI strip (New leads, Suspects awaiting review, Decks this week, Proposals out, Won this month); 'Needs attention' list (suspects, unbooked valid leads, transcripts ready); activity feed rail.",
+      "data_deps": {
+        "tables": [
+          "leads",
+          "validation_runs",
+          "decks",
+          "proposals",
+          "lead_status_events",
+          "notifications"
+        ],
+        "queries": [
+          "KPI aggregates scoped to the rep (admin: all reps)",
+          "needs-attention list (suspect verdicts, valid leads with no booking after N days, transcripts ready without proposals)",
+          "latest 20 activity events"
+        ],
+        "mutations": [],
+        "realtime": [
+          "new-lead and verdict events via Supabase Realtime"
+        ],
+        "jobs": [
+          "nightly KPI rollup (Inngest cron)"
+        ]
+      },
+      "components": [
+        "KpiTile",
+        "DataTable",
+        "Card",
+        "StatusPill",
+        "EmptyState"
+      ],
+      "affordances": [
+        {
+          "label": "KPI: New leads",
+          "kind": "tile",
+          "dest": "lead-list"
+        },
+        {
+          "label": "KPI: Suspects",
+          "kind": "tile",
+          "dest": "suspect-review-queue"
+        },
+        {
+          "label": "KPI: Decks",
+          "kind": "tile",
+          "dest": "deck-library"
+        },
+        {
+          "label": "KPI: Proposals",
+          "kind": "tile",
+          "dest": "proposal-list"
+        },
+        {
+          "label": "Needs-attention row",
+          "kind": "row",
+          "dest": "lead-detail"
+        },
+        {
+          "label": "Activity row",
+          "kind": "row",
+          "dest": "lead-detail"
+        },
+        {
+          "label": "Notification bell",
+          "kind": "menu",
+          "dest": "notifications-center"
+        },
+        {
+          "label": "Avatar menu: Profile",
+          "kind": "menu",
+          "dest": "profile-settings"
+        },
+        {
+          "label": "Avatar menu: Sign out",
+          "kind": "menu",
+          "dest": "login"
+        },
+        {
+          "label": "Cmd-K",
+          "kind": "overlay",
+          "dest": "command-palette"
+        }
+      ],
+      "modals": [],
+      "states": {
+        "empty": "library:empty-state-library: 'No leads yet. New form fills land here automatically.'",
+        "loading": "KPI strip + table skeletons",
+        "error": "library:error-state-library",
+        "edit": "n/a",
+        "success": "n/a",
+        "mobile": "KPIs stack 2-up, activity rail drops below 768px"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "Server component with streamed KPIs. Rep scoping by assigned_to = profile id; admin sees all (role from profiles.role, enforced by RLS not UI). Decks/Proposals tiles render but their list screens are P2: hide those two tiles behind a feature flag until S10/S12 ship (M1 demo shows 3 tiles).",
+      "variants": [],
+      "session_hint": "S7"
+    },
+    {
+      "id": "lead-list",
+      "name": "Lead List",
+      "type": "screen",
+      "route": "/leads",
+      "dimension": "Core Workflow",
+      "tier": 1,
+      "phase": 1,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "full"
+      },
+      "purpose": "Every lead with verdict, stage, age, and next step; the rep's working surface.",
+      "rationale": "T1 P1: core workflow feature 1; the M1 demo's first stop after intake.",
+      "layout": "Full-width DataTable: name, company, verdict badge, stage pill, age, assigned rep (admin), last sync indicator; filter bar (verdict, stage, age, archived); suspect banner when the queue is non-empty.",
+      "data_deps": {
+        "tables": [
+          "leads",
+          "validation_runs",
+          "lead_status_events",
+          "ghl_sync_log",
+          "profiles"
+        ],
+        "queries": [
+          "paged leads scoped by role (rep: assigned; admin: all) with latest verdict + stage",
+          "suspect count for the banner"
+        ],
+        "mutations": [
+          "archive lead (soft delete)",
+          "assign rep (admin)"
+        ],
+        "realtime": [
+          "new-lead inserts appear live"
+        ],
+        "jobs": [
+          "lead ingest from the GHL webhook (Inngest)"
+        ]
+      },
+      "components": [
+        "DataTable",
+        "StatusPill",
+        "ScoreBadge",
+        "SourceBadge",
+        "EmptyState"
+      ],
+      "affordances": [
+        {
+          "label": "Row click",
+          "kind": "row",
+          "dest": "lead-detail"
+        },
+        {
+          "label": "Suspects banner",
+          "kind": "banner",
+          "dest": "suspect-review-queue"
+        },
+        {
+          "label": "Export CSV",
+          "kind": "button",
+          "dest": "modal:export-csv"
+        },
+        {
+          "label": "Row menu: Archive",
+          "kind": "menu",
+          "dest": "modal:archive-lead"
+        },
+        {
+          "label": "Sync indicator (admin)",
+          "kind": "icon",
+          "dest": "sync-log"
+        }
+      ],
+      "modals": [
+        {
+          "name": "export-csv",
+          "fields": "column picker, current-filter scope note"
+        },
+        {
+          "name": "archive-lead",
+          "fields": "lead name echo, reason (optional), type-to-confirm off (soft delete, reversible)"
+        }
+      ],
+      "states": {
+        "empty": "library:empty-state-library: 'No leads yet. New form fills land here automatically.'",
+        "loading": "table row skeletons",
+        "error": "library:error-state-library",
+        "edit": "inline rep assignment (admin only)",
+        "success": "toast on archive/assign",
+        "mobile": "table collapses to card list below 768px"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "DataTable with null-sorts-last (age on never-synced leads is null, never 0, per DS data honesty). Archived is a filter on the same route, not a separate screen. The sync indicator is the visible seam from the prototype: hover shows the last write to GHL.",
+      "variants": [],
+      "session_hint": "S7"
+    },
+    {
+      "id": "lead-detail",
+      "name": "Lead Detail",
+      "type": "screen",
+      "route": "/leads/[id]",
+      "dimension": "Detail Pages",
+      "tier": 1,
+      "phase": 1,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "full"
+      },
+      "purpose": "Everything about one lead: research brief, verdict, decks, proposals, meetings, status timeline, and every GHL write.",
+      "rationale": "T1 P1: the drill-down for the core list; research + deck generation both run from here in the M1 demo.",
+      "layout": "Header (name, company, verdict badge, stage pill, assigned rep); tab set: Overview, Research, Decks, Proposals, Meetings, Timeline; right rail: next-step card + sync seam (what was written to GHL, when).",
+      "data_deps": {
+        "tables": [
+          "leads",
+          "lead_research",
+          "validation_runs",
+          "decks",
+          "proposals",
+          "meetings",
+          "transcripts",
+          "invoices",
+          "lead_status_events",
+          "ghl_sync_log"
+        ],
+        "queries": [
+          "lead with latest research, verdict, decks, proposals, meetings, status history, sync entries"
+        ],
+        "mutations": [
+          "qualify/disqualify",
+          "manual status change",
+          "mark spam",
+          "assign rep (admin)",
+          "request research refresh"
+        ],
+        "realtime": [
+          "verdict + transcript-ready events for this lead"
+        ],
+        "jobs": [
+          "research enrichment (Inngest, on intake/booking)",
+          "status write-back to GHL on decisions"
+        ]
+      },
+      "components": [
+        "Card",
+        "StatusPill",
+        "ScoreBadge",
+        "DataTable",
+        "AIInsightsCard",
+        "EmptyState",
+        "DeltaPill"
+      ],
+      "affordances": [
+        {
+          "label": "Generate deck",
+          "kind": "button",
+          "dest": "deck-generate"
+        },
+        {
+          "label": "Deck row",
+          "kind": "row",
+          "dest": "deck-detail"
+        },
+        {
+          "label": "New proposal",
+          "kind": "button",
+          "dest": "proposal-generate"
+        },
+        {
+          "label": "Proposal row",
+          "kind": "row",
+          "dest": "proposal-detail"
+        },
+        {
+          "label": "Meeting row",
+          "kind": "row",
+          "dest": "meeting-recordings"
+        },
+        {
+          "label": "Invoice chip",
+          "kind": "chip",
+          "dest": "invoice-pair-detail"
+        },
+        {
+          "label": "Qualify / Disqualify",
+          "kind": "button",
+          "dest": "modal:qualification-decision"
+        },
+        {
+          "label": "Change status",
+          "kind": "button",
+          "dest": "modal:status-change"
+        },
+        {
+          "label": "Mark as spam",
+          "kind": "menu",
+          "dest": "modal:mark-spam"
+        },
+        {
+          "label": "Refresh research",
+          "kind": "button",
+          "dest": "modal:refresh-research"
+        },
+        {
+          "label": "Open contact in GHL (admin)",
+          "kind": "link",
+          "dest": "external:ghl-contact-card"
+        },
+        {
+          "label": "Breadcrumb: Leads",
+          "kind": "link",
+          "dest": "lead-list"
+        }
+      ],
+      "modals": [
+        {
+          "name": "qualification-decision",
+          "fields": "qualified/disqualified radio, reason, GHL write preview line"
+        },
+        {
+          "name": "status-change",
+          "fields": "status select (full silence-path set), note, GHL write preview line"
+        },
+        {
+          "name": "mark-spam",
+          "fields": "lead echo, spam pattern tag select, 'teaches the classifier' note"
+        },
+        {
+          "name": "refresh-research",
+          "fields": "confirm + cost note (LLM spend)"
+        }
+      ],
+      "states": {
+        "empty": "per tab via library:empty-state-library ('No decks yet. Generate the discovery deck.' / 'Research runs automatically after intake.')",
+        "loading": "header + tab content skeletons",
+        "error": "library:error-state-library",
+        "edit": "inline note editing on timeline entries",
+        "success": "toast naming the GHL write that resulted (the seam stays visible)",
+        "mobile": "tabs become an accordion; right rail folds under the header"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "Every mutating modal shows the exact GHL write it will cause (the prototype's seam principle). Phase gating for M1: the Proposals/Meetings tabs show the library empty state AND the New proposal button, Meeting rows, and Invoice chip stay hidden behind a phase flag until S11/S12/S13 ship their destinations; nothing on this screen may 404 during the M1 demo. Research tab renders lead_research markdown via AIInsightsCard. Deck generation spends LLM tokens: CostPreview in front per DS money rules.",
+      "variants": [],
+      "session_hint": "S7"
+    },
+    {
+      "id": "suspect-review-queue",
+      "name": "Suspect Review Queue",
+      "type": "screen",
+      "route": "/review-queue",
+      "dimension": "AI Layer",
+      "tier": 1,
+      "phase": 1,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "full"
+      },
+      "purpose": "Human approval queue for 'suspect' verdicts: validate or mark spam, fast.",
+      "rationale": "T1 P1: the agreed spam design (auto-label obvious, humans judge suspects) requires this queue for the funnel to be trustworthy.",
+      "layout": "Queue list: lead summary, verdict reasoning excerpt, classifier pattern tags; per-row Validate / Mark Spam actions; keyboard-first (j/k + v/s).",
+      "data_deps": {
+        "tables": [
+          "leads",
+          "validation_runs"
+        ],
+        "queries": [
+          "leads with latest verdict = suspect, oldest first, role-scoped"
+        ],
+        "mutations": [
+          "validate (promotes to valid, resumes funnel)",
+          "mark spam (labels + stops funnel + cancels discovery per pipeline rules)"
+        ],
+        "realtime": [
+          "new suspects appear live"
+        ],
+        "jobs": [
+          "verdict job writes the queue; spam decision writes back to GHL (cancel booking chase)"
+        ]
+      },
+      "components": [
+        "DataTable",
+        "StatusPill",
+        "AIInsightTile",
+        "Button",
+        "EmptyState"
+      ],
+      "affordances": [
+        {
+          "label": "Row click",
+          "kind": "row",
+          "dest": "lead-detail"
+        },
+        {
+          "label": "Validate",
+          "kind": "button",
+          "dest": "modal:confirm-validate"
+        },
+        {
+          "label": "Mark spam",
+          "kind": "button",
+          "dest": "modal:mark-spam-queue"
+        }
+      ],
+      "modals": [
+        {
+          "name": "confirm-validate",
+          "fields": "lead echo, 'resumes booking sequence in GHL' note"
+        },
+        {
+          "name": "mark-spam-queue",
+          "fields": "lead echo, pattern tag select, 'cancels discovery chase in GHL' note"
+        }
+      ],
+      "states": {
+        "empty": "library:empty-state-library: 'Queue clear. Suspects land here when the classifier is unsure.'",
+        "loading": "row skeletons",
+        "error": "library:error-state-library",
+        "edit": "n/a",
+        "success": "row animates out on decision; toast names the GHL write",
+        "mobile": "cards with full-width action buttons"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "This doubles as the D15 agent approval queue. Decisions append to validation_runs as human overrides, which is the classifier's feedback loop. Never dim a row the keyboard still indexes (DS rule).",
+      "variants": [],
+      "session_hint": "S8"
+    },
+    {
+      "id": "deck-generate",
+      "name": "Generate Deck",
+      "type": "screen",
+      "route": "/leads/[id]/decks/new",
+      "dimension": "Core Workflow",
+      "tier": 1,
+      "phase": 1,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "full"
+      },
+      "purpose": "One-click deck creation: pick the group (Discovery Call, Follow Up, Strategy Session), review the data going in, generate.",
+      "rationale": "T1 P1: the M1 demo's centerpiece; template + data per presentation type is a confirmed product decision.",
+      "layout": "Three template-group cards with preview thumbnails; input review panel (lead fields, research highlights the deck will use); CostPreview; Generate button with progress states.",
+      "data_deps": {
+        "tables": [
+          "leads",
+          "lead_research",
+          "deck_templates",
+          "decks"
+        ],
+        "queries": [
+          "lead + latest research",
+          "active template per group"
+        ],
+        "mutations": [
+          "create deck row (status: generating)"
+        ],
+        "realtime": [
+          "generation progress events"
+        ],
+        "jobs": [
+          "Presenton generation job (Inngest): template + lead data + research to HTML, then PDF render"
+        ]
+      },
+      "components": [
+        "Card",
+        "CostPreview",
+        "Button",
+        "Eyebrow",
+        "RunStatePill"
+      ],
+      "affordances": [
+        {
+          "label": "Generate",
+          "kind": "button",
+          "dest": "deck-detail"
+        },
+        {
+          "label": "Back to lead",
+          "kind": "link",
+          "dest": "lead-detail"
+        }
+      ],
+      "modals": [],
+      "states": {
+        "empty": "n/a (always has the three groups; a missing template renders the group card disabled with 'template not installed')",
+        "loading": "generation progress: queued, composing, rendering, done (RunStatePill)",
+        "error": "generation failure panel with retry + error detail (library:error-state-library styling)",
+        "edit": "n/a",
+        "success": "redirect to deck-detail; first ever deck also fires first-value-celebration",
+        "mobile": "group cards stack"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "CostPreview required before generation (LLM spend, DS money rule). Template groups are exactly three (operator decision 2026-10-07: Discovery Call, Follow Up, Strategy Session; not SEO decks). Generation is async: the deck row exists immediately, deck-detail shows live progress.",
+      "variants": [],
+      "session_hint": "S9"
+    },
+    {
+      "id": "deck-detail",
+      "name": "Deck Detail",
+      "type": "screen",
+      "route": "/decks/[id]",
+      "dimension": "Core Workflow",
+      "tier": 1,
+      "phase": 1,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "full"
+      },
+      "purpose": "View, present, share, and export one deck; the booking calendar rides the last slide.",
+      "rationale": "T1 P1: the deck is the discovery call's artifact; presenting from here is the demo's payoff.",
+      "layout": "Deck HTML preview (iframe, slide navigation); action bar: Present, Edit, Download PDF, Copy share link, Regenerate; metadata rail (group, lead, generated at, template version, booking-slide status).",
+      "data_deps": {
+        "tables": [
+          "decks",
+          "deck_templates",
+          "leads"
+        ],
+        "queries": [
+          "deck with render status, share token, template version, lead link"
+        ],
+        "mutations": [
+          "issue/rotate share token",
+          "trigger PDF re-render"
+        ],
+        "realtime": [
+          "render progress while status = generating"
+        ],
+        "jobs": [
+          "PDF render job",
+          "share-link access logging"
+        ]
+      },
+      "components": [
+        "Card",
+        "Button",
+        "RunStatePill",
+        "SourceBadge",
+        "EmptyState"
+      ],
+      "affordances": [
+        {
+          "label": "Present",
+          "kind": "button",
+          "dest": "external:presentation-window"
+        },
+        {
+          "label": "Edit deck",
+          "kind": "button",
+          "dest": "deck-edit"
+        },
+        {
+          "label": "Download PDF",
+          "kind": "button",
+          "dest": "external:pdf-download"
+        },
+        {
+          "label": "Copy share link",
+          "kind": "button",
+          "dest": "modal:share-link"
+        },
+        {
+          "label": "Regenerate",
+          "kind": "button",
+          "dest": "modal:regenerate-deck"
+        },
+        {
+          "label": "Lead link",
+          "kind": "link",
+          "dest": "lead-detail"
+        },
+        {
+          "label": "Breadcrumb: Decks",
+          "kind": "link",
+          "dest": "deck-library"
+        }
+      ],
+      "modals": [
+        {
+          "name": "share-link",
+          "fields": "share URL, rotate token action, 'PDF emails after the call' note"
+        },
+        {
+          "name": "regenerate-deck",
+          "fields": "confirm, 'manual edits will be lost unless saved as revision' warning, CostPreview"
+        }
+      ],
+      "states": {
+        "empty": "generating state: progress panel until the HTML lands",
+        "loading": "iframe skeleton",
+        "error": "render-failed panel with retry and the job error",
+        "edit": "via deck-edit",
+        "success": "toast on share-link copy / PDF ready",
+        "mobile": "preview letterboxes; action bar wraps"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "Deck HTML is a Presenton artifact served from Supabase Storage behind the share token. Last slide embeds Lee's GHL booking calendar (confirmed working inside the presentation); booking-slide status in the rail shows whether the embed config is set. Present opens the raw HTML full screen in a new window. Phase gating for M1: the Decks breadcrumb targets deck-library (P2); until S10 it renders 'Back to lead' only, so the M1 demo cannot 404 from here. Edit button likewise hidden until S10.",
+      "variants": [],
+      "session_hint": "S9"
+    },
+    {
+      "id": "deck-edit",
+      "name": "Deck Edit",
+      "type": "screen",
+      "route": "/decks/[id]/edit",
+      "dimension": "Core Workflow",
+      "tier": 2,
+      "phase": 2,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "full"
+      },
+      "purpose": "Edit a generated deck before the call: structured section edits plus prompt-driven regeneration of single slides.",
+      "rationale": "T2 P2: editable-after-generation is a confirmed Mitchell requirement; the M1 demo can present an unedited deck, so this lands at M2.",
+      "layout": "Slide list rail; selected-slide editor (headline, body, data fields per template slot); prompt bar ('tighten slide 4', 'swap the case study') that regenerates the selected slide; Save / Discard.",
+      "data_deps": {
+        "tables": [
+          "decks",
+          "deck_templates",
+          "lead_research"
+        ],
+        "queries": [
+          "deck slide model (structured slots, not raw HTML)"
+        ],
+        "mutations": [
+          "save revision",
+          "slide regeneration request"
+        ],
+        "realtime": [
+          "slide regeneration progress"
+        ],
+        "jobs": [
+          "single-slide regeneration (Inngest, OpenRouter)"
+        ]
+      },
+      "components": [
+        "Card",
+        "Button",
+        "CostPreview",
+        "RunStatePill"
+      ],
+      "affordances": [
+        {
+          "label": "Save",
+          "kind": "button",
+          "dest": "deck-detail"
+        },
+        {
+          "label": "Discard",
+          "kind": "button",
+          "dest": "modal:discard-edits"
+        },
+        {
+          "label": "Regenerate slide (prompt)",
+          "kind": "input",
+          "dest": "modal:regen-slide-cost"
+        }
+      ],
+      "modals": [
+        {
+          "name": "discard-edits",
+          "fields": "unsaved-changes echo, confirm"
+        },
+        {
+          "name": "regen-slide-cost",
+          "fields": "CostPreview, prompt echo, confirm"
+        }
+      ],
+      "states": {
+        "empty": "n/a (always has the generated deck)",
+        "loading": "slide editor skeleton; per-slide spinner on regeneration",
+        "error": "slide regen failure inline with retry",
+        "edit": "the screen is the edit mode; dirty-state guard on exit",
+        "success": "toast on save; preview refreshes",
+        "mobile": "slide rail becomes a dropdown"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "Edits work the structured slide model and re-render through Presenton, never hand-edited HTML (keeps PDF parity). Full WYSIWYG is Phase 4 unless Presenton gives it free (open question in project.json).",
+      "variants": [],
+      "session_hint": "S10"
+    },
+    {
+      "id": "deck-library",
+      "name": "Deck Library",
+      "type": "screen",
+      "route": "/decks",
+      "dimension": "Core Workflow",
+      "tier": 2,
+      "phase": 2,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "full"
+      },
+      "purpose": "All decks across leads, filterable by group and status.",
+      "rationale": "T2 P2: reps reach decks through leads at M1; the cross-lead view earns its place once volume exists.",
+      "layout": "DataTable: deck name, group badge, lead, generated date, status, share state; filter bar (group, status, date).",
+      "data_deps": {
+        "tables": [
+          "decks",
+          "leads"
+        ],
+        "queries": [
+          "paged decks role-scoped with lead join"
+        ],
+        "mutations": [],
+        "realtime": [],
+        "jobs": []
+      },
+      "components": [
+        "DataTable",
+        "SourceBadge",
+        "RunStatePill",
+        "EmptyState"
+      ],
+      "affordances": [
+        {
+          "label": "Row click",
+          "kind": "row",
+          "dest": "deck-detail"
+        },
+        {
+          "label": "Lead link",
+          "kind": "link",
+          "dest": "lead-detail"
+        }
+      ],
+      "modals": [],
+      "states": {
+        "empty": "library:empty-state-library: 'No decks yet. Generate one from a lead.'",
+        "loading": "table skeletons",
+        "error": "library:error-state-library",
+        "edit": "n/a",
+        "success": "n/a",
+        "mobile": "card list"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "Pure read surface; creation always starts from a lead (deck-generate needs lead context).",
+      "variants": [],
+      "session_hint": "S10"
+    },
+    {
+      "id": "pipeline-board",
+      "name": "Pipeline Board",
+      "type": "screen",
+      "route": "/pipeline",
+      "dimension": "Core Workflow",
+      "tier": 2,
+      "phase": 2,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "full"
+      },
+      "purpose": "Leads by stage, mirroring Lee's GHL pipeline, silence paths included.",
+      "rationale": "T2 P2: lead-list carries stage at M1; the board view ships with the status engine at M2.",
+      "layout": "Kanban columns per stage (incoming, discovery booked, discovery held, qualified, proposal review booked, proposal sent, won, lost, nurture); lead cards with age + verdict; stage counts.",
+      "data_deps": {
+        "tables": [
+          "leads",
+          "lead_status_events",
+          "status_defs"
+        ],
+        "queries": [
+          "leads grouped by current stage, role-scoped",
+          "stage definitions + thresholds"
+        ],
+        "mutations": [
+          "drag = manual status change (same write path as the modal)"
+        ],
+        "realtime": [
+          "stage-change events"
+        ],
+        "jobs": [
+          "lead-age automation moves cards (Inngest cron)"
+        ]
+      },
+      "components": [
+        "Card",
+        "StatusPill",
+        "DeltaPill",
+        "EmptyState"
+      ],
+      "affordances": [
+        {
+          "label": "Card click",
+          "kind": "card",
+          "dest": "lead-detail"
+        },
+        {
+          "label": "Card drag",
+          "kind": "drag",
+          "dest": "modal:confirm-stage-move"
+        },
+        {
+          "label": "Configure statuses (admin)",
+          "kind": "link",
+          "dest": "admin-statuses"
+        }
+      ],
+      "modals": [
+        {
+          "name": "confirm-stage-move",
+          "fields": "from/to echo, note, GHL write preview line"
+        }
+      ],
+      "states": {
+        "empty": "library:empty-state-library per column: stage-specific one-liners",
+        "loading": "column skeletons",
+        "error": "library:error-state-library",
+        "edit": "drag-and-drop with confirm",
+        "success": "toast naming the GHL write",
+        "mobile": "columns become swipeable; drag disabled, move via modal"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "Stages mirror GHL and never fork from it: status_defs seeds from the ghl-workstream mapping doc and Lee confirms. Every move writes through the same idempotent GHL write path as lead-detail.",
+      "variants": [],
+      "session_hint": "S14"
+    },
+    {
+      "id": "proposal-generate",
+      "name": "Generate Proposal",
+      "type": "screen",
+      "route": "/leads/[id]/proposals/new",
+      "dimension": "Core Workflow",
+      "tier": 1,
+      "phase": 2,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "full"
+      },
+      "purpose": "Build the Smart Pricing Table proposal from the discovery transcript, deck context, and rep inputs.",
+      "rationale": "T1 P2: the M2 journey's core (Mitchell flow: discovery ends, review booked 24 to 48h out, transcript + deck context generate the proposal).",
+      "layout": "Context panel (transcript status + excerpt viewer, deck used, research highlights); extracted-values table (what the transcript set: locations, services, quantities) with per-row accept/override; pricing inputs; CostPreview; Generate.",
+      "data_deps": {
+        "tables": [
+          "leads",
+          "transcripts",
+          "meetings",
+          "decks",
+          "lead_research",
+          "proposals"
+        ],
+        "queries": [
+          "latest discovery transcript for this lead",
+          "deck + research context"
+        ],
+        "mutations": [
+          "create proposal row (status: generating)"
+        ],
+        "realtime": [
+          "generation progress"
+        ],
+        "jobs": [
+          "extraction + SPT create via API (Inngest)"
+        ]
+      },
+      "components": [
+        "Card",
+        "DataTable",
+        "AIInsightsCard",
+        "CostPreview",
+        "Button",
+        "RunStatePill"
+      ],
+      "affordances": [
+        {
+          "label": "Generate",
+          "kind": "button",
+          "dest": "proposal-detail"
+        },
+        {
+          "label": "Pick a different transcript",
+          "kind": "link",
+          "dest": "meeting-recordings"
+        },
+        {
+          "label": "Back to lead",
+          "kind": "link",
+          "dest": "lead-detail"
+        }
+      ],
+      "modals": [],
+      "states": {
+        "empty": "no-transcript state: 'No transcript matched yet' with manual-paste textarea fallback (the S11 fallback, a first-class state)",
+        "loading": "extraction progress, then SPT creation progress",
+        "error": "extraction/API failure with retry + raw error",
+        "edit": "extracted-values rows editable before generation",
+        "success": "redirect to proposal-detail",
+        "mobile": "panels stack"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "Transcript values pre-fill but never auto-commit: the rep sees and can override every extracted value before it hits SPT ('they want 25 locations' becomes an editable row). Manual-paste fallback keeps the funnel alive if Fathom matching fails.",
+      "variants": [],
+      "session_hint": "S12"
+    },
+    {
+      "id": "proposal-detail",
+      "name": "Proposal Detail",
+      "type": "screen",
+      "route": "/proposals/[id]",
+      "dimension": "Detail Pages",
+      "tier": 1,
+      "phase": 2,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "full"
+      },
+      "purpose": "Iterate the generated proposal in natural language until right, then send for signature and track it.",
+      "rationale": "T1 P2: the prompt tweak area is a confirmed Mitchell requirement; signature state drives the invoice flow.",
+      "layout": "SPT proposal preview (embed/summary of sections + pricing); prompt tweak bar with preset chips ('the website piece needs to be 10,000') and revision history; status rail (draft, sent, viewed, signed); actions.",
+      "data_deps": {
+        "tables": [
+          "proposals",
+          "proposal_revisions",
+          "leads",
+          "invoices"
+        ],
+        "queries": [
+          "proposal with SPT state, revisions, signature events, invoice links"
+        ],
+        "mutations": [
+          "apply prompt tweak (new revision via SPT API)",
+          "send for signature",
+          "withdraw"
+        ],
+        "realtime": [
+          "SPT webhook events (viewed, signed) surface live"
+        ],
+        "jobs": [
+          "tweak application job",
+          "signature webhook processing"
+        ]
+      },
+      "components": [
+        "Card",
+        "DataTable",
+        "AIInsightsSparkle",
+        "StatusPill",
+        "Button",
+        "CostPreview"
+      ],
+      "affordances": [
+        {
+          "label": "Apply tweak",
+          "kind": "input",
+          "dest": "modal:tweak-preview"
+        },
+        {
+          "label": "Send for signature",
+          "kind": "button",
+          "dest": "modal:send-signature"
+        },
+        {
+          "label": "Open in Smart Pricing Table",
+          "kind": "link",
+          "dest": "external:spt-proposal"
+        },
+        {
+          "label": "Invoice pair chip",
+          "kind": "chip",
+          "dest": "invoice-pair-detail"
+        },
+        {
+          "label": "Lead link",
+          "kind": "link",
+          "dest": "lead-detail"
+        },
+        {
+          "label": "Breadcrumb: Proposals",
+          "kind": "link",
+          "dest": "proposal-list"
+        }
+      ],
+      "modals": [
+        {
+          "name": "tweak-preview",
+          "fields": "diff of what the tweak changes, CostPreview, apply/cancel"
+        },
+        {
+          "name": "send-signature",
+          "fields": "recipient echo, 'signature triggers invoice drafts' note, confirm"
+        }
+      ],
+      "states": {
+        "empty": "generating state until SPT returns the draft",
+        "loading": "preview skeleton; per-tweak progress",
+        "error": "SPT API failure with retry and raw error",
+        "edit": "the prompt bar is the edit surface; direct edits happen in SPT via the external link",
+        "success": "revision chip animates in; signed state fires confetti-free toast (celebrations stay at first-value)",
+        "mobile": "preview collapses to section list"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "Tweaks are never silent: the tweak-preview modal shows exactly what changes before it hits SPT. Signature webhook is the S13 trigger; this screen only displays its results. Preset chips seed from admin-templates prompt presets.",
+      "variants": [],
+      "session_hint": "S12"
+    },
+    {
+      "id": "proposal-list",
+      "name": "Proposal List",
+      "type": "screen",
+      "route": "/proposals",
+      "dimension": "Core Workflow",
+      "tier": 2,
+      "phase": 2,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "full"
+      },
+      "purpose": "All proposals with signature state and value.",
+      "rationale": "T2 P2: cross-lead proposal tracking for reps and Mitchell once proposals exist.",
+      "layout": "DataTable: proposal, lead, value, status (draft/sent/viewed/signed), sent date, days out; filter bar.",
+      "data_deps": {
+        "tables": [
+          "proposals",
+          "leads"
+        ],
+        "queries": [
+          "paged proposals role-scoped with signature state"
+        ],
+        "mutations": [],
+        "realtime": [
+          "status changes live"
+        ],
+        "jobs": []
+      },
+      "components": [
+        "DataTable",
+        "StatusPill",
+        "EmptyState"
+      ],
+      "affordances": [
+        {
+          "label": "Row click",
+          "kind": "row",
+          "dest": "proposal-detail"
+        },
+        {
+          "label": "Lead link",
+          "kind": "link",
+          "dest": "lead-detail"
+        }
+      ],
+      "modals": [],
+      "states": {
+        "empty": "library:empty-state-library: 'No proposals yet. They start from a qualified lead.'",
+        "loading": "table skeletons",
+        "error": "library:error-state-library",
+        "edit": "n/a",
+        "success": "n/a",
+        "mobile": "card list"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "Value column renders null as not-measured (never $0) until SPT returns pricing, per DS data honesty.",
+      "variants": [],
+      "session_hint": "S12"
+    },
+    {
+      "id": "invoice-approvals",
+      "name": "Invoice Approvals",
+      "type": "screen",
+      "route": "/invoices",
+      "dimension": "Core Workflow",
+      "tier": 1,
+      "phase": 2,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "read-only"
+      },
+      "purpose": "Drafted invoice pairs awaiting approval: review the two-invoice logic, approve, send.",
+      "rationale": "T1 P2: draft-plus-notify is the locked invoicing scope; approval is the one human step in the close.",
+      "layout": "Queue of invoice pairs: lead/client, one-time amount, recurring amount + start date, signed date, drafted date; per-pair review drawer summary; Approve and send.",
+      "data_deps": {
+        "tables": [
+          "invoices",
+          "proposals",
+          "leads"
+        ],
+        "queries": [
+          "pairs with status drafted, joined to proposal + lead",
+          "date-logic summary per pair (due now, recurring start)"
+        ],
+        "mutations": [
+          "approve-and-send (both invoices via Invoice Ninja API)",
+          "flag for correction"
+        ],
+        "realtime": [
+          "new drafts appear live (webhook-triggered)"
+        ],
+        "jobs": [
+          "draft creation on signature webhook",
+          "send on approval"
+        ]
+      },
+      "components": [
+        "DataTable",
+        "KpiTile",
+        "StatusPill",
+        "Button",
+        "EmptyState"
+      ],
+      "affordances": [
+        {
+          "label": "Row click",
+          "kind": "row",
+          "dest": "invoice-pair-detail"
+        },
+        {
+          "label": "Approve and send",
+          "kind": "button",
+          "dest": "modal:approve-send"
+        },
+        {
+          "label": "Open in Invoice Ninja",
+          "kind": "link",
+          "dest": "external:invoice-ninja"
+        }
+      ],
+      "modals": [
+        {
+          "name": "approve-send",
+          "fields": "both invoice echoes (amounts, due dates, recurring start), confirm"
+        }
+      ],
+      "states": {
+        "empty": "library:empty-state-library: 'Nothing waiting. Signed proposals draft their invoices here.'",
+        "loading": "row skeletons",
+        "error": "library:error-state-library; per-pair draft-failure state with retry",
+        "edit": "n/a (corrections happen in Invoice Ninja; flag-for-correction notes it)",
+        "success": "pair animates out on send; toast with Invoice Ninja links",
+        "mobile": "card list"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "Admin approves (operator read-only per project.json open question). The date-logic summary renders the rule outcome in words ('signed Nov 1: one-time due now, recurring starts Dec 1') so approval is a judgment, not a calculation.",
+      "variants": [],
+      "session_hint": "S13"
+    },
+    {
+      "id": "invoice-pair-detail",
+      "name": "Invoice Pair Detail",
+      "type": "screen",
+      "route": "/invoices/[id]",
+      "dimension": "Detail Pages",
+      "tier": 2,
+      "phase": 2,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "read-only"
+      },
+      "purpose": "One signed deal's two invoices: line items, date logic, send state, Invoice Ninja links.",
+      "rationale": "T2 P2: the approval queue needs a drill-down that shows the full date-logic reasoning before money moves.",
+      "layout": "Two invoice cards (one-time, recurring) with line items and dates; date-logic explanation block; event timeline (signed, drafted, approved, sent); links.",
+      "data_deps": {
+        "tables": [
+          "invoices",
+          "proposals",
+          "leads"
+        ],
+        "queries": [
+          "pair with line items, events, proposal + lead join"
+        ],
+        "mutations": [
+          "approve-and-send",
+          "flag for correction"
+        ],
+        "realtime": [
+          "send/payment status from Invoice Ninja webhooks"
+        ],
+        "jobs": [
+          "webhook ingestion updates states"
+        ]
+      },
+      "components": [
+        "Card",
+        "DataTable",
+        "StatusPill",
+        "Button"
+      ],
+      "affordances": [
+        {
+          "label": "Approve and send",
+          "kind": "button",
+          "dest": "modal:approve-send-detail"
+        },
+        {
+          "label": "Open in Invoice Ninja",
+          "kind": "link",
+          "dest": "external:invoice-ninja"
+        },
+        {
+          "label": "Lead link",
+          "kind": "link",
+          "dest": "lead-detail"
+        },
+        {
+          "label": "Proposal link",
+          "kind": "link",
+          "dest": "proposal-detail"
+        },
+        {
+          "label": "Breadcrumb: Invoices",
+          "kind": "link",
+          "dest": "invoice-approvals"
+        }
+      ],
+      "modals": [
+        {
+          "name": "approve-send-detail",
+          "fields": "both invoice echoes, confirm"
+        }
+      ],
+      "states": {
+        "empty": "n/a (reached only from an existing pair)",
+        "loading": "card skeletons",
+        "error": "library:error-state-library; draft-failure state carries the Invoice Ninja API error",
+        "edit": "n/a",
+        "success": "timeline advances live",
+        "mobile": "cards stack"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "Amounts come from the synced Invoice Ninja state, never recomputed locally (one source of truth for money). Operator sees everything read-only: reps track their deal, admins act.",
+      "variants": [],
+      "session_hint": "S13"
+    },
+    {
+      "id": "meeting-recordings",
+      "name": "Meetings & Recordings",
+      "type": "screen",
+      "route": "/recordings",
+      "dimension": "Integrations & API",
+      "tier": 2,
+      "phase": 2,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "read-only"
+      },
+      "purpose": "Fathom recordings matched to meetings and leads; transcript status; rematch when matching errs.",
+      "rationale": "T2 P2: Fathom matching is the flagged risk; making the match visible and fixable is the mitigation surface.",
+      "layout": "DataTable: recording, matched meeting + lead (or unmatched badge), duration, transcript status; transcript drawer on row expand; Rematch action.",
+      "data_deps": {
+        "tables": [
+          "meetings",
+          "transcripts",
+          "leads"
+        ],
+        "queries": [
+          "recordings with match + transcript state",
+          "unmatched recordings first"
+        ],
+        "mutations": [
+          "rematch recording to a meeting (admin)"
+        ],
+        "realtime": [
+          "new recordings + transcript-ready events"
+        ],
+        "jobs": [
+          "Fathom sync (Inngest cron): recordings, matching, transcript pull"
+        ]
+      },
+      "components": [
+        "DataTable",
+        "StatusPill",
+        "SourceBadge",
+        "EmptyState"
+      ],
+      "affordances": [
+        {
+          "label": "Matched lead link",
+          "kind": "link",
+          "dest": "lead-detail"
+        },
+        {
+          "label": "Rematch (admin)",
+          "kind": "menu",
+          "dest": "modal:rematch-recording"
+        },
+        {
+          "label": "View transcript",
+          "kind": "row",
+          "dest": "modal:transcript-drawer"
+        }
+      ],
+      "modals": [
+        {
+          "name": "rematch-recording",
+          "fields": "recording echo, meeting picker (upcoming + recent for the likely lead), confirm"
+        },
+        {
+          "name": "transcript-drawer",
+          "fields": "read-only transcript with speaker turns, copy action"
+        }
+      ],
+      "states": {
+        "empty": "library:empty-state-library: 'No recordings yet. Fathom calls land here after they process.'",
+        "loading": "table skeletons; per-row transcript-pulling state",
+        "error": "library:error-state-library; Fathom API failure banner with last-sync time",
+        "edit": "rematch only",
+        "success": "toast on rematch; match badge updates",
+        "mobile": "card list; drawer becomes full-screen"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "Matching keys on GHL meeting time + attendee email against Fathom metadata; confidence below threshold renders unmatched rather than guessing (a wrong transcript in a proposal is worse than none). Unmatched-first ordering keeps the risk visible.",
+      "variants": [],
+      "session_hint": "S11"
+    },
+    {
+      "id": "notifications-center",
+      "name": "Notifications Center",
+      "type": "screen",
+      "route": "/notifications",
+      "dimension": "Notifications",
+      "tier": 2,
+      "phase": 2,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "full"
+      },
+      "purpose": "Everything that needs the rep's or approver's attention, in one feed.",
+      "rationale": "T2 P2: six core event types ship at M2 (valid lead, suspect queued, deck ready, transcript ready, signed, invoice drafted); the 16-alerts decision may widen this.",
+      "layout": "Feed grouped by day: icon, event line, lead/deal context, age; unread markers; mark-all-read; filter by type.",
+      "data_deps": {
+        "tables": [
+          "notifications",
+          "leads"
+        ],
+        "queries": [
+          "paged notifications for this profile, unread count"
+        ],
+        "mutations": [
+          "mark read / mark all read"
+        ],
+        "realtime": [
+          "new notifications push live (the bell badge shares this channel)"
+        ],
+        "jobs": [
+          "event fan-out writes notifications (Inngest)"
+        ]
+      },
+      "components": [
+        "DataTable",
+        "SeverityDot",
+        "StatusPill",
+        "EmptyState"
+      ],
+      "affordances": [
+        {
+          "label": "Notification row",
+          "kind": "row",
+          "dest": "lead-detail"
+        },
+        {
+          "label": "Invoice notification row",
+          "kind": "row",
+          "dest": "invoice-approvals"
+        },
+        {
+          "label": "Preferences",
+          "kind": "link",
+          "dest": "profile-settings"
+        }
+      ],
+      "modals": [],
+      "states": {
+        "empty": "library:empty-state-library: 'All caught up.'",
+        "loading": "feed skeletons",
+        "error": "library:error-state-library",
+        "edit": "n/a",
+        "success": "unread markers clear optimistically",
+        "mobile": "full-width feed"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "Row destination depends on event type (lead events to lead-detail, invoice events to invoice-approvals); both are registered affordances. Per-type on/off lives on profile-settings, not here.",
+      "variants": [],
+      "session_hint": "S15"
+    },
+    {
+      "id": "profile-settings",
+      "name": "Profile & Preferences",
+      "type": "screen",
+      "route": "/settings/profile",
+      "dimension": "Personal Account & Profile",
+      "tier": 2,
+      "phase": 2,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "full"
+      },
+      "purpose": "Name, avatar, and per-type notification preferences.",
+      "rationale": "T2 P2: minimal personal surface for an internal tool; Google owns identity, admins own provisioning.",
+      "layout": "Two cards: profile (name, avatar from Google, role read-only) and notification preferences (per-type toggles).",
+      "data_deps": {
+        "tables": [
+          "profiles"
+        ],
+        "queries": [
+          "own profile with notification prefs JSON"
+        ],
+        "mutations": [
+          "update display name",
+          "update notification prefs"
+        ],
+        "realtime": [],
+        "jobs": []
+      },
+      "components": [
+        "Card",
+        "Button",
+        "RolePill"
+      ],
+      "affordances": [
+        {
+          "label": "Save",
+          "kind": "button",
+          "dest": "modal:save-confirm-toast"
+        }
+      ],
+      "modals": [
+        {
+          "name": "save-confirm-toast",
+          "fields": "inline toast only; listed as modal for the affordance contract"
+        }
+      ],
+      "states": {
+        "empty": "n/a",
+        "loading": "card skeletons",
+        "error": "library:error-state-library",
+        "edit": "inline field editing, dirty-state save bar",
+        "success": "toast on save",
+        "mobile": "cards stack"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "No password or delete-account flows: Google OAuth only, lifecycle owned by admins on team-reps. Notification prefs gate the fan-out job per type.",
+      "variants": [],
+      "session_hint": "S15"
+    },
+    {
+      "id": "welcome-first-run",
+      "name": "First-Run Welcome",
+      "type": "screen",
+      "route": "/welcome",
+      "dimension": "Onboarding & Activation",
+      "tier": 2,
+      "phase": 2,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "full"
+      },
+      "purpose": "Three-step orientation on first login: your leads, the review queue, deck generation.",
+      "rationale": "T2 P2: onboarding depth is minimal (admin-provisioned internal reps); one screen, not a wizard cluster.",
+      "layout": "Three-panel stepper with product screenshots: 'Leads arrive validated', 'You judge the suspects', 'One click makes the deck'; Get started.",
+      "data_deps": {
+        "tables": [
+          "profiles"
+        ],
+        "queries": [
+          "first_run flag"
+        ],
+        "mutations": [
+          "clear first_run flag on completion"
+        ],
+        "realtime": [],
+        "jobs": []
+      },
+      "components": [
+        "Card",
+        "Button",
+        "Eyebrow"
+      ],
+      "affordances": [
+        {
+          "label": "Get started",
+          "kind": "button",
+          "dest": "dashboard"
+        },
+        {
+          "label": "Skip",
+          "kind": "link",
+          "dest": "dashboard"
+        }
+      ],
+      "modals": [],
+      "states": {
+        "empty": "n/a",
+        "loading": "n/a (static content)",
+        "error": "n/a",
+        "edit": "n/a",
+        "success": "redirect to dashboard",
+        "mobile": "panels stack vertically"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "Routed to from auth-callback when profiles.first_run is true. Skipping also clears the flag (never nag twice).",
+      "variants": [],
+      "session_hint": "S15"
+    },
+    {
+      "id": "team-reps",
+      "name": "Rep Management",
+      "type": "screen",
+      "route": "/admin/reps",
+      "dimension": "Team & Permissions",
+      "tier": 2,
+      "phase": 2,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "hidden"
+      },
+      "purpose": "Provision reps and admins, assign roles, deactivate; one rep at launch, built for 3 to 4.",
+      "rationale": "T2 P2: the launch rep can be seeded at S4; self-serve provisioning becomes necessary when rep 2 arrives.",
+      "layout": "Roster DataTable: name, email, role, status, assigned leads count, last active; Provision rep action; row drawer with role + deactivate.",
+      "data_deps": {
+        "tables": [
+          "profiles",
+          "leads"
+        ],
+        "queries": [
+          "roster with assigned-lead counts"
+        ],
+        "mutations": [
+          "provision (insert profile by Workspace email)",
+          "change role",
+          "deactivate (leads must be reassigned first)"
+        ],
+        "realtime": [],
+        "jobs": []
+      },
+      "components": [
+        "DataTable",
+        "RolePill",
+        "StatusPill",
+        "Button",
+        "EmptyState"
+      ],
+      "affordances": [
+        {
+          "label": "Provision rep",
+          "kind": "button",
+          "dest": "modal:provision-rep"
+        },
+        {
+          "label": "Row menu: Deactivate",
+          "kind": "menu",
+          "dest": "modal:deactivate-rep"
+        },
+        {
+          "label": "Assigned-leads count",
+          "kind": "link",
+          "dest": "lead-list"
+        }
+      ],
+      "modals": [
+        {
+          "name": "provision-rep",
+          "fields": "Workspace email, role select (rep/admin), 'they sign in with Google' note"
+        },
+        {
+          "name": "deactivate-rep",
+          "fields": "rep echo, lead-reassignment picker (required when leads assigned), confirm"
+        }
+      ],
+      "states": {
+        "empty": "n/a (the provisioning admin is always listed)",
+        "loading": "table skeletons",
+        "error": "library:error-state-library",
+        "edit": "role change inline in the drawer",
+        "success": "toast on provision/deactivate",
+        "mobile": "card list"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "Provisioning writes the profiles row the auth-callback checks: email must match the Workspace domain. Deactivation blocks until leads are reassigned (no orphaned pipeline).",
+      "variants": [],
+      "session_hint": "S15"
+    },
+    {
+      "id": "admin-integrations",
+      "name": "Integrations Health",
+      "type": "screen",
+      "route": "/admin/integrations",
+      "dimension": "Integrations & API",
+      "tier": 2,
+      "phase": 2,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "hidden"
+      },
+      "purpose": "Connection status, config, and last-sync health for all six integrations.",
+      "rationale": "T2 P2: MVP configures via env at S2; the health surface earns its place at GA when non-builders need to see what broke.",
+      "layout": "Six connection cards (GoHighLevel, Presenton, Smart Pricing Table, Invoice Ninja, Fathom, OpenRouter): status dot, last successful call, error count 24h, Configure + Test actions; OpenRouter card carries spend-today.",
+      "data_deps": {
+        "tables": [
+          "integration_connections",
+          "ghl_sync_log",
+          "validation_runs"
+        ],
+        "queries": [
+          "connection states with last-success + error counts",
+          "LLM spend aggregates"
+        ],
+        "mutations": [
+          "update connection config (non-secret fields)",
+          "trigger test call"
+        ],
+        "realtime": [],
+        "jobs": [
+          "health-check pings (Inngest cron)"
+        ]
+      },
+      "components": [
+        "Card",
+        "StatusPill",
+        "SeverityDot",
+        "Button",
+        "KpiTile"
+      ],
+      "affordances": [
+        {
+          "label": "Configure",
+          "kind": "button",
+          "dest": "modal:configure-connection"
+        },
+        {
+          "label": "Test connection",
+          "kind": "button",
+          "dest": "modal:test-result"
+        },
+        {
+          "label": "View sync log",
+          "kind": "link",
+          "dest": "sync-log"
+        },
+        {
+          "label": "View validation log",
+          "kind": "link",
+          "dest": "validation-log"
+        }
+      ],
+      "modals": [
+        {
+          "name": "configure-connection",
+          "fields": "non-secret config per provider (location id, calendar id, pipeline map pointer); secrets stay in Vercel env, noted"
+        },
+        {
+          "name": "test-result",
+          "fields": "test call result, latency, raw response excerpt"
+        }
+      ],
+      "states": {
+        "empty": "not-connected variant per card before first config",
+        "loading": "card skeletons; per-card test spinner",
+        "error": "card-level error state with last error detail",
+        "edit": "via configure modal",
+        "success": "status dot flips on test pass",
+        "mobile": "cards stack"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "Secrets never render or round-trip here: cards show presence ('key set in Vercel env'), not values. EmptyState not-connected variant per DS rules.",
+      "variants": [],
+      "session_hint": "S15"
+    },
+    {
+      "id": "admin-templates",
+      "name": "Deck Templates",
+      "type": "screen",
+      "route": "/admin/templates",
+      "dimension": "Integrations & API",
+      "tier": 2,
+      "phase": 2,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "hidden"
+      },
+      "purpose": "The three template groups: active versions, previews, and the proposal prompt presets.",
+      "rationale": "T2 P2: templates live in Git (locked decision); this surface shows what is installed and previews it, plus prompt-preset management.",
+      "layout": "Three group cards (Discovery Call, Follow Up, Strategy Session): active version, updated date, Preview action; prompt-presets card (the proposal tweak chips) with add/edit.",
+      "data_deps": {
+        "tables": [
+          "deck_templates",
+          "app_settings"
+        ],
+        "queries": [
+          "template versions per group",
+          "prompt presets"
+        ],
+        "mutations": [
+          "set active version",
+          "add/edit/remove prompt preset"
+        ],
+        "realtime": [],
+        "jobs": [
+          "template sync from repo on deploy"
+        ]
+      },
+      "components": [
+        "Card",
+        "SourceBadge",
+        "Button",
+        "DataTable"
+      ],
+      "affordances": [
+        {
+          "label": "Preview template",
+          "kind": "button",
+          "dest": "modal:template-preview"
+        },
+        {
+          "label": "Set active version",
+          "kind": "menu",
+          "dest": "modal:confirm-version"
+        },
+        {
+          "label": "Open templates in repo",
+          "kind": "link",
+          "dest": "external:github-templates"
+        },
+        {
+          "label": "Edit prompt preset",
+          "kind": "row",
+          "dest": "modal:edit-preset"
+        }
+      ],
+      "modals": [
+        {
+          "name": "template-preview",
+          "fields": "sample-data render of the template in an iframe"
+        },
+        {
+          "name": "confirm-version",
+          "fields": "version echo, 'new decks only, existing decks unchanged' note"
+        },
+        {
+          "name": "edit-preset",
+          "fields": "preset label, prompt text"
+        }
+      ],
+      "states": {
+        "empty": "group card shows 'template not installed' until the repo ships one (placeholders ship at S3)",
+        "loading": "card skeletons; preview render spinner",
+        "error": "preview render failure with the Presenton error",
+        "edit": "presets inline",
+        "success": "toast on version/preset changes",
+        "mobile": "cards stack"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "Templates are repo files (Git is the source of truth per the kickoff decision); this screen reads the synced manifest and never edits template content. Mitchell and Zachery's enhanced templates land as repo PRs.",
+      "variants": [],
+      "session_hint": "S15"
+    },
+    {
+      "id": "admin-statuses",
+      "name": "Statuses & Thresholds",
+      "type": "screen",
+      "route": "/admin/statuses",
+      "dimension": "Workspace / Org Management",
+      "tier": 2,
+      "phase": 2,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "hidden"
+      },
+      "purpose": "The status set mirrored from GHL and the lead-age thresholds that move leads automatically.",
+      "rationale": "T2 P2: defaults ship in the packet for Lee to confirm; this surface is where they get tuned without a deploy.",
+      "layout": "Status table (app status, GHL stage mapping, kind: manual/automatic); thresholds card (no booking after N days to nurture, no-show chase days to lost, silent-after-proposal days to lost); audit note of last change.",
+      "data_deps": {
+        "tables": [
+          "status_defs",
+          "app_settings",
+          "lead_status_events"
+        ],
+        "queries": [
+          "status defs with GHL mapping",
+          "threshold values"
+        ],
+        "mutations": [
+          "edit thresholds",
+          "remap status to GHL stage (guarded)"
+        ],
+        "realtime": [],
+        "jobs": [
+          "lead-age automation reads thresholds (Inngest cron)"
+        ]
+      },
+      "components": [
+        "DataTable",
+        "Card",
+        "StatusPill",
+        "Button"
+      ],
+      "affordances": [
+        {
+          "label": "Edit threshold",
+          "kind": "row",
+          "dest": "modal:edit-threshold"
+        },
+        {
+          "label": "Remap GHL stage",
+          "kind": "menu",
+          "dest": "modal:remap-stage"
+        },
+        {
+          "label": "View pipeline",
+          "kind": "link",
+          "dest": "pipeline-board"
+        }
+      ],
+      "modals": [
+        {
+          "name": "edit-threshold",
+          "fields": "threshold echo, new value, 'applies on the next nightly run' note"
+        },
+        {
+          "name": "remap-stage",
+          "fields": "mapping echo, GHL stage picker, 'coordinate with Lee' warning"
+        }
+      ],
+      "states": {
+        "empty": "n/a (seeds from the ghl-workstream mapping at S14)",
+        "loading": "table skeletons",
+        "error": "library:error-state-library",
+        "edit": "modal-driven",
+        "success": "toast; audit note updates",
+        "mobile": "table scrolls horizontally"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "Remapping a GHL stage is the one config that can break the mirror: the warning modal names Lee and the ghl-workstream doc. Threshold defaults: nurture at 14 days unbooked, lost after chase on no-show, lost after 14 days silent post-proposal (Lee confirms).",
+      "variants": [],
+      "session_hint": "S14"
+    },
+    {
+      "id": "validation-log",
+      "name": "Validation Log",
+      "type": "screen",
+      "route": "/admin/validation-log",
+      "dimension": "AI Layer",
+      "tier": 2,
+      "phase": 2,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "hidden"
+      },
+      "purpose": "Every Claude verdict with inputs, reasoning, cost, and human overrides: the AI audit trail.",
+      "rationale": "T2 P2: autonomous pipelines need an audit surface for trust and classifier tuning; admin-only forensics.",
+      "layout": "DataTable: timestamp, lead, verdict badge, confidence, pattern tags, human override marker, cost; row drawer with full input/output; spend KPI strip on top.",
+      "data_deps": {
+        "tables": [
+          "validation_runs",
+          "leads"
+        ],
+        "queries": [
+          "paged runs with override joins",
+          "spend aggregates by day"
+        ],
+        "mutations": [],
+        "realtime": [],
+        "jobs": []
+      },
+      "components": [
+        "DataTable",
+        "KpiTile",
+        "ScoreBadge",
+        "StatusPill",
+        "EmptyState"
+      ],
+      "affordances": [
+        {
+          "label": "Lead link",
+          "kind": "link",
+          "dest": "lead-detail"
+        },
+        {
+          "label": "Row expand",
+          "kind": "row",
+          "dest": "modal:run-drawer"
+        }
+      ],
+      "modals": [
+        {
+          "name": "run-drawer",
+          "fields": "full prompt inputs, verdict reasoning, model, tokens, cost"
+        }
+      ],
+      "states": {
+        "empty": "library:empty-state-library: 'No validation runs yet.'",
+        "loading": "table skeletons",
+        "error": "library:error-state-library",
+        "edit": "n/a (read-only surface)",
+        "success": "n/a",
+        "mobile": "card list"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "Read-only by design (review agents report, builders fix: same spirit). Overrides come from the suspect queue and are the classifier feedback loop. Cost renders from validation_runs.cost_cents; null while pending, never 0.",
+      "variants": [],
+      "session_hint": "S8"
+    },
+    {
+      "id": "sync-log",
+      "name": "GHL Sync Log",
+      "type": "screen",
+      "route": "/admin/sync-log",
+      "dimension": "Compliance & Security",
+      "tier": 2,
+      "phase": 2,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "hidden"
+      },
+      "purpose": "Every write the app made to GoHighLevel: the seam, made visible and auditable.",
+      "rationale": "T2 P2: the prototype's core principle (every click shows what it writes back) needs a forensic surface when something looks wrong in GHL.",
+      "layout": "DataTable: timestamp, lead, write type (status, stage, field, booking), payload summary, result, retry count; filter by type/result; failure banner when the dead-letter queue is non-empty.",
+      "data_deps": {
+        "tables": [
+          "ghl_sync_log",
+          "leads"
+        ],
+        "queries": [
+          "paged writes with result + retries",
+          "dead-letter count"
+        ],
+        "mutations": [
+          "retry failed write"
+        ],
+        "realtime": [
+          "new writes stream in"
+        ],
+        "jobs": [
+          "the connector's write path logs here; retry job drains failures"
+        ]
+      },
+      "components": [
+        "DataTable",
+        "StatusPill",
+        "SeverityDot",
+        "Button",
+        "EmptyState"
+      ],
+      "affordances": [
+        {
+          "label": "Lead link",
+          "kind": "link",
+          "dest": "lead-detail"
+        },
+        {
+          "label": "Retry write",
+          "kind": "button",
+          "dest": "modal:retry-write"
+        },
+        {
+          "label": "Row expand",
+          "kind": "row",
+          "dest": "modal:payload-drawer"
+        }
+      ],
+      "modals": [
+        {
+          "name": "retry-write",
+          "fields": "write echo, idempotency note, confirm"
+        },
+        {
+          "name": "payload-drawer",
+          "fields": "full request/response JSON, redacted auth"
+        }
+      ],
+      "states": {
+        "empty": "library:empty-state-library: 'No writes yet. Everything the app tells GHL lands here.'",
+        "loading": "table skeletons",
+        "error": "library:error-state-library",
+        "edit": "n/a",
+        "success": "retried rows update in place",
+        "mobile": "card list"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "Built in S6 alongside the connector (the log IS the connector's write path, not an afterthought). Idempotency keys render so duplicate-write debugging is possible. This is the single spam-removal / write-divergence forensic surface the architecture doc asked for.",
+      "variants": [],
+      "session_hint": "S6"
+    },
+    {
+      "id": "command-palette",
+      "name": "Command Palette",
+      "type": "overlay",
+      "dimension": "Search & Discovery",
+      "tier": 2,
+      "phase": 2,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "full"
+      },
+      "purpose": "Cmd-K: jump to any lead, deck, or proposal; run quick actions.",
+      "rationale": "T2 P2: four data types exceed scannability; the DS CommandPalette covers search, so no search-results page is manufactured.",
+      "layout": "DS CommandPalette: typeahead across leads/decks/proposals, section-grouped results, quick actions (go to queue, generate deck for...).",
+      "data_deps": {
+        "tables": [
+          "leads",
+          "decks",
+          "proposals"
+        ],
+        "queries": [
+          "typeahead search across the three entity types, role-scoped"
+        ],
+        "mutations": [],
+        "realtime": [],
+        "jobs": []
+      },
+      "components": [
+        "CommandPalette"
+      ],
+      "affordances": [
+        {
+          "label": "Lead result",
+          "kind": "row",
+          "dest": "lead-detail"
+        },
+        {
+          "label": "Deck result",
+          "kind": "row",
+          "dest": "deck-detail"
+        },
+        {
+          "label": "Proposal result",
+          "kind": "row",
+          "dest": "proposal-detail"
+        },
+        {
+          "label": "Quick action: review queue",
+          "kind": "row",
+          "dest": "suspect-review-queue"
+        }
+      ],
+      "modals": [],
+      "states": {
+        "empty": "empty-query state shows recent items; no-results state per DS",
+        "loading": "inline spinner in the input",
+        "error": "inline 'search unavailable' line",
+        "edit": "n/a",
+        "success": "navigates and closes",
+        "mobile": "full-screen sheet"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "DS CommandPalette component as shipped; search endpoint is one RPC across the three tables with RLS doing the scoping. Explicit cut: no global search-results page (internal tool, palette suffices).",
+      "variants": [],
+      "session_hint": "S15"
+    },
+    {
+      "id": "empty-state-library",
+      "name": "Empty State Library",
+      "type": "library",
+      "dimension": "State Coverage",
+      "tier": 1,
+      "phase": 1,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "full"
+      },
+      "purpose": "Every primary screen's empty state: one pattern, per-screen copy table.",
+      "rationale": "T1 P1: new installs live in empty states; the M1 demo opens on several of them.",
+      "layout": "DS EmptyState with required variant per case (empty / filtered / not-connected); copy table maintained in docs/design/empty-states.md.",
+      "data_deps": {
+        "tables": [],
+        "queries": [],
+        "mutations": [],
+        "realtime": [],
+        "jobs": []
+      },
+      "components": [
+        "EmptyState"
+      ],
+      "affordances": [],
+      "modals": [],
+      "states": {
+        "empty": "n/a (this library defines them)",
+        "loading": "n/a",
+        "error": "n/a",
+        "edit": "n/a",
+        "success": "n/a",
+        "mobile": "variants are responsive by component"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "DS EmptyState requires an explicit variant (no safe default). Copy per screen lives in the per-screen states fields in this registry; the library enforces the pattern and hosts the shared illustrations.",
+      "variants": [],
+      "session_hint": "S5"
+    },
+    {
+      "id": "error-state-library",
+      "name": "Error State Library",
+      "type": "library",
+      "dimension": "State Coverage",
+      "tier": 1,
+      "phase": 1,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "full"
+      },
+      "purpose": "404, 403, 500, and offline patterns; trust-critical from day one.",
+      "rationale": "T1 P1: a broken route during a live sales call must fail gracefully.",
+      "layout": "Four patterns on the DS error layout; 404 and 403 render via App Router not-found.tsx and a guard redirect respectively.",
+      "data_deps": {
+        "tables": [],
+        "queries": [],
+        "mutations": [],
+        "realtime": [],
+        "jobs": []
+      },
+      "components": [
+        "EmptyState",
+        "Button"
+      ],
+      "affordances": [
+        {
+          "label": "Go to dashboard",
+          "kind": "button",
+          "dest": "dashboard"
+        }
+      ],
+      "modals": [],
+      "states": {
+        "empty": "n/a",
+        "loading": "n/a",
+        "error": "n/a (this library defines them)",
+        "edit": "n/a",
+        "success": "n/a",
+        "mobile": "responsive by component"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "404 via app/not-found.tsx (App Router convention, no registry route needed); 403 is the access-denied screen for auth cases and an inline pattern for role-gated fetches; 500 via error.tsx boundaries; offline via a connectivity listener banner.",
+      "variants": [],
+      "session_hint": "S5"
+    },
+    {
+      "id": "first-value-celebration",
+      "name": "First-Value Celebration",
+      "type": "overlay",
+      "dimension": "Onboarding & Activation",
+      "tier": 1,
+      "phase": 1,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "full"
+      },
+      "purpose": "Marks the first generated deck: the moment the product proves itself.",
+      "rationale": "T1 P1: F5 activation stage; the first deck is this product's first-value moment.",
+      "layout": "One-time overlay on deck-detail after the first successful generation: deck thumbnail, one congratulatory line, Continue.",
+      "data_deps": {
+        "tables": [
+          "profiles",
+          "decks"
+        ],
+        "queries": [
+          "has this profile generated a deck before"
+        ],
+        "mutations": [
+          "set celebration-shown flag"
+        ],
+        "realtime": [],
+        "jobs": []
+      },
+      "components": [
+        "Card",
+        "Button"
+      ],
+      "affordances": [
+        {
+          "label": "Continue",
+          "kind": "button",
+          "dest": "deck-detail"
+        }
+      ],
+      "modals": [],
+      "states": {
+        "empty": "n/a",
+        "loading": "n/a",
+        "error": "never blocks: any failure skips the overlay silently",
+        "edit": "n/a",
+        "success": "shown exactly once per profile",
+        "mobile": "centered sheet"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "Fires once per profile, flag on profiles. Restrained per the internal-tool register: one moment, no confetti engine, no milestone celebration series (explicit cut, Phase 4 revisit).",
+      "variants": [],
+      "session_hint": "S9"
+    },
+    {
+      "id": "loading-skeleton-library",
+      "name": "Loading Skeleton Library",
+      "type": "library",
+      "dimension": "State Coverage",
+      "tier": 2,
+      "phase": 4,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "full"
+      },
+      "purpose": "One skeleton pattern per layout archetype (KPI strip, table, card grid, kanban column, drawer, detail).",
+      "rationale": "T2 P4: more than three primary screens exist, so the library pays for itself; per-screen skeletons ship inline until it lands.",
+      "layout": "deferred: scoped at phase promotion",
+      "data_deps": {
+        "tables": [],
+        "queries": [],
+        "mutations": [],
+        "realtime": [],
+        "jobs": []
+      },
+      "components": [],
+      "affordances": [],
+      "modals": [],
+      "states": {
+        "empty": "n/a",
+        "loading": "n/a (this library defines them)",
+        "error": "n/a",
+        "edit": "n/a",
+        "success": "n/a",
+        "mobile": "deferred: scoped at phase promotion"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "deferred: scoped at phase promotion",
+      "variants": [],
+      "session_hint": "backlog"
+    },
+    {
+      "id": "reports-hub",
+      "name": "Reports Hub",
+      "type": "screen",
+      "route": "/reports",
+      "dimension": "Reporting & Analytics",
+      "tier": 3,
+      "phase": 4,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "read-only"
+      },
+      "purpose": "Funnel conversion, verdict accuracy, deal velocity: the management view.",
+      "rationale": "T3 P4: the dashboard covers daily operation; management reporting earns depth after GA data accumulates.",
+      "layout": "deferred: scoped at phase promotion",
+      "data_deps": {
+        "tables": [
+          "leads",
+          "proposals",
+          "invoices"
+        ],
+        "queries": [
+          "deferred: scoped at phase promotion"
+        ],
+        "mutations": [],
+        "realtime": [],
+        "jobs": []
+      },
+      "components": [],
+      "affordances": [
+        {
+          "label": "Open analytics",
+          "kind": "link",
+          "dest": "admin-analytics"
+        }
+      ],
+      "modals": [],
+      "states": {
+        "empty": "library:empty-state-library",
+        "loading": "deferred: scoped at phase promotion",
+        "error": "library:error-state-library",
+        "edit": "n/a",
+        "success": "n/a",
+        "mobile": "deferred: scoped at phase promotion"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "deferred: scoped at phase promotion",
+      "variants": [],
+      "session_hint": "backlog"
+    },
+    {
+      "id": "admin-analytics",
+      "name": "Admin Analytics",
+      "type": "screen",
+      "route": "/admin/analytics",
+      "dimension": "Reporting & Analytics",
+      "tier": 3,
+      "phase": 4,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "hidden"
+      },
+      "purpose": "Classifier precision over time, pipeline leak points, per-rep performance once multi-rep.",
+      "rationale": "T3 P4: tuning surfaces need months of data; premature at GA.",
+      "layout": "deferred: scoped at phase promotion",
+      "data_deps": {
+        "tables": [
+          "validation_runs",
+          "lead_status_events"
+        ],
+        "queries": [
+          "deferred: scoped at phase promotion"
+        ],
+        "mutations": [],
+        "realtime": [],
+        "jobs": []
+      },
+      "components": [],
+      "affordances": [
+        {
+          "label": "Drill to leads",
+          "kind": "link",
+          "dest": "lead-list"
+        }
+      ],
+      "modals": [],
+      "states": {
+        "empty": "library:empty-state-library",
+        "loading": "deferred: scoped at phase promotion",
+        "error": "library:error-state-library",
+        "edit": "n/a",
+        "success": "n/a",
+        "mobile": "deferred: scoped at phase promotion"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "deferred: scoped at phase promotion",
+      "variants": [],
+      "session_hint": "backlog"
+    },
+    {
+      "id": "invoice-manager",
+      "name": "Invoice Manager (Full)",
+      "type": "screen",
+      "route": "/invoices/manage",
+      "dimension": "Core Workflow",
+      "tier": 3,
+      "phase": 4,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "hidden"
+      },
+      "purpose": "Full in-app invoice lifecycle (edit, void, credit, payment tracking) if Mitchell widens scope beyond draft-plus-notify.",
+      "rationale": "T3 P4: explicitly deferred by the 2026-10-07 decision; draft-plus-notify is the GA scope and this is the named swap path.",
+      "layout": "deferred: scoped at phase promotion",
+      "data_deps": {
+        "tables": [
+          "invoices"
+        ],
+        "queries": [
+          "deferred: scoped at phase promotion"
+        ],
+        "mutations": [],
+        "realtime": [],
+        "jobs": []
+      },
+      "components": [],
+      "affordances": [
+        {
+          "label": "Pair link",
+          "kind": "row",
+          "dest": "invoice-pair-detail"
+        }
+      ],
+      "modals": [],
+      "states": {
+        "empty": "library:empty-state-library",
+        "loading": "deferred: scoped at phase promotion",
+        "error": "library:error-state-library",
+        "edit": "deferred: scoped at phase promotion",
+        "success": "n/a",
+        "mobile": "deferred: scoped at phase promotion"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "deferred: scoped at phase promotion",
+      "variants": [],
+      "session_hint": "backlog"
+    },
+    {
+      "id": "admin-routing",
+      "name": "Lead Routing Rules",
+      "type": "screen",
+      "route": "/admin/routing",
+      "dimension": "Team & Permissions",
+      "tier": 3,
+      "phase": 4,
+      "status": "planned",
+      "rbac": {
+        "admin": "full",
+        "operator": "hidden"
+      },
+      "purpose": "Multi-rep lead assignment rules once reps 2 to 4 exist; GHL routing stays authoritative until then.",
+      "rationale": "T3 P4: MVP is one rep and Lee confirmed GHL covers routing; an app surface only matters when assignment becomes an in-app decision.",
+      "layout": "deferred: scoped at phase promotion",
+      "data_deps": {
+        "tables": [
+          "profiles",
+          "leads"
+        ],
+        "queries": [
+          "deferred: scoped at phase promotion"
+        ],
+        "mutations": [],
+        "realtime": [],
+        "jobs": []
+      },
+      "components": [],
+      "affordances": [
+        {
+          "label": "Rep roster",
+          "kind": "link",
+          "dest": "team-reps"
+        }
+      ],
+      "modals": [],
+      "states": {
+        "empty": "library:empty-state-library",
+        "loading": "deferred: scoped at phase promotion",
+        "error": "library:error-state-library",
+        "edit": "deferred: scoped at phase promotion",
+        "success": "n/a",
+        "mobile": "deferred: scoped at phase promotion"
+      },
+      "entitlement_gate": "none",
+      "cc_notes": "deferred: scoped at phase promotion",
+      "variants": [],
+      "session_hint": "backlog"
+    }
+  ],
+  "nav_gating": [
+    {
+      "nav_item": "Dashboard",
+      "admin": "full",
+      "operator": "full"
+    },
+    {
+      "nav_item": "Leads",
+      "admin": "full",
+      "operator": "full"
+    },
+    {
+      "nav_item": "Review Queue",
+      "admin": "full",
+      "operator": "full"
+    },
+    {
+      "nav_item": "Pipeline",
+      "admin": "full",
+      "operator": "full"
+    },
+    {
+      "nav_item": "Decks",
+      "admin": "full",
+      "operator": "full"
+    },
+    {
+      "nav_item": "Proposals",
+      "admin": "full",
+      "operator": "full"
+    },
+    {
+      "nav_item": "Invoices",
+      "admin": "full",
+      "operator": "read-only"
+    },
+    {
+      "nav_item": "Recordings",
+      "admin": "full",
+      "operator": "read-only"
+    },
+    {
+      "nav_item": "Notifications",
+      "admin": "full",
+      "operator": "full"
+    },
+    {
+      "nav_item": "Admin (Reps, Integrations, Templates, Statuses, Logs)",
+      "admin": "full",
+      "operator": "hidden"
+    },
+    {
+      "nav_item": "Settings (Profile)",
+      "admin": "full",
+      "operator": "full"
+    }
+  ],
+  "certification": {
+    "status": "certified",
+    "audited": "2026-10-07T12:50",
+    "frameworks_applied": [
+      "F1",
+      "F2",
+      "F3",
+      "F4",
+      "F5"
+    ],
+    "audit_rounds": 2,
+    "counts": {
+      "total": 36,
+      "phase1": 12,
+      "phase2": 19,
+      "phase3": 0,
+      "phase4": 5,
+      "tier1": 13,
+      "tier2": 19,
+      "tier3": 4,
+      "libraries": 3
+    },
+    "dangling_destinations": 0,
+    "findings_fixed": [
+      "A6 round 1: lead-detail carried affordances to P2 destinations (New proposal, Meeting row, Invoice chip) reachable in the M1 demo; fixed with phase flags in cc_notes so nothing on the screen can 404 at M1",
+      "A6 round 1: deck-detail breadcrumb targeted deck-library (P2) during the M1 demo; fixed: breadcrumb renders Back to lead until S10, Edit hidden until S10",
+      "A2 round 1: shell affordances (bell, avatar menu, Cmd-K) were implied on every screen but listed nowhere consistently; convention fixed: listed once on dashboard and recorded in the affordance map as inherited via the shell",
+      "A4 round 1: dashboard Decks and Proposals KPI tiles target P2 list screens; fixed: feature-flagged until S10/S12 so the M1 demo shows three tiles"
+    ],
+    "open_questions": [
+      "hours_per_week defaulted to 30; Bien confirms at the Friday Oct 10 review call and milestone dates re-derive",
+      "start_date defaulted to 2026-10-13, the Monday after the review call that starts the build clock",
+      "Which of the 16 GHL internal alerts become in-app notification types is decided at the Friday call; S15 ships the six core types either way",
+      "Status set and lead-age thresholds (nurture 14d unbooked, lost after no-show chase, lost 14d silent post-proposal) ship as defaults for Lee to confirm",
+      "Rep data scope defaulted to own-assigned-leads for reps, all for admins; revisit when rep 2 is provisioned",
+      "Invoice approver defaulted to admin with rep read-only; Mitchell may widen",
+      "Deck edit depth: structured slots plus prompt-driven slide regeneration; full WYSIWYG is Phase 4 unless Presenton gives it free"
+    ]
+  }
+}

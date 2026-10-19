@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: amended by ADR-0008 (the row is created at provisioning)
 ---
 
 # The app User row is created at profile setup and shares its id with the Supabase auth user

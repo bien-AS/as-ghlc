@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by ADR-0008
 ---
 
 # Sign-up is open to anyone for now
