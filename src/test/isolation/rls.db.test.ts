@@ -159,6 +159,24 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
     expect(tables).toHaveLength(17);
   });
 
+  // The catalog, not the Drizzle list: a table added outside the schema is caught too.
+  test("no table in schema public has row-level security off", async () => {
+    const { rows: open } = await (client as pg.Client).query(
+      `select c.relname from pg_class c
+       join pg_namespace n on n.oid = c.relnamespace
+       where n.nspname = 'public' and c.relkind in ('r', 'p')
+         and not c.relrowsecurity`,
+    );
+    expect(open).toEqual([]);
+  });
+
+  test("schema public has no RLS policies (default deny)", async () => {
+    const { rows: found } = await (client as pg.Client).query(
+      "select count(*)::int as n from pg_policies where schemaname = 'public'",
+    );
+    expect(found[0].n).toBe(0);
+  });
+
   describe.each(["anon", "authenticated"])("as %s", (role) => {
     test.each(
       rows(1).map(([table, row]) => [getTableConfig(table).name, table, row]),
