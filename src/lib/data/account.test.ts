@@ -34,7 +34,7 @@ const ada = {
 };
 const grace = {
   id: "auth-user-2",
-  email: "grace@example.com",
+  email: "grace@authoritysolutions.com",
   firstName: "Grace",
   lastName: "Hopper",
 };

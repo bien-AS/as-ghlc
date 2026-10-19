@@ -53,18 +53,28 @@ export class AccessError extends Error {
   }
 }
 
+/** ADR-0008 check 1: the only addresses let in. Shared with /auth/callback. */
+export const COMPANY_DOMAIN = "@authoritysolutions.com";
+
 /**
  * Verifies the session with Supabase (`getClaims` checks the token's signature
  * against the project's keys and refreshes an expired session) and returns the
- * auth user id from the verified claims.
+ * auth user id from the verified claims. ADR-0008 check 1, re-made on every
+ * request: the session came through OAuth (Google is the only provider) with a
+ * company address. Anything else (a password or magic-link session) is not a
+ * session this app recognises, so it reads as signed out.
  */
 async function getSessionUserId(): Promise<string | null> {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getClaims();
   const claims = data?.claims;
   if (error || !claims?.sub || typeof claims.email !== "string") return null;
-  if (!claims.email) return null;
-  return claims.sub;
+  if (!claims.email.toLowerCase().endsWith(COMPANY_DOMAIN)) return null;
+  // `amr` is AMREntry[] or string[] (@supabase/auth-js JwtPayload).
+  const viaOAuth = claims.amr?.some(
+    (entry) => (typeof entry === "string" ? entry : entry.method) === "oauth",
+  );
+  return viaOAuth ? claims.sub : null;
 }
 
 /** The profile columns a CurrentUser carries. */

@@ -77,3 +77,32 @@ test("a page sends an unprovisioned or deactivated session to /access-denied", a
   fake.users.set(ada.id, ada);
   expect(await enforceRoute("/dashboard")).toMatchObject({ status: "ready" });
 });
+
+test.each([
+  ["a password session", { amr: [{ method: "password", timestamp: 1 }] }],
+  ["a magic-link session", { amr: ["otp"] }],
+  ["a session with no amr", { amr: undefined }],
+  ["a non-company email", { email: "ada@example.com" }],
+  ["a look-alike domain", { email: "ada@evil-authoritysolutions.com" }],
+])(
+  "ADR-0008 check 1: %s on a provisioned, active profile is treated as signed out",
+  async (_, claims) => {
+    fake.users.set(ada.id, ada);
+    signIn(claims);
+    expect(await getCurrentUser()).toEqual({ status: "signed-out" });
+    await expect(requireProfile()).rejects.toMatchObject({
+      code: "unauthenticated",
+    });
+  },
+);
+
+test("ADR-0008 check 1: a Google session with a company email passes, in either amr format and any case", async () => {
+  fake.users.set(ada.id, ada);
+  for (const claims of [
+    { amr: ["oauth"] },
+    { email: "Ada@AuthoritySolutions.com" },
+  ]) {
+    signIn(claims);
+    expect(await requireProfile()).toMatchObject({ id: ada.id });
+  }
+});

@@ -44,11 +44,15 @@ export function resetFakes() {
   fake.signOut.mockReset().mockResolvedValue({ error: null });
 }
 
-/** A verified session, as the token claims. */
+/**
+ * A verified session, as the token claims: a Google (OAuth) sign-in with a
+ * company address, which is all the guards accept (ADR-0008 check 1).
+ */
 export function signIn(claims: Record<string, unknown> = {}) {
   fake.claims = {
     sub: "auth-user-1",
-    email: "ada@example.com",
+    email: "ada@authoritysolutions.com",
+    amr: [{ method: "oauth", timestamp: 1 }],
     ...claims,
   };
 }
@@ -56,7 +60,7 @@ export function signIn(claims: Record<string, unknown> = {}) {
 /** The rep the role tests sign in as: the first sample rep, who owns sample leads. */
 export const SAMPLE_REP = {
   id: SAMPLE_REPS[0].id,
-  email: "maya@example.com",
+  email: "maya@authoritysolutions.com",
   firstName: "Maya",
   lastName: "Okafor",
 };

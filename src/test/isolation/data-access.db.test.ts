@@ -117,21 +117,21 @@ vi.mock(
 
 const ADMIN = {
   id: randomUUID(),
-  email: "admin@isolation.test",
+  email: "isolation-admin@authoritysolutions.com",
   firstName: "Isolation",
   lastName: "Admin",
   role: "admin" as const,
 };
 const REP_A = {
   id: SAMPLE_REPS[0].id,
-  email: "rep-a@isolation.test",
+  email: "isolation-rep-a@authoritysolutions.com",
   firstName: "Rep",
   lastName: "A",
   role: "rep" as const,
 };
 const REP_B = {
   id: SAMPLE_REPS[1].id,
-  email: "rep-b@isolation.test",
+  email: "isolation-rep-b@authoritysolutions.com",
   firstName: "Rep",
   lastName: "B",
   role: "rep" as const,

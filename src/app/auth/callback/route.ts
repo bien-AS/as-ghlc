@@ -8,11 +8,9 @@ import {
   NOTICE,
   rememberedPage,
 } from "@/lib/auth/routing";
-import { getSignInProfile } from "@/lib/data/users";
+import { COMPANY_DOMAIN, getSignInProfile } from "@/lib/data/users";
 import { isLive } from "@/lib/flags";
 import { createClient } from "@/lib/supabase/server";
-
-const COMPANY_DOMAIN = "@authoritysolutions.com";
 
 /** ADR-0008 check 1: Google verified the address, and it is a company one. */
 function isCompanyAddress(user: User) {
