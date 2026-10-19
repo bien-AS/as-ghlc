@@ -1,5 +1,9 @@
 allowBuilds:
   '@prisma/engines': true
+  # postinstall downloads the CLI binary; required for `pnpm dev:inngest`.
+  inngest-cli: true
   prisma: true
+  # Transitive of inngest; its postinstall is optional codegen the runtime does not need.
+  protobufjs: false
   sharp: false
   unrs-resolver: false
