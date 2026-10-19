@@ -11,8 +11,8 @@ vi.mock(
   async () => (await import("@/test/server-fakes")).supabaseServerModule,
 );
 vi.mock(
-  "@/lib/prisma",
-  async () => (await import("@/test/server-fakes")).prismaModule,
+  "@/db/client",
+  async () => (await import("@/test/server-fakes")).dbModule,
 );
 
 beforeEach(resetFakes);
@@ -61,7 +61,7 @@ test("POST /api/profile creates the row from the session id and email", async ()
   const response = await post({ firstName: " Ada ", lastName: "Lovelace" });
   expect(response.status).toBe(201);
   expect(await response.json()).toEqual(ada);
-  expect(fake.users.get("auth-user-1")).toEqual(ada);
+  expect(fake.users.get("auth-user-1")).toEqual({ ...ada, active: false });
 });
 
 test("POST /api/profile rejects a client-supplied id or email and writes nothing", async () => {
@@ -150,7 +150,7 @@ test("POST /api/profile/silent creates the profile from the session alone", asyn
   const response = await silentRoute.POST();
   expect(response.status).toBe(201);
   expect(await response.json()).toEqual(ada);
-  expect(fake.users.get("auth-user-1")).toEqual(ada);
+  expect(fake.users.get("auth-user-1")).toEqual({ ...ada, active: false });
 });
 
 test("POST /api/profile/silent for a Google session: 409 profile_form_required, nothing written", async () => {

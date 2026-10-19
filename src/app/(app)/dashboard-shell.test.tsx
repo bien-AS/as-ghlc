@@ -34,8 +34,8 @@ vi.mock(
   async () => (await import("@/test/server-fakes")).supabaseServerModule,
 );
 vi.mock(
-  "@/lib/prisma",
-  async () => (await import("@/test/server-fakes")).prismaModule,
+  "@/db/client",
+  async () => (await import("@/test/server-fakes")).dbModule,
 );
 vi.mock(
   "@/lib/supabase/client",

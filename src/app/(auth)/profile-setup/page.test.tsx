@@ -1,7 +1,7 @@
 import { isValidElement } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
-import { fake, prismaModule, resetFakes, signIn } from "@/test/server-fakes";
+import { dbModule, fake, resetFakes, signIn } from "@/test/server-fakes";
 
 import ProfileSetupPage from "./page";
 import { ProfileSetupForm } from "./profile-setup-form";
@@ -12,8 +12,8 @@ vi.mock(
   async () => (await import("@/test/server-fakes")).supabaseServerModule,
 );
 vi.mock(
-  "@/lib/prisma",
-  async () => (await import("@/test/server-fakes")).prismaModule,
+  "@/db/client",
+  async () => (await import("@/test/server-fakes")).dbModule,
 );
 
 beforeEach(resetFakes);
@@ -24,7 +24,7 @@ afterEach(() => {
 const signUpNames = { dw_first_name: "Ada", dw_last_name: "Lovelace" };
 
 test("rendering the page for a silent-path session writes nothing: no profile from a prefetch or a speculative render", async () => {
-  const create = vi.spyOn(prismaModule.prisma.user, "create");
+  const create = vi.spyOn(dbModule.db, "insert");
   signIn({ user_metadata: signUpNames });
 
   // Rendered twice, as a prefetch followed by the visit would.

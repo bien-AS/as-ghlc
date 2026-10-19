@@ -23,7 +23,7 @@ import { fake, resetFakes, signIn } from "@/test/server-fakes";
  * the two outer boundaries faked: Supabase Auth and the database. Test files
  * wire the fakes in with
  *   vi.mock("@/lib/supabase/server", async () => (await import("@/test/server-fakes")).supabaseServerModule);
- *   vi.mock("@/lib/prisma", async () => (await import("@/test/server-fakes")).prismaModule);
+ *   vi.mock("@/db/client", async () => (await import("@/test/server-fakes")).dbModule);
  *   vi.mock("next/navigation", async () => (await import("@/test/navigation")).navigationModule);
  */
 

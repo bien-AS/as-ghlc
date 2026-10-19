@@ -43,8 +43,8 @@ vi.mock(
   async () => (await import("@/test/server-fakes")).supabaseServerModule,
 );
 vi.mock(
-  "@/lib/prisma",
-  async () => (await import("@/test/server-fakes")).prismaModule,
+  "@/db/client",
+  async () => (await import("@/test/server-fakes")).dbModule,
 );
 // The real function still runs; the test only watches what it is asked to raise.
 vi.mock("@/lib/data/notifications", async (original) => {

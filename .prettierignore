@@ -11,10 +11,7 @@ pnpm-lock.yaml
 skills-lock.json
 pnpm-workspace.yaml
 
-# generated
-generated
 next-env.d.ts
-prisma/migrations
 
 # vendored agent skills (content-hashed in skills-lock.json)
 .agents

@@ -10,15 +10,15 @@ import {
   requireUser,
   silentProfileNames,
 } from "@/lib/data/users";
-import { fake, prismaModule, resetFakes, signIn } from "@/test/server-fakes";
+import { dbModule, fake, resetFakes, signIn } from "@/test/server-fakes";
 
 vi.mock(
   "@/lib/supabase/server",
   async () => (await import("@/test/server-fakes")).supabaseServerModule,
 );
 vi.mock(
-  "@/lib/prisma",
-  async () => (await import("@/test/server-fakes")).prismaModule,
+  "@/db/client",
+  async () => (await import("@/test/server-fakes")).dbModule,
 );
 
 beforeEach(resetFakes);
@@ -67,7 +67,8 @@ test("creating a profile takes the id and email from the session", async () => {
   signIn();
   const user = await createProfile({ firstName: "Ada", lastName: "Lovelace" });
   expect(user).toEqual(ada);
-  expect(fake.users.get("auth-user-1")).toEqual(ada);
+  // Self-made, so inactive until an admin provisions it (ADR-0008).
+  expect(fake.users.get("auth-user-1")).toEqual({ ...ada, active: false });
 });
 
 test("an id or email supplied by the caller is ignored", async () => {
@@ -191,7 +192,8 @@ function logged(spy: { mock: { calls: unknown[][] } }) {
 test("silent creation: makes the row from the session for an email session with both names", async () => {
   signIn({ user_metadata: signUpNames });
   expect(await createProfileSilently()).toEqual(ada);
-  expect(fake.users.get("auth-user-1")).toEqual(ada);
+  // Self-made, so inactive until an admin provisions it (ADR-0008).
+  expect(fake.users.get("auth-user-1")).toEqual({ ...ada, active: false });
 });
 
 test("silent creation: asked twice, or at the same moment, still one row and no error", async () => {
@@ -249,30 +251,30 @@ test("silent creation: an email conflict ends on the form and is logged without 
 test("silent creation: a database failure ends on the form and logs the kind of error, never its message", async () => {
   const log = vi.spyOn(console, "error").mockImplementation(() => {});
   // A driver error whose message quotes the row it was writing.
-  vi.spyOn(prismaModule.prisma.user, "create").mockRejectedValueOnce(
-    Object.assign(
+  vi.spyOn(dbModule.db, "insert").mockImplementationOnce(() => {
+    throw Object.assign(
       new Error(
         "insert failed for (auth-user-1, ada@example.com, Ada, Lovelace)",
       ),
-      { name: "PrismaClientKnownRequestError", code: "P1001" },
-    ),
-  );
+      { name: "DatabaseError", code: "08006" },
+    );
+  });
   signIn({ user_metadata: signUpNames });
 
   expect(await createProfileSilently()).toBeNull();
   expect(log.mock.calls[0][1]).toEqual({
     step: "create-profile",
-    name: "PrismaClientKnownRequestError",
-    code: "P1001",
+    name: "DatabaseError",
+    code: "08006",
   });
   for (const value of PERSONAL) expect(logged(log)).not.toContain(value);
 });
 
 test("silent creation: a failure while resolving the session names that step", async () => {
   const log = vi.spyOn(console, "error").mockImplementation(() => {});
-  vi.spyOn(prismaModule.prisma.user, "findUnique").mockRejectedValueOnce(
+  vi.spyOn(dbModule.db.query.profiles, "findFirst").mockRejectedValueOnce(
     Object.assign(new Error("cannot reach database for ada@example.com"), {
-      name: "PrismaClientInitializationError",
+      name: "DrizzleQueryError",
     }),
   );
   signIn({ user_metadata: signUpNames });
@@ -280,7 +282,7 @@ test("silent creation: a failure while resolving the session names that step", a
   expect(await createProfileSilently()).toBeNull();
   expect(log.mock.calls[0][1]).toEqual({
     step: "resolve-session",
-    name: "PrismaClientInitializationError",
+    name: "DrizzleQueryError",
     code: undefined,
   });
   for (const value of PERSONAL) expect(logged(log)).not.toContain(value);

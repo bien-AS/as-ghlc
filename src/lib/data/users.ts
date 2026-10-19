@@ -1,5 +1,9 @@
+import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { cache } from "react";
+
+import { db } from "@/db/client";
+import { profiles } from "@/db/schema";
 
 import { type AuthStatus, decideRedirect } from "@/lib/auth/routing";
 import {
@@ -7,11 +11,10 @@ import {
   type ProfileInput,
   profileSchema,
 } from "@/lib/auth/schemas";
-import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 
 /*
- * Data access for the User resource, and the shared guards every other
+ * Data access for the signed-in person's profile, and the shared guards every other
  * data-access function calls first (ADR-0002, AGENTS.md).
  *
  * Server only: this module reads the session cookies and the database. The
@@ -106,16 +109,34 @@ async function getSessionIdentity(): Promise<SessionIdentity | null> {
   };
 }
 
+/** The profile columns a CurrentUser carries. */
+const CURRENT_USER = {
+  id: profiles.id,
+  email: profiles.email,
+  firstName: profiles.firstName,
+  lastName: profiles.lastName,
+};
+
+const findProfile = (id: string) =>
+  db.query.profiles.findFirst({
+    where: eq(profiles.id, id),
+    columns: { id: true, email: true, firstName: true, lastName: true },
+  });
+
+/** Postgres' unique_violation, under the error Drizzle wraps it in. */
+const isUniqueViolation = (error: unknown) =>
+  (error as { cause?: { code?: unknown } } | null)?.cause?.code === "23505";
+
 /**
  * The current-user resolver: signed out, signed in without a profile, or the
- * User. One read by primary key, because User.id is the auth user id
- * (ADR-0005). Memoised for the length of one server render.
+ * profile. One read by primary key, because profiles.id is the auth user id
+ * (ADR-0008). Memoised for the length of one server render.
  */
 export const getCurrentUser = cache(async (): Promise<CurrentUserResult> => {
   const identity = await getSessionIdentity();
   if (!identity) return { status: "signed-out" };
 
-  const user = await prisma.user.findUnique({ where: { id: identity.id } });
+  const user = await findProfile(identity.id);
   return user
     ? { status: "ready", identity, user }
     : { status: "no-profile", identity };
@@ -159,9 +180,13 @@ export async function getMe(): Promise<CurrentUser> {
 }
 
 /**
- * Creates the User row for the signed-in person. The id and email come from
+ * Creates the profile row for the signed-in person. The id and email come from
  * the verified session and nowhere else; `input` supplies the two names only,
  * and any other property on it is ignored. Safe to call twice.
+ *
+ * The row is created inactive: only an admin's provisioning gives access
+ * (ADR-0008), so every guard refuses a self-made profile. Sign-up and profile
+ * setup are deleted with Google sign-in (spec 01, S5).
  */
 export async function createProfile(input: ProfileInput): Promise<CurrentUser> {
   const current = await requireSession();
@@ -169,19 +194,22 @@ export async function createProfile(input: ProfileInput): Promise<CurrentUser> {
 
   const { id, email } = current.identity;
   try {
-    return await prisma.user.create({
-      data: {
+    const [created] = await db
+      .insert(profiles)
+      .values({
         id,
-        email,
+        email: email.toLowerCase(),
         firstName: input.firstName,
         lastName: input.lastName,
-      },
-    });
+        active: false,
+      })
+      .returning(CURRENT_USER);
+    return created;
   } catch (error) {
-    if ((error as { code?: unknown } | null)?.code !== "P2002") throw error;
+    if (!isUniqueViolation(error)) throw error;
     // Unique violation: either a second submit won the race (same id, fine),
     // or another profile already uses this email.
-    const existing = await prisma.user.findUnique({ where: { id } });
+    const existing = await findProfile(id);
     if (existing) return existing;
     throw new AccessError("email_conflict");
   }
@@ -194,10 +222,12 @@ export async function createProfile(input: ProfileInput): Promise<CurrentUser> {
  */
 export async function updateProfile(input: ProfileInput): Promise<CurrentUser> {
   const user = await requireUser();
-  return prisma.user.update({
-    where: { id: user.id },
-    data: { firstName: input.firstName, lastName: input.lastName },
-  });
+  const [updated] = await db
+    .update(profiles)
+    .set({ firstName: input.firstName, lastName: input.lastName })
+    .where(eq(profiles.id, user.id))
+    .returning(CURRENT_USER);
+  return updated;
 }
 
 /**
@@ -220,8 +250,8 @@ export function silentProfileNames(
 function describeFailure(error: unknown) {
   const e = error as { name?: unknown; code?: unknown } | null;
   return {
-    // A class name ("PrismaClientKnownRequestError") and a code ("P2002",
-    // "email_conflict"). Never the message: it can quote the values involved.
+    // A class name ("DrizzleQueryError") and a code ("email_conflict").
+    // Never the message: it can quote the values involved.
     name: typeof e?.name === "string" ? e.name : typeof error,
     code: typeof e?.code === "string" ? e.code : undefined,
   };
