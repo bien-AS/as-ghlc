@@ -6,7 +6,6 @@ import { AccessError, requireUser } from "@/lib/data/users";
 import {
   type Capability,
   can,
-  type PreviewRoleInput,
   type Role,
   roleSchema,
   type ViewerSummary,
@@ -16,13 +15,13 @@ import {
  * Who is asking, and as which role (spec 12; question 7, ASSUMED).
  *
  * THE SEAM. `getViewer` is the one function that resolves the viewer's role.
- * Today there is no Workspace membership, so it returns the role being
- * PREVIEWED: a cookie set by the "Viewing as" control, honoured only while the
- * dashboard runs on sample data. Going live means replacing `resolveRole` with
- * a read of the user's membership and deleting the preview. Screens, hooks and
- * handlers ask this module and never read the cookie.
+ * Today there is no membership, so every viewer is an owner. The role preview
+ * ("Viewing as") is deleted (spec 01); ponytail: `resolveRole` still reads the
+ * cookie it left, which nothing in the app sets any more, so the tests can
+ * view as another role. Spec 01 S4 replaces it with `profiles.role`. Screens,
+ * hooks and handlers ask this module and never read the cookie.
  *
- * The preview is not access control. The real guard is `requireUser`, which
+ * A role here is not access control. The real guard is `requireUser`, which
  * `getViewer` calls first; a role here only narrows what sample data is shown.
  */
 
@@ -85,23 +84,5 @@ export async function getViewerSummary(): Promise<ViewerSummary> {
     role: viewer.role,
     preview: SAMPLE_DATA,
     staffRep: viewer.role === "staff" ? PREVIEW_STAFF_REP : null,
-  };
-}
-
-/** Preview only: remembers which role to show. Refused once data is real. */
-export async function setPreviewRole(
-  input: PreviewRoleInput,
-): Promise<ViewerSummary> {
-  await requireUser();
-  if (!SAMPLE_DATA) throw new AccessError("forbidden");
-  (await cookies()).set(PREVIEW_ROLE_COOKIE, input.role, {
-    path: "/",
-    sameSite: "lax",
-    httpOnly: true,
-  });
-  return {
-    role: input.role,
-    preview: true,
-    staffRep: input.role === "staff" ? PREVIEW_STAFF_REP : null,
   };
 }

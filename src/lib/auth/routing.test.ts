@@ -19,9 +19,11 @@ const table: [string, string | null, string | null, string | null][] = [
   ],
   ["/profile-setup", "/sign-in", SHOWN, "/dashboard"],
   ["/dashboard", "/sign-in?next=%2Fdashboard", "/profile-setup", SHOWN],
+  ["/leads/42", "/sign-in?next=%2Fleads%2F42", "/profile-setup", SHOWN],
+  ["/admin/reps", "/sign-in?next=%2Fadmin%2Freps", "/profile-setup", SHOWN],
   [
-    "/dashboard/leads/42",
-    "/sign-in?next=%2Fdashboard%2Fleads%2F42",
+    "/settings/profile",
+    "/sign-in?next=%2Fsettings%2Fprofile",
     "/profile-setup",
     SHOWN,
   ],
@@ -42,9 +44,9 @@ test.each(table)("%s", (route, ...expected) => {
 });
 
 test("remembers the whole requested address, query included", () => {
-  expect(
-    decideRedirect("/dashboard/leads?stage=won&page=2", "signed-out"),
-  ).toBe("/sign-in?next=%2Fdashboard%2Fleads%3Fstage%3Dwon%26page%3D2");
+  expect(decideRedirect("/leads?stage=won&page=2", "signed-out")).toBe(
+    "/sign-in?next=%2Fleads%3Fstage%3Dwon%26page%3D2",
+  );
 });
 
 test("a query or trailing slash does not change which row applies", () => {
@@ -52,6 +54,7 @@ test("a query or trailing slash does not change which row applies", () => {
     "/dashboard",
   );
   expect(decideRedirect("/profile-setup/", "signed-out")).toBe("/sign-in");
-  // A route that merely starts with the same letters is not the dashboard.
+  // A route that merely starts with the same letters is not an app section.
   expect(decideRedirect("/dashboards", "signed-out")).toBeNull();
+  expect(decideRedirect("/leadership", "signed-out")).toBeNull();
 });

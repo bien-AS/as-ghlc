@@ -29,14 +29,13 @@ export const CAPABILITIES = [
   /** Every lead in the Workspace, and the filter by rep. */
   "see_all_leads",
   "manage_users",
-  "manage_workspace",
   "manage_connections",
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
 /**
  * Question 7 (proposed): staff work their own leads; admins and owners see
- * every lead and manage users, the Workspace and its connections. Spec 12
+ * every lead and manage users and connections. Spec 12
  * defines no owner-only setting, so Owner and Admin are the same here.
  */
 const ALLOWED: Record<Role, readonly Capability[]> = {
@@ -57,7 +56,3 @@ export const viewerSchema = z.object({
   staffRep: z.object({ id: z.string(), name: z.string() }).nullable(),
 });
 export type ViewerSummary = z.infer<typeof viewerSchema>;
-
-/** Body of POST /api/viewer/role. */
-export const previewRoleInputSchema = z.strictObject({ role: roleSchema });
-export type PreviewRoleInput = z.infer<typeof previewRoleInputSchema>;

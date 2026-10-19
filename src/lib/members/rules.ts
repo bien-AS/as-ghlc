@@ -41,8 +41,7 @@ export function memberLock(
 }
 
 export const MEMBER_LOCK_REASON: Record<MemberLock, string> = {
-  // The sample dashboard has no membership: the viewer's role is the preview.
-  self: "This is you. Your role follows “Viewing as” while the data is sample data.",
+  self: "This is you. You cannot change your own role.",
   last_owner:
     "The only owner. Make someone else an owner before changing or removing this one.",
 };

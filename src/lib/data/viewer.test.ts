@@ -1,6 +1,5 @@
 // @vitest-environment node
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { POST as postRole } from "@/app/api/viewer/role/route";
 import { GET as getViewerRoute } from "@/app/api/viewer/route";
 import {
   getLead,
@@ -19,10 +18,9 @@ import {
   PREVIEW_ROLE_COOKIE,
   PREVIEW_STAFF_REP,
   requireCapability,
-  setPreviewRole,
 } from "@/lib/data/viewer";
 import { listLeadsQuerySchema } from "@/lib/leads/schemas";
-import { CAPABILITIES, can, ROLES, viewerSchema } from "@/lib/roles";
+import { CAPABILITIES, can, viewerSchema } from "@/lib/roles";
 import { fake, resetFakes, signIn } from "@/test/server-fakes";
 
 vi.mock(
@@ -89,9 +87,6 @@ test("the role is resolved after the real guard: signed out and profile-less cal
   await expect(getViewer()).rejects.toEqual(refusedWith("profile_required"));
   fake.claims = null;
   await expect(getViewer()).rejects.toEqual(refusedWith("unauthenticated"));
-  await expect(setPreviewRole({ role: "staff" })).rejects.toEqual(
-    refusedWith("unauthenticated"),
-  );
 });
 
 test("staff can do none of the admin things; admin and owner can do all of them (question 7, proposed)", async () => {
@@ -163,44 +158,14 @@ test("staff asking for another rep's lead, or changing it, are told it does not 
   expect((await getLead(other.id)).exit).toBeNull();
 });
 
-// --- the preview's routes ----------------------------------------------------------
+// --- the viewer route ---------------------------------------------------------------
 
-const post = (body: unknown) =>
-  postRole(
-    new Request("http://localhost:3000/api/viewer/role", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }),
-  );
+test("GET /api/viewer answers with the role, and 401 when signed out", async () => {
+  const response = await getViewerRoute();
+  expect(viewerSchema.parse(await response.json()).role).toBe("owner");
 
-test("GET /api/viewer answers with the role; POST /api/viewer/role remembers a preview and refuses anything that is not a role", async () => {
-  const before = await getViewerRoute();
-  expect(viewerSchema.parse(await before.json()).role).toBe("owner");
-
-  for (const role of ROLES) {
-    const response = await post({ role });
-    expect(response.status).toBe(200);
-    expect(viewerSchema.parse(await response.json()).role).toBe(role);
-    expect(fake.cookies.get(PREVIEW_ROLE_COOKIE)).toBe(role);
-    expect(viewerSchema.parse(await (await getViewerRoute()).json()).role).toBe(
-      role,
-    );
-  }
-
-  for (const bad of [{ role: "root" }, {}, { role: "admin", extra: 1 }]) {
-    const response = await post(bad);
-    expect(response.status).toBe(400);
-    expect((await response.json()).error.code).toBe("invalid_input");
-  }
-  expect(fake.cookies.get(PREVIEW_ROLE_COOKIE)).toBe("staff");
-});
-
-test("signed out, both viewer routes answer 401, and no preview is remembered", async () => {
   fake.claims = null;
   expect((await getViewerRoute()).status).toBe(401);
-  expect((await post({ role: "staff" })).status).toBe(401);
-  expect(fake.cookies.has(PREVIEW_ROLE_COOKIE)).toBe(false);
 });
 
 // --- what the other blocks record on a lead ----------------------------------------
