@@ -24,7 +24,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Build plan
 
-`docs/packet/build-plan.md`, adapted by ADR-0007 and the specs in `docs/specs/`. Current session: see STATUS.md `Now`. Sessions are scope units in six arcs; merging in a sitting is normal, each merged session still gets its build-log line; **IDs are never renumbered** (insert as S8b). Handoff protocol: commit everything, validator + routes_diff clean, tests + CI floor green, STATUS.md + TODO.md + build-log updated. Lee's GHL lane: `docs/packet/ghl-workstream.md`; S6, S10, S13, S14 name their Lee dependencies.
+`docs/packet/build-plan.md`, adapted by ADR-0007 and the specs in `docs/specs/`. Current session: the spec being worked (`docs/specs/`, whose `sessions:` frontmatter names the packet sessions it covers) and the last session's commit and report, per `docs/agents/handoff-foundations.md`. Sessions are scope units in six arcs; merging in a sitting is normal, each merged session is still named in the commit and report; **IDs are never renumbered** (insert as S8b). Handoff protocol: commit everything, validator + routes_diff clean, tests + CI floor green, then a report of what passed, what is outstanding (owner steps, assumptions built on) and where the next session starts. Lee's GHL lane: `docs/packet/ghl-workstream.md`; S6, S10, S13, S14 name their Lee dependencies.
 
 ## QA loop
 
