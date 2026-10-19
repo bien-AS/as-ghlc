@@ -4,7 +4,6 @@ status: needs-clarification
 sessions: S6 (and the write-backs used by S8, S12, S13, S14)
 registry: sync-log
 waiting_on:
-  - Bien: a read-only Private Integration Token in the production sub-account (see "Working without a dev location")
   - Lee: the four outbound webhooks pointed at a deployed preview of the app
   - Lee: whether a dev sub-account can be made; until then writes stay switched off outside supervised tests
   - Lee: a custom field for the proposal link (needed by W5, not by S6)
@@ -31,7 +30,7 @@ C1 being a draft matters: the GHL spec says GHL moves a lead to New Lead "on int
 
 A write to this sub-account fires Lee's published workflows, which email and text real people. So until a dev sub-account exists:
 
-1. **The app's token is read-only:** `contacts.readonly`, `opportunities.readonly`, `locations/customFields.readonly`, `calendars.readonly`, `calendars/events.readonly`, `users.readonly`. Bien creates it under Settings, Private Integrations, named "AS Sales App (read-only)". Reads, import, reconcile and webhooks are all built and tested with it.
+1. **The app's token is read-only** (created by Bien on 20 October; reads of the pipeline, custom fields, calendars and users all succeed and every id matches this spec): `contacts.readonly`, `opportunities.readonly`, `locations/customFields.readonly`, `calendars.readonly`, `calendars/events.readonly`, `users.readonly`. Bien creates it under Settings, Private Integrations, named "AS Sales App (read-only)". Reads, import, reconcile and webhooks are all built and tested with it.
 2. **Writes are built and tested against a stubbed GHL**, and switched off in every environment by `GHL_WRITES_ENABLED=false`. The runner records a write it would have made in the sync log as "skipped: writes disabled", so the seam is still visible.
 3. **The first real writes** happen in one supervised session with Lee: a second token with the two write scopes, on test contacts Lee creates, with Lee watching which workflows fire. Acceptance check 7 is run then.
 4. If Lee makes a dev sub-account, everything above moves to it, writes switch on there, and production keeps read-only until S17.
@@ -42,7 +41,7 @@ The production IDs below are the ones to configure now; a dev sub-account would 
 
 - **One Private Integration Token per location** (dev, production), created in the sub-account under Settings, Private Integrations. Not OAuth: one sub-account needs no marketplace app, and OAuth would need Agency Pro.
 - **Scopes (eight):** `contacts.readonly`, `contacts.write`, `opportunities.readonly`, `opportunities.write`, `locations/customFields.readonly`, `calendars.readonly`, `calendars/events.readonly`, `users.readonly`. Not `conversations.write`: GHL sends every client email and SMS, and the app must not be able to.
-- Every request: `Authorization: Bearer <token>`, `Version: 2021-07-28` (without it calls fail like auth errors), base `https://services.leadconnectorhq.com`.
+- Every request: `Authorization: Bearer <token>`, `Version: 2021-07-28` (without it calls fail like auth errors), base `https://services.leadconnectorhq.com`, and an explicit `User-Agent` (for example `as-sales-app/1.0`). GHL sits behind Cloudflare, which answered 403 "Error 1010: Access denied" to Python's default user agent on 20 October while curl's passed; set it rather than depend on the runtime's default.
 - The token lives in the environment (`GHL_PRIVATE_TOKEN`), never in the repo or a table. Rotation, about every 90 days, is a config change.
 - One module, `src/lib/services/ghl/`, holds every GHL call. Nothing else imports it except the connector's data-access functions and Inngest jobs.
 
@@ -130,7 +129,7 @@ Reads (checks 1 to 5, 10, 11) against production with the read-only token; write
 1. **Silence paths.** GHL moves a lead to Nurturing "after silence"; the packet's S14 has the app move leads by age (14 days unbooked to Nurturing, Lost after the no-show chase, Lost 14 days silent after the proposal). Assumed: GHL moves them and the app mirrors, showing age and thresholds only. Lee and Mitchell confirm (spec 14).
 2. **Proposal link field.** W5 needs a contact field Lee has not created yet.
 3. **Deck link (W2).** Deferred by the packet; Lee may contest it. Built behind a flag either way.
-4. **Calendars.** Both calendar ids come from a September audit; Lee re-verifies them.
+4. **Calendars.** Verified through the API on 20 October: Discovery Session `EyS5yBQrME3y1GUq8cwa`, Proposal Review `UXReMLDiPGIzaIjGrNSr` (plus "Agent One's Personal Calendar", not used). Closed.
 5. **Reps in GHL.** None exist yet; GHL assigns the placeholder user `c1OqILwMVMfbMStYQd0F`. Until real reps exist, `assigned_to` stays empty and only admins see unassigned leads. The mapping from GHL user to profile is `profiles.ghl_user_id`, set on the reps screen.
 6. **Typeform.** The packet says intake stays on Typeform; this spec starts from GHL's Get Started form webhook. Lee confirms Typeform submissions reach GHL as that form (and so trigger "contact created").
 7. **Webhook verification.** Whether GHL workflow webhooks carry a signature, or only the secret we put in the URL or a header. Checked on the first webhook Lee points at the preview.

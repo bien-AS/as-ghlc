@@ -50,8 +50,8 @@ Screens are grouped under an `(app)` route group with the shell layout; `/login`
 ## 1. Stack (S2)
 
 - **Drizzle** with `drizzle-kit`. Schema in `src/db/schema.ts`, one client in `src/db/client.ts` using the pooled `DATABASE_URL`; migrations generated, read, then applied with `DIRECT_URL`. `pnpm db:generate`, `pnpm db:migrate`.
-- **Inngest** for every background job: one client, one serve route at `/api/inngest`, functions under `src/inngest/`. Local runs use the Inngest dev server.
-- **OpenRouter** for every model call, through one module (`src/lib/services/llm.ts`). Each call logs model, tokens and cost; cost is `null` until known, never 0.
+- **Inngest** for every background job: one client, one serve route at `/api/inngest` (Node runtime), functions under `src/lib/inngest/functions/`. **Local only for now**, copied from TopicVane (`C:/topicvane/main`): the `inngest` SDK plus `inngest-cli` as a dev dependency (allowed to build in `pnpm-workspace.yaml`), a `dev:inngest` script running `inngest-cli dev -u http://localhost:3000/api/inngest` beside `pnpm dev`, and `INNGEST_DEV=1` in a committed `.env.development` (which Next loads only in development), never in `.env.example`. The route calls a guard at module scope that throws when `INNGEST_DEV` is set on a deployed environment (`VERCEL_ENV` present), because dev mode turns off request signing. Deployed environments get `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY` when Inngest Cloud is set up.
+- **OpenRouter** for every model call, through one module (`src/lib/services/llm.ts`). The default model is `OPENROUTER_MODEL` (`anthropic/claude-sonnet-5.5`); a job may name another. Each call logs model, tokens and cost; cost is `null` until known, never 0.
 - **Environment:** add `OPENROUTER_API_KEY`, `INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY`, and the GHL, Presenton, Fathom, SPT and Invoice Ninja variables as their specs need them. `.env.example` lists every name with a one-line purpose; `.env` stays out of git.
 
 ## 2. Registry and QA machinery (S2)

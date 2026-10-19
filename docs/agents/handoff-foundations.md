@@ -27,7 +27,8 @@ These are the source of truth; this prompt only adds what they leave out.
 - `docs/packet/build-plan.md` (S1 to S8), `docs/packet/product-doc.md` (sections 4 and 7), `docs/packet/qa-plan.md`, `docs/packet/ghl-workstream.md`, `docs/packet/screen-registry.md`, and the `screen-registry.json` entry of every screen a part builds.
 - `GLOSSARY.md` and `DESIGN.md`. The design authority is the Vantage design system in `node_modules/@vantage/design-system` (`docs/RULES.md` is law).
 - The build packet's repo package, for the files part 1 copies in: `C:\Users\ajapa\Downloads\AS-Sales-App-build-packet-2026-10-07\_plans\as-sales-app\repo-package\` (`scripts/`, `.claude/agents/`, `.claude/commands/`, `CLAUDE.md`).
-- `.env.example` lists every environment variable with its purpose. The owner fills `.env`; never print, log or commit a value from it.
+- `.env.example` lists every environment variable with its purpose. The owner fills `.env`; never print, log or commit a value from it. Already set by the owner: Supabase, Google sign-in (in Supabase itself), `OPENROUTER_API_KEY`, `GHL_PRIVATE_TOKEN` (read-only). Inngest runs locally, so it needs no keys yet.
+- TopicVane (`C:/topicvane/main`), a sibling project, for the local Inngest setup to copy: `src/lib/inngest/client.ts`, `src/lib/inngest/assert-cloud-mode.ts`, `src/app/api/inngest/route.ts`, `.env.development`, the `dev:inngest` script in `package.json`, the `inngest-cli` entry in `pnpm-workspace.yaml`, and the Inngest section of its README. Copy the pattern, not its functions. Read only; change nothing there.
 
 ## Part 1: foundations (spec 01)
 
@@ -37,7 +38,7 @@ Each step leaves the app working, the tests green and a commit behind it.
 2. **Routes to the registry.** Move the mockups to the registry routes in the spec's route map, under an `(app)` route group, with `src/lib/flags.ts` hiding any link whose destination is not live in production. Delete the role preview and Workspace settings. Update the navigation table, tests and internal links. When `routes_diff.py` shows no built-but-unregistered route, turn on the Stop hook.
 3. **Drizzle in, Prisma out.** Schema for the seventeen tables, RLS enabled with no policies in the same migration, `src/db/client.ts`, `db:generate` and `db:migrate`. Before the first migration, put the drafted columns to the owner in one message and wait for a yes. Then remove Prisma, its generated client, config and scripts.
 4. **Guards and isolation.** `requireProfile`, `requireAdmin`, `leadScope`, called first by every data-access function. Write both isolation suites failing first, show them failing, then make them pass.
-5. **Inngest and OpenRouter.** The Inngest client and `/api/inngest`; the one OpenRouter module, logging model, tokens and cost on every call.
+5. **Inngest and OpenRouter.** Inngest runs **locally only** for now, set up as TopicVane does: the `inngest` SDK, `inngest-cli` as a dev dependency allowed to build, `pnpm dev:inngest` (`inngest-cli dev -u http://localhost:3000/api/inngest`) run beside `pnpm dev`, `INNGEST_DEV=1` in a committed `.env.development` and never in `.env.example`, and the guard that refuses `INNGEST_DEV` on a deployed environment. Add a README section saying how to run the two processes. Then the one OpenRouter module: default model from `OPENROUTER_MODEL`, logging model, tokens and cost on every call.
 6. **Google sign-in.** `/login`, `/auth/callback`, `/access-denied`, sign-out, the proxy redirect to `/login`, and `pnpm seed:admins`. Google sign-in and the Supabase provider are already set up by the owner. Delete sign-up, password reset and profile setup with their routes, tests and copy. Then remind the owner to turn off "Allow new users to sign up" and the email provider in Supabase.
 7. **Shell and state libraries.** Sidebar from the registry's nav gating matrix, admin group omitted for reps; empty states on the kit's `EmptyState` with an explicit variant; `not-found.tsx`, `error.tsx` boundaries and the offline banner.
 
@@ -45,11 +46,10 @@ Each step leaves the app working, the tests green and a commit behind it.
 
 Read the spec's "What the account looks like" and "Working without a dev location" first. There is one GHL sub-account and it is production: **a write to it fires Lee's workflows and emails real people.**
 
-- Build against the read-only token (`GHL_PRIVATE_TOKEN`). Verify the configured ids at startup, then import, the webhook route, the Inngest jobs that read records back, and the nightly reconcile.
+- Build against the read-only token (`GHL_PRIVATE_TOKEN`, already in `.env`; the owner's check on 20 October read the pipeline, custom fields, calendars and users, and every id matched spec 06). Send an explicit `User-Agent` on every call: Cloudflare in front of GHL rejects some runtime defaults with 403 "Error 1010". Verify the configured ids at startup, then import, the webhook route, the Inngest jobs that read records back, and the nightly reconcile.
 - Build the write runner and W1, W3, W4 (and W2 behind its flag) against a stubbed GHL in tests. `GHL_WRITES_ENABLED` stays `false`; a write that would have been made is logged as skipped. Never set it to `true`, and never create a write-scoped token: the first real writes happen in a session the owner runs with Lee.
 - The sync log screen at `/admin/sync-log`.
 - Webhooks need a public URL; Lee points them at a deployed preview. Until then, test the handler with recorded payloads.
-- If the owner has not created the read-only token yet, ask for it and continue with everything that runs on stubs.
 
 ## Part 3: leads, research and the dashboard (spec 07)
 
