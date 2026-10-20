@@ -76,6 +76,11 @@ import {
   sendProposal,
   simulateProposalEvent,
 } from "@/lib/data/proposals";
+import {
+  estimateResearchCost,
+  getLatestResearch,
+  requestResearch,
+} from "@/lib/data/research";
 import { listSyncLog, retryWrite } from "@/lib/data/sync-log";
 import { getMe, updateProfile } from "@/lib/data/users";
 import { getViewerSummary } from "@/lib/data/viewer";
@@ -178,6 +183,7 @@ const listCalls = (): Calls => ({
   listProposalLeads,
   listNotifications: () => listNotifications(notificationsQuery()),
   getUnreadCount,
+  estimateResearchCost,
 });
 
 /** Every read or write of one lead, or of something that belongs to it. */
@@ -214,6 +220,8 @@ const leadCalls = (
   createNotification: () =>
     createNotification({ leadId, type: "proposal_signed" }),
   markNotificationRead: () => markNotificationRead(notificationId),
+  getLatestResearch: () => getLatestResearch(leadId),
+  requestResearch: () => requestResearch(leadId),
 });
 
 /** The admin cluster: reps, integrations and the GHL sync log. */
