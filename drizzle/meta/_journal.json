@@ -15,6 +15,13 @@
       "when": 1792440659034,
       "tag": "0001_drop_prisma_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792473249869,
+      "tag": "0002_webhook_events_and_status_defs",
+      "breakpoints": true
     }
   ]
 }

@@ -128,6 +128,16 @@ const rows = (n: 0 | 1): [PgTable, Record<string, unknown>][] => [
     { provider: n === 0 ? "presenton" : "fathom" },
   ],
   [schema.appSettings, { key: `rls-${n}`, value: {} }],
+  [
+    schema.webhookEvents,
+    {
+      provider: "ghl",
+      eventId: `rls-event-${n}`,
+      type: "rls",
+      verified: false,
+      payload: {},
+    },
+  ],
 ];
 
 const tables = rows(0).map(([table]) => table);
@@ -155,8 +165,8 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
     await client?.end();
   });
 
-  test("the check covers all seventeen tables", () => {
-    expect(tables).toHaveLength(17);
+  test("the check covers all eighteen tables", () => {
+    expect(tables).toHaveLength(18);
   });
 
   // The catalog, not the Drizzle list: a table added outside the schema is caught too.
