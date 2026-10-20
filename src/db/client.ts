@@ -4,7 +4,13 @@ import * as schema from "./schema";
 
 // DATABASE_URL is Supabase's transaction pooler (port 6543), which cannot keep prepared statements.
 // node-postgres only prepares a statement when a query is given a name (`.prepare("name")`): never name one here.
+/** How long a query waits for a free pooled connection before it fails, instead of waiting forever. */
+const CONNECTION_TIMEOUT_MS = 10_000;
+
 export const db = drizzle({
-  connection: { connectionString: process.env.DATABASE_URL },
+  connection: {
+    connectionString: process.env.DATABASE_URL,
+    connectionTimeoutMillis: CONNECTION_TIMEOUT_MS,
+  },
   schema,
 });

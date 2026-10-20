@@ -101,6 +101,8 @@ test("an admin sees every active lead, the rep column and the rep filter (check 
   expect(imogen.getByText("Appointment - Completed")).toBeDefined();
   expect(imogen.getByText("Maya Okafor")).toBeDefined();
   expect(imogen.getByText("3 days")).toBeDefined();
+  // Her discovery call is done: the next step lead detail shows, not "Open deck".
+  expect(imogen.getByText("Qualified")).toBeDefined();
   expect(within(row("Beatrix Olander")).getByText("Unassigned")).toBeDefined();
   expect(
     within(row("Beatrix Olander")).getByText("No status yet"),

@@ -14,6 +14,8 @@ const BASE_URL = "https://services.leadconnectorhq.com";
 const MAX_ATTEMPTS = 5;
 /** The longest 429 backoff slept; GHL asking for more fails the call instead. */
 const MAX_BACKOFF_MS = 60_000;
+/** How long one request may wait for GHL's answer before it is aborted (and fails). */
+export const REQUEST_TIMEOUT_MS = 15_000;
 /** GHL's largest page for opportunity search. */
 export const PAGE_SIZE = 100;
 
@@ -104,7 +106,8 @@ function backoffMs(res: Response, attempt: number): number {
 /**
  * Every GHL call goes through here: the auth, version and user-agent headers
  * (Cloudflare answers 403 "Error 1010" to a runtime's default user agent), and
- * retry on 429 with exponential backoff (capped at 60s). Any method but GET is
+ * retry on 429 with exponential backoff (capped at 60s), each attempt aborted
+ * after REQUEST_TIMEOUT_MS. Any method but GET is
  * refused unless GHL_WRITES_ENABLED is exactly "true". Returns the parsed JSON body.
  */
 export async function ghlRequest(
@@ -135,6 +138,7 @@ export async function ghlRequest(
         ...(init.body ? { "Content-Type": "application/json" } : {}),
         ...init.headers,
       },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     // A wait past the cap is not slept: it falls through to a GhlError 429.
     const wait =

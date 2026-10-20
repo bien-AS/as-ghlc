@@ -28,6 +28,7 @@ import {
   setQualification,
 } from "@/lib/data/leads";
 import { listStatusDefs } from "@/lib/data/status-defs";
+import { nextStep } from "@/lib/leads/rules";
 import {
   dashboardSchema,
   leadDetailSchema,
@@ -289,6 +290,24 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
 
     await expect(markSpam(lead.id)).rejects.toThrow("conflict");
     expect(await syncRows(lead.id)).toHaveLength(1);
+  });
+
+  test("the review queue cannot mark a won suspect spam: refused, nothing written", async () => {
+    const lead = await seed({ verdict: "suspect", stage: "Lead Won" });
+    await expect(reviewSuspect(lead.id, { outcome: "spam" })).rejects.toThrow(
+      "conflict",
+    );
+    expect(await syncRows(lead.id)).toEqual([]);
+    expect(await events(lead.id)).toEqual([]);
+  });
+
+  test("the list's next step is the one lead detail shows: a held call reads Qualified in both", async () => {
+    const lead = await afterCall();
+    const item = (await list()).find((row) => row.id === lead.id);
+    if (!item) throw new Error("the lead is not listed");
+    const detail = await getLead(lead.id);
+    expect(nextStep(item)).toEqual(nextStep(detail));
+    expect(nextStep(item).main).toBe("qualify");
   });
 
   test("clearing a suspect writes W1 Valid once and records the human run", async () => {

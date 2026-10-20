@@ -603,16 +603,9 @@ const stageText = (lead: LeadListItem) =>
       ? STAGE_LABEL[lead.stage]
       : null;
 
-/**
- * The row's next step, from the same rule lead detail uses.
- * ponytail: a list row knows only its next booking, not past ones, so a lead
- * whose discovery call is done reads "Open deck" here until its page is open.
- */
+/** The row's next step: the same rule, on the same fields, as lead detail. */
 function nextStepOf(lead: LeadListItem) {
-  const step = nextStep({
-    ...lead,
-    bookings: lead.nextBooking ? [lead.nextBooking] : [],
-  });
+  const step = nextStep(lead);
   return {
     action: step.main,
     label: step.main ? ACTION_LABEL[step.main] : "Nothing to do",

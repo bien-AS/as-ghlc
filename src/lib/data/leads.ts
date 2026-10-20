@@ -58,10 +58,11 @@ import type {
   SyncEntry,
 } from "@/lib/leads/schemas";
 import { EXITS, NEEDS, STAGES, UNASSIGNED } from "@/lib/leads/schemas";
+import { runWrite, type Write } from "@/lib/services/ghl/runner";
 import {
-  writeMarkSpam,
-  writeQualification,
-  writeValidationVerdict,
+  markSpamWrite,
+  qualificationWrite,
+  validationVerdictWrite,
 } from "@/lib/services/ghl/writes";
 
 /*
@@ -287,6 +288,7 @@ function toListItem(
     owner: owner && { id: owner.id, name: personName(owner) },
     nextBooking:
       bookings.find((booking) => booking.state === "confirmed") ?? null,
+    bookings,
     createdAt: lead.createdAt.toISOString(),
     lastActivityAt: iso(lead.lastActivityAt),
     archivedAt: iso(lead.deletedAt),
@@ -324,7 +326,6 @@ function toDetailBase(row: Row, lastSync: SyncEntry | null): LeadDetail {
     formAnswers: formAnswersOf(lead.formAnswers),
     updatedAt: lead.updatedAt.toISOString(),
     verdictRecord: null,
-    bookings: bookingsOf(lead),
     deck: null,
     proposal: null,
     invoice: null,
@@ -592,9 +593,8 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 /**
  * The lead in the profile's scope, locked until the transaction ends, so two
  * clicks on the same action make one decision: the second waits, then finds
- * the decision already made. NO KEY UPDATE, not UPDATE: the sync-log insert the
- * write path makes on its own connection takes a KEY SHARE lock on this row
- * (its foreign key), which UPDATE would block.
+ * the decision already made. NO KEY UPDATE, not UPDATE: it only has to stop a
+ * second decision, not the foreign keys other rows hold on the lead (KEY SHARE).
  */
 async function lockLead(tx: Tx, profile: Profile, leadId: string) {
   if (!isUuid(leadId)) throw new AccessError("not_found");
@@ -609,23 +609,49 @@ async function lockLead(tx: Tx, profile: Profile, leadId: string) {
 
 /** What `nextStep` needs, from the row: the same rule the page shows. */
 const stepOf = (lead: LeadRow) =>
-  nextStep({
-    ...toListItem({ lead, owner: null, status: null }, null),
-    bookings: bookingsOf(lead),
-  });
+  nextStep(toListItem({ lead, owner: null, status: null }, null));
 
-/** Runs a write on a locked lead, then reads it back through the scope. */
+/**
+ * Makes a decision on a locked lead in one short transaction, then sends the
+ * GHL write it queued (if any) after the commit, and reads the lead back
+ * through the scope.
+ *
+ * GHL is called outside any transaction: a slow GHL (429 backoff, the request
+ * timeout) never holds the lead's lock or a second pooled connection, and a
+ * failed write, or a crash after the commit, leaves the decision standing with
+ * its sync-log row pending or failed, to retry from there (spec 06).
+ */
 async function change(
   profile: Profile,
   leadId: string,
-  write: (tx: Tx, lead: LeadRow) => Promise<void>,
+  decide: (tx: Tx, lead: LeadRow) => Promise<Write | undefined>,
 ): Promise<LeadDetail> {
-  await db.transaction(async (tx) => {
+  const write = await db.transaction(async (tx) => {
     const lead = await lockLead(tx, profile, leadId);
     if (lead.deletedAt) throw new AccessError("conflict");
-    await write(tx, lead);
+    return decide(tx, lead);
   });
+  // Picks up the pending row `queue` logged under the same key.
+  if (write) await runWrite(write);
   return detailOf(profile, leadId);
+}
+
+/**
+ * Logs a decision's GHL write as pending in the decision's own transaction, so
+ * the two commit together; `change` sends it after the commit. Returns the
+ * row's id, for the event's sync_log_id.
+ */
+async function queue(tx: Tx, write: Write): Promise<string> {
+  const [row] = await tx
+    .insert(ghlSyncLog)
+    .values({
+      leadId: write.leadId,
+      writeType: write.writeType,
+      idempotencyKey: write.idempotencyKey,
+      payload: write.plan,
+    })
+    .returning({ id: ghlSyncLog.id });
+  return row.id;
 }
 
 /** A timeline entry made by the signed-in person. The table is append-only. */
@@ -648,14 +674,9 @@ const event = (
 
 /*
  * A decision that GHL receives (W3, W4, W1) is one lead_status_events row and
- * one ghl_sync_log row, linked by the event's sync_log_id. The event is
- * append-only, so its id is made first, the write runs with it as the
- * decision id, and the event is then inserted already linked.
- *
- * ponytail: the write commits on its own connection before the event does. If
- * the event insert then fails, the sync row stays with no event; with writes
- * on, a retry is a new decision and writes again. Move the runner onto the
- * caller's transaction if that ever happens in practice.
+ * one ghl_sync_log row, linked by the event's sync_log_id, committed together
+ * (the row pending) before GHL is called. The event is append-only, so the
+ * decision id is made first and the event is inserted already linked.
  */
 
 /** Qualify or Not qualified after the discovery call: W3, and the stage it sets (spec 06). */
@@ -669,7 +690,7 @@ export async function setQualification(
       throw new AccessError("conflict");
     }
     const id = randomUUID();
-    const sync = await writeQualification(
+    const write = qualificationWrite(
       { id: lead.id, ghlOpportunityId: lead.ghlOpportunityId },
       input.decision,
       id,
@@ -678,34 +699,38 @@ export async function setQualification(
     await event(tx, user, lead, {
       id,
       toStage,
-      syncLogId: sync.id,
+      syncLogId: await queue(tx, write),
       note: input.decision === "qualified" ? "Qualified" : "Not qualified",
     });
     await tx.update(leads).set({ stage: toStage }).where(eq(leads.id, lead.id));
+    return write;
   });
 }
 
-/** Marks the lead spam: W4, nothing else in GHL (spec 06). GHL does the removal. */
+/**
+ * Marks the lead spam: W4, nothing else in GHL (spec 06). GHL does the removal.
+ * Both ways in (Mark as spam, and the review queue's spam) are refused here
+ * unless the lead allows it: a won lead is never marked spam.
+ */
 async function markAsSpam(tx: Tx, user: Profile, lead: LeadRow) {
+  if (!stepOf(lead).canMarkSpam) throw new AccessError("conflict");
   const id = randomUUID();
-  const sync = await writeMarkSpam(
+  const write = markSpamWrite(
     { id: lead.id, ghlContactId: lead.ghlContactId },
     id,
   );
   await event(tx, user, lead, {
     id,
-    syncLogId: sync.id,
+    syncLogId: await queue(tx, write),
     note: "Marked as spam",
   });
   await tx.update(leads).set({ verdict: "spam" }).where(eq(leads.id, lead.id));
+  return write;
 }
 
 export async function markSpam(leadId: string): Promise<LeadDetail> {
   const user = await requireProfile();
-  return change(user, leadId, async (tx, lead) => {
-    if (!stepOf(lead).canMarkSpam) throw new AccessError("conflict");
-    await markAsSpam(tx, user, lead);
-  });
+  return change(user, leadId, (tx, lead) => markAsSpam(tx, user, lead));
 }
 
 /**
@@ -726,9 +751,9 @@ export async function reviewSuspect(
       overriddenBy: user.id,
     };
     if (input.outcome === "spam") {
-      await markAsSpam(tx, user, lead);
+      const write = await markAsSpam(tx, user, lead);
       await tx.insert(validationRuns).values({ ...run, verdict: "spam" });
-      return;
+      return write;
     }
     const [latest] = await tx
       .select({ summary: validationRuns.summary })
@@ -742,7 +767,7 @@ export async function reviewSuspect(
       .orderBy(desc(validationRuns.createdAt))
       .limit(1);
     const id = randomUUID();
-    const sync = await writeValidationVerdict(
+    const write = validationVerdictWrite(
       { id: lead.id, ghlContactId: lead.ghlContactId },
       "valid",
       latest?.summary ?? "",
@@ -750,13 +775,14 @@ export async function reviewSuspect(
     );
     await tx.insert(validationRuns).values({ ...run, id, verdict: "valid" });
     await event(tx, user, lead, {
-      syncLogId: sync.id,
+      syncLogId: await queue(tx, write),
       note: "Cleared as valid",
     });
     await tx
       .update(leads)
       .set({ verdict: "valid" })
       .where(eq(leads.id, lead.id));
+    return write;
   });
 }
 
@@ -766,7 +792,7 @@ export async function changeStatus(
   input: StatusInput,
 ): Promise<LeadDetail> {
   const user = await requireProfile();
-  return change(user, leadId, async (tx, lead) => {
+  return change(user, leadId, async (tx, lead): Promise<undefined> => {
     if (
       user.role !== "admin" &&
       !REP_SETTABLE_STATUSES.includes(input.status)
@@ -796,7 +822,7 @@ export async function assignRep(
   input: AssignInput,
 ): Promise<LeadDetail> {
   const admin = await requireAdmin();
-  return change(admin, leadId, async (tx, lead) => {
+  return change(admin, leadId, async (tx, lead): Promise<undefined> => {
     if (lead.assignedTo === input.profileId) return;
     let note = "Unassigned";
     if (input.profileId) {
@@ -823,7 +849,7 @@ export async function archiveLead(
   input: ArchiveInput,
 ): Promise<LeadDetail> {
   const user = await requireProfile();
-  return change(user, leadId, async (tx, lead) => {
+  return change(user, leadId, async (tx, lead): Promise<undefined> => {
     await event(tx, user, lead, { note: "Archived" });
     await tx
       .update(leads)

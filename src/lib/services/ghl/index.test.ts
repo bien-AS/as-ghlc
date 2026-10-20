@@ -7,6 +7,7 @@ import {
   ghlConfig,
   ghlRequest,
   leadFromGhl,
+  REQUEST_TIMEOUT_MS,
   searchPipelineOpportunities,
 } from "@/lib/services/ghl";
 import { TEST_IDS } from "@/test/ghl-ids";
@@ -124,6 +125,17 @@ test("every request sends the token, the API version and an explicit user agent"
     Version: "2021-07-28",
     "User-Agent": "as-sales-app/1.0",
   });
+});
+
+test("every request is aborted if GHL has not answered within the request timeout", async () => {
+  const timeout = vi.spyOn(AbortSignal, "timeout");
+  const fetchMock = stubGhl();
+  await checkGhlIds();
+  expect(timeout).toHaveBeenCalledWith(REQUEST_TIMEOUT_MS);
+  for (const [, init] of fetchMock.mock.calls) {
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+  }
+  timeout.mockRestore();
 });
 
 test("a 429 is retried after the window GHL asks for, then succeeds", async () => {
