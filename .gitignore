@@ -46,3 +46,6 @@ next-env.d.ts
 
 # QA screenshots
 /screenshots/
+
+# nested agent worktrees
+/.claude/worktrees/
