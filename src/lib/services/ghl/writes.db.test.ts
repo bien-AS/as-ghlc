@@ -174,9 +174,9 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
     for (const value of [undefined, "false", "TRUE", "1"]) {
       await inRollback(async (db) => {
         vi.stubEnv("GHL_WRITES_ENABLED", value);
-        await writeValidationVerdict(lead, "valid", "Looks real.");
-        await writeQualification(opp(), "qualified");
-        await writeMarkSpam(lead);
+        await writeValidationVerdict(lead, "valid", "Looks real.", "run-1");
+        await writeQualification(opp(), "qualified", "event-1");
+        await writeMarkSpam(lead, "event-9");
 
         const logged = await rows(db);
         expect(logged.map((row) => row.writeType).sort()).toEqual([
@@ -205,9 +205,14 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
 
   test("W1, W3 and W4 send the specified requests and succeed", () =>
     inRollback(async (db) => {
-      const w1 = await writeValidationVerdict(lead, "suspect", "Brief.");
-      const w3 = await writeQualification(opp(), "not_qualified");
-      const w4 = await writeMarkSpam(lead);
+      const w1 = await writeValidationVerdict(
+        lead,
+        "suspect",
+        "Brief.",
+        "run-1",
+      );
+      const w3 = await writeQualification(opp(), "not_qualified", "event-1");
+      const w4 = await writeMarkSpam(lead, "event-9");
 
       const contact = {
         locationId: "loc-test",
@@ -256,18 +261,40 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
         });
       }
       expect(w3.idempotencyKey).toBe(
-        `w3_qualification:${lead.id}:not_qualified`,
+        `w3_qualification:${lead.id}:not_qualified:event-1`,
       );
       expect(await rows(db)).toHaveLength(3);
     }));
 
   test("the same W3 twice makes one GHL change and one succeeded row (check 7)", () =>
     inRollback(async (db) => {
-      await writeQualification(opp(), "qualified");
-      const again = await writeQualification(opp(), "qualified");
+      await writeQualification(opp(), "qualified", "event-1");
+      const again = await writeQualification(opp(), "qualified", "event-1");
       expect(calls().filter((call) => call.method === "PUT")).toHaveLength(1);
       expect(again).toMatchObject({ result: "succeeded", attempts: 1 });
       expect(await rows(db)).toHaveLength(1);
+    }));
+
+  test("a decision made again later is written again: Qualified, Not Qualified, Qualified", () =>
+    inRollback(async (db) => {
+      const flips = [
+        await writeQualification(opp(), "qualified", "event-1"),
+        await writeQualification(opp(), "not_qualified", "event-2"),
+        await writeQualification(opp(), "qualified", "event-3"),
+      ];
+      expect(flips.map((row) => row.result)).toEqual([
+        "succeeded",
+        "succeeded",
+        "succeeded",
+      ]);
+      const puts = calls().filter((call) => call.method === "PUT");
+      expect(puts.map((call) => call.body.pipelineStageId)).toEqual([
+        "s-qual",
+        "s-lost",
+        "s-qual",
+      ]);
+      expect(ghl.stage).toBe("s-qual");
+      expect(await rows(db)).toHaveLength(3);
     }));
 
   test("a 429 is retried after backoff and the write succeeds (check 8)", () =>
@@ -279,7 +306,7 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
           headers: { "Retry-After": "2" },
         }),
       ];
-      const run = writeMarkSpam(lead);
+      const run = writeMarkSpam(lead, "event-9");
       await vi.waitFor(() => expect(vi.getTimerCount()).toBe(1));
       await vi.advanceTimersByTimeAsync(2000);
       expect(await run).toMatchObject({ result: "succeeded", attempts: 1 });
@@ -289,7 +316,7 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
   test("unreachable GHL stays failed; Retry succeeds once GHL answers (check 8)", () =>
     inRollback(async (db) => {
       ghl.queue = [new TypeError("fetch failed")];
-      const failed = await writeQualification(opp(), "qualified");
+      const failed = await writeQualification(opp(), "qualified", "event-1");
       expect(failed).toMatchObject({
         result: "failed",
         attempts: 1,
@@ -361,7 +388,7 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
   test("a stage write the read-back contradicts is failed, never succeeded (check 9)", () =>
     inRollback(async () => {
       ghl.stuck = true; // GHL answers 200 and leaves the stage where it was
-      const row = await writeQualification(opp(), "qualified");
+      const row = await writeQualification(opp(), "qualified", "event-1");
       expect(row.result).toBe("failed");
       expect(row.lastError).toMatch(
         /Read-back: .* is in stage s-dcb, not s-qual/,
@@ -371,7 +398,7 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
   test("an upsert that created a new contact is failed, not succeeded", () =>
     inRollback(async () => {
       ghl.queue = [Response.json({ new: true, contact: { id: "other" } })];
-      const row = await writeMarkSpam(lead);
+      const row = await writeMarkSpam(lead, "event-9");
       expect(row).toMatchObject({ result: "failed" });
       expect(row.lastError).toMatch(/new contact/);
     }));
@@ -382,9 +409,9 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
         new Response(`bad token ${TOKEN}`, { status: 401 }),
         Response.json({ new: false, echo: `Bearer ${TOKEN}` }),
       ];
-      const failed = await writeMarkSpam(lead);
+      const failed = await writeMarkSpam(lead, "event-9");
       expect(failed.result).toBe("failed");
-      await writeValidationVerdict(lead, "valid", "ok");
+      await writeValidationVerdict(lead, "valid", "ok", "run-2");
       const stored = JSON.stringify(await rows(db));
       expect(stored).toContain("[redacted]");
       expect(stored).not.toContain(TOKEN);

@@ -9,6 +9,12 @@ import { runWrite, type SyncLogEntry, type WritePlan } from "./runner";
  * through `runWrite`. The callers (validation in spec 08, the rep's decisions
  * in spec 07) have already read the lead through its scope and pass it in.
  *
+ * `decisionId` is a stable id the caller owns for the decision being written
+ * (the validation_runs or lead_status_events row that recorded it). It is part
+ * of the idempotency key: the same decision sent twice makes one GHL change,
+ * and a decision made again later (Qualified, Not Qualified, Qualified) is a
+ * new decision and is written again.
+ *
  * ASSUMED request shapes, to confirm in the supervised write session (or on a
  * dev sub-account) before writes are switched on:
  *  - contact fields: POST /contacts/upsert { locationId, email, phone,
@@ -56,11 +62,12 @@ export const writeValidationVerdict = (
   lead: ContactLead,
   verdict: keyof typeof VALIDATION_STATUS,
   summary: string,
+  decisionId: string,
 ): Promise<SyncLogEntry> =>
   runWrite({
     leadId: lead.id,
     writeType: "w1_verdict",
-    idempotencyKey: `w1_verdict:${lead.id}:${verdict}`,
+    idempotencyKey: `w1_verdict:${lead.id}:${verdict}:${decisionId}`,
     plan: contactUpsert(lead, {
       validation_status: VALIDATION_STATUS[verdict],
       validation_summary: summary,
@@ -85,6 +92,7 @@ export const writeDeckLink = async (
 export function writeQualification(
   lead: OpportunityLead,
   decision: "qualified" | "not_qualified",
+  decisionId: string,
 ): Promise<SyncLogEntry> {
   const cfg = ghlConfig();
   const pipelineStageId =
@@ -92,7 +100,7 @@ export function writeQualification(
   return runWrite({
     leadId: lead.id,
     writeType: "w3_qualification",
-    idempotencyKey: `w3_qualification:${lead.id}:${decision}`,
+    idempotencyKey: `w3_qualification:${lead.id}:${decision}:${decisionId}`,
     plan: {
       method: "PUT",
       path: `/opportunities/${encodeURIComponent(lead.ghlOpportunityId)}`,
@@ -113,10 +121,13 @@ export function writeQualification(
 }
 
 /** W4: a rep marks a suspect as spam. Validation Status = Spam, nothing else; GHL does the removal. */
-export const writeMarkSpam = (lead: ContactLead): Promise<SyncLogEntry> =>
+export const writeMarkSpam = (
+  lead: ContactLead,
+  decisionId: string,
+): Promise<SyncLogEntry> =>
   runWrite({
     leadId: lead.id,
     writeType: "w4_mark_spam",
-    idempotencyKey: `w4_mark_spam:${lead.id}`,
+    idempotencyKey: `w4_mark_spam:${lead.id}:spam:${decisionId}`,
     plan: contactUpsert(lead, { validation_status: "Spam" }),
   });
