@@ -7,20 +7,18 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
-import { SAMPLE_REPS } from "@/lib/data/fixtures/leads";
-import { getPipelineSummary } from "@/lib/data/leads";
 import {
   api,
   FORBIDDEN,
   renderScreen,
   startDashboard,
   stopDashboard,
+  viewAs,
 } from "@/test/dashboard";
+import { resetLeadStore } from "@/test/lead-store";
 import { address, router } from "@/test/navigation";
 
 import { PipelineScreen } from "./pipeline-screen";
-
-const MAYA = SAMPLE_REPS[0].id;
 
 vi.mock(
   "@/lib/supabase/server",
@@ -34,278 +32,250 @@ vi.mock(
   "next/navigation",
   async () => (await import("@/test/navigation")).navigationModule,
 );
+vi.mock("@/lib/data/leads", async (original) => ({
+  ...(await original<typeof import("@/lib/data/leads")>()),
+  ...(await import("@/test/lead-store")).leadsModule,
+}));
 vi.mock(
-  "@/lib/navigate",
-  async () => (await import("@/test/render")).navigateModule,
+  "@/lib/data/research",
+  async () => (await import("@/test/lead-store")).researchModule,
 );
 
-beforeEach(() => startDashboard("/leads"));
+beforeEach(() => {
+  startDashboard("/leads");
+  resetLeadStore();
+});
 afterEach(() => {
   cleanup();
   stopDashboard();
 });
 
-const rows = () =>
-  within(screen.getByRole("list")).getAllByRole<HTMLAnchorElement>("link");
+/** The desktop table (the card list below md renders the same rows). */
+const table = () => screen.getByRole("table");
+const bodyRows = () => within(table()).getAllByRole("row").slice(1);
+/** The lead names, in the order the table shows them. */
+const names = () =>
+  bodyRows().map((row) => row.querySelector("a")?.textContent ?? "");
 const row = (name: string) => {
-  const found = rows().find((link) => link.textContent?.includes(name));
+  const found = bodyRows().find((r) => r.textContent?.includes(name));
   if (!found) throw new Error(`no row for ${name}`);
   return found;
 };
-const tab = (name: RegExp) => screen.getByRole("tab", { name });
-const loaded = () =>
-  screen.findByText(/^All \d+ leads? shown$|Show more leads/);
+const loaded = () => screen.findByRole("table");
+const header = (name: string) => within(table()).getByRole("button", { name });
 
-test("shows the strip, the tabs with counts and the list; each row carries the six fields and opens its lead", async () => {
+test("an admin sees every active lead, the rep column and the rep filter (check 1)", async () => {
   renderScreen(<PipelineScreen />);
   await loaded();
-  const counts = await getPipelineSummary({ tz: "UTC" });
 
-  expect(screen.getByRole("heading", { name: "Pipeline" })).toBeDefined();
-  expect(tab(/^All open/).getAttribute("aria-selected")).toBe("true");
-  expect(tab(/^All open/).textContent).toContain(String(counts.open));
-  expect(tab(/^Qualified/).textContent).toContain(
-    String(counts.stages.qualified),
+  expect(screen.getByRole("heading", { name: "Leads" })).toBeDefined();
+  expect(names().sort()).toEqual(
+    [
+      "Beatrix Olander",
+      "Desmond Achterberg",
+      "Emeka Obi",
+      "Imogen Vasquez",
+      "Sofia Lindgren",
+    ].sort(),
   );
-  expect(tab(/^Lead Lost/).textContent).toContain(String(counts.exits.lost));
-  expect(screen.getByText(`${counts.open} leads`)).toBeDefined();
-
-  // Name, company, status line, stage (under All open), verdict, next call, owner.
-  const lead = row("Priscilla Nwosu");
-  expect(lead.getAttribute("href")).toMatch(/^\/leads\/lead-\d+$/);
-  const cells = within(lead);
-  expect(cells.getByText("Nwosu Paediatrics")).toBeDefined();
-  expect(cells.getByText("Deck ready")).toBeDefined();
-  expect(cells.getByText("Discovery Call Booked")).toBeDefined();
-  expect(cells.getByText("Valid")).toBeDefined();
-  expect(cells.getByText("Wed, Oct 7, 12:30 PM")).toBeDefined();
-  expect(cells.getByText("Maya Okafor")).toBeDefined();
-
-  // A lead with no call says so; one with little still has a full row.
   expect(
-    within(row("Sofia Lindgren")).getByText("No call booked"),
+    within(table()).getByRole("columnheader", { name: /^Rep/ }),
   ).toBeDefined();
+  await screen.findByRole("option", { name: "Jonah Pike" });
+  expect(screen.getByLabelText("Rep")).toBeDefined();
+
+  // Each row carries its verdict, stage, Lead Status, rep, age and next step.
+  const imogen = within(row("Imogen Vasquez"));
+  expect(imogen.getByText("Vasquez Co")).toBeDefined();
+  expect(imogen.getByText("Valid")).toBeDefined();
+  expect(imogen.getByText("Discovery Call Booked")).toBeDefined();
+  expect(imogen.getByText("Appointment - Completed")).toBeDefined();
+  expect(imogen.getByText("Maya Okafor")).toBeDefined();
+  expect(imogen.getByText("3 days")).toBeDefined();
+  expect(within(row("Beatrix Olander")).getByText("Unassigned")).toBeDefined();
   expect(
-    within(row("Callum Adeyemi")).getByText("No company given"),
+    within(row("Beatrix Olander")).getByText("No status yet"),
   ).toBeDefined();
-  expect(
-    within(row("Callum Adeyemi")).getByText("Awaiting verdict"),
-  ).toBeTruthy();
 
   expect(document.body.textContent).not.toMatch(FORBIDDEN);
 });
 
-test("the first page is 25 leads; asking for more loads the rest once, then says all are shown", async () => {
-  renderScreen(<PipelineScreen />);
-  await screen.findByRole("button", { name: "Show more leads" });
-  expect(rows()).toHaveLength(25);
-  const { open } = await getPipelineSummary({ tz: "UTC" });
-
-  fireEvent.click(screen.getByRole("button", { name: "Show more leads" }));
-  await screen.findByText(`All ${open} leads shown`);
-  expect(rows()).toHaveLength(open);
-  const hrefs = rows().map((link) => link.getAttribute("href"));
-  expect(new Set(hrefs).size).toBe(open);
-});
-
-test("choosing a tab puts it in the address and shows only that stage; each count equals its rows", async () => {
+test("a rep sees only their own leads, with no rep column and no rep filter (check 1)", async () => {
+  viewAs("rep");
   renderScreen(<PipelineScreen />);
   await loaded();
-  const counts = await getPipelineSummary({ tz: "UTC" });
+  // The role arrives with the viewer; wait until the screen has drawn for it.
+  await waitFor(() => expect(screen.getByText(/^Your leads/)).toBeDefined());
 
-  fireEvent.click(tab(/^Qualified/));
-  expect(address()).toBe("/leads?tab=qualified");
-  await screen.findByText(`All ${counts.stages.qualified} leads shown`);
-  expect(rows()).toHaveLength(counts.stages.qualified);
-  expect(rows().map((link) => link.textContent)).toEqual(
-    expect.arrayContaining([expect.stringContaining("Beatrix Olander")]),
-  );
-  expect(screen.queryByText("Sofia Lindgren")).toBeNull();
-
-  // All open is the default, so it leaves no trace in the address.
-  fireEvent.click(tab(/^All open/));
-  expect(address()).toBe("/leads");
-});
-
-test("a lead that has left the pipeline is struck through and names its exit", async () => {
-  startDashboard("/leads?tab=spam");
-  renderScreen(<PipelineScreen />);
-  await loaded();
-
-  expect(tab(/^Spam/).getAttribute("aria-selected")).toBe("true");
-  const lead = row("Wendell Krause");
-  expect(lead.querySelector("s")?.textContent).toBe("Wendell Krause");
-  expect(within(lead).getByText(/left the pipeline\)/)).toBeDefined();
-  expect(within(lead).getByText("Left the pipeline: Spam")).toBeDefined();
-  expect(within(lead).getByText("Removed from pipeline")).toBeDefined();
-});
-
-test("typing in the search narrows the list by name, company or email and is kept in the address", async () => {
-  renderScreen(<PipelineScreen />);
-  await loaded();
-
-  fireEvent.change(
-    screen.getByRole("searchbox", { name: "Search by name, company or email" }),
-    { target: { value: "  BELLWEATHER " } },
-  );
-  await waitFor(() => expect(address()).toBe("/leads?q=BELLWEATHER"));
-  // Typing replaces the entry, so Back does not step through every keystroke.
-  expect(router.replace).toHaveBeenCalled();
-  expect(router.push).not.toHaveBeenCalled();
-  await screen.findByText("1 lead match");
-  expect(rows()).toHaveLength(1);
-  expect(rows()[0].textContent).toContain("Marcus Bellweather");
-
-  fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
-  expect(address()).toBe("/leads");
-  await screen.findByRole("button", { name: "Show more leads" });
+  expect(names().sort()).toEqual(["Desmond Achterberg", "Imogen Vasquez"]);
   expect(
-    screen.getByRole<HTMLInputElement>("searchbox", {
-      name: "Search by name, company or email",
-    }).value,
-  ).toBe("");
+    within(table()).queryByRole("columnheader", { name: /^Rep/ }),
+  ).toBeNull();
+  expect(screen.queryByLabelText("Rep")).toBeNull();
+  expect(document.body.textContent).not.toContain("Jonah Pike");
 });
 
-test("the verdict and rep filters narrow the list, combine, and survive a reload of the address", async () => {
+test("age shows Not measured for a never-synced lead, never 0, and sorts it last in both directions (check 2)", async () => {
+  renderScreen(<PipelineScreen />);
+  await loaded();
+  expect(within(row("Sofia Lindgren")).getByText("Not measured")).toBeDefined();
+  expect(
+    within(row("Beatrix Olander")).getByText("Not measured"),
+  ).toBeDefined();
+
+  fireEvent.click(header("Age"));
+  expect(names().slice(0, 3)).toEqual([
+    "Emeka Obi",
+    "Imogen Vasquez",
+    "Desmond Achterberg",
+  ]);
+  expect(names().slice(3).sort()).toEqual([
+    "Beatrix Olander",
+    "Sofia Lindgren",
+  ]);
+
+  fireEvent.click(header("Age"));
+  expect(names().slice(0, 3)).toEqual([
+    "Desmond Achterberg",
+    "Imogen Vasquez",
+    "Emeka Obi",
+  ]);
+  expect(names().slice(3).sort()).toEqual([
+    "Beatrix Olander",
+    "Sofia Lindgren",
+  ]);
+});
+
+test("each filter goes in the address and narrows the list; Clear filters takes them all out", async () => {
   renderScreen(<PipelineScreen />);
   await loaded();
 
-  fireEvent.change(screen.getByRole("combobox", { name: "Verdict" }), {
+  fireEvent.change(screen.getByLabelText("Verdict"), {
     target: { value: "suspect" },
   });
   expect(address()).toBe("/leads?verdict=suspect");
-  await screen.findByText("6 leads match");
-  expect(rows().every((link) => link.textContent?.includes("Suspect"))).toBe(
-    true,
-  );
+  await waitFor(() => expect(names()).toEqual(["Emeka Obi"]));
 
-  fireEvent.change(screen.getByRole("combobox", { name: "Rep" }), {
-    target: { value: MAYA },
+  fireEvent.change(screen.getByLabelText("Verdict"), {
+    target: { value: "" },
   });
-  expect(address()).toBe(`/leads?verdict=suspect&owner=${MAYA}`);
-  await screen.findByText("2 leads match");
-  expect(
-    rows().every((link) => link.textContent?.includes("Maya Okafor")),
-  ).toBe(true);
-
-  // The same address, opened fresh, is the same view.
-  cleanup();
-  startDashboard(`/leads?verdict=suspect&owner=${MAYA}`);
-  renderScreen(<PipelineScreen />);
-  await screen.findByText("2 leads match");
-  expect(
-    screen.getByRole<HTMLSelectElement>("combobox", { name: "Verdict" }).value,
-  ).toBe("suspect");
-  expect(
-    screen.getByRole<HTMLSelectElement>("combobox", { name: "Rep" }).value,
-  ).toBe(MAYA);
-});
-
-test("each needs-you count is a button that filters to those leads; suspects opens Suspect review; zero is inactive", async () => {
-  renderScreen(<PipelineScreen />);
-  await loaded();
-  const { needs } = await getPipelineSummary({ tz: "UTC" });
-
-  const suspects = screen.getByRole("link", { name: /Suspects to review/ });
-  expect(suspects.getAttribute("href")).toBe("/review-queue");
-  expect(suspects.textContent).toContain(String(needs.suspects));
-
-  const calls = screen.getByRole("button", { name: /Calls today/ });
-  expect(calls.textContent).toContain(String(needs.calls_today));
-  fireEvent.click(calls);
-  expect(address()).toBe("/leads?needs=calls_today");
-  await screen.findByText(`${needs.calls_today} leads match`);
-  expect(rows()).toHaveLength(needs.calls_today);
-  expect(calls.getAttribute("aria-pressed")).toBe("true");
-
-  // Pressing it again takes the filter off.
-  fireEvent.click(calls);
-  expect(address()).toBe("/leads");
-
-  for (const [name, count] of [
-    [/Proposals to send/, needs.proposals],
-    [/Invoice drafts/, needs.invoices],
-  ] as const) {
-    expect(screen.getByRole("button", { name }).textContent).toContain(
-      String(count),
-    );
-  }
-
-  // Tomorrow nothing is booked today: the count is a zero and cannot be pressed.
-  cleanup();
-  startDashboard("/leads");
-  await getPipelineSummary({ tz: "UTC" }); // the sample is placed around "now"
-  vi.setSystemTime(new Date("2026-10-20T12:00:00.000Z"));
-  renderScreen(<PipelineScreen />);
-  await loaded();
-  const none = screen.getByRole<HTMLButtonElement>("button", {
-    name: /Calls today/,
+  fireEvent.change(screen.getByLabelText("Lead Status"), {
+    target: { value: "Qualified" },
   });
-  expect(none.textContent).toContain("0");
-  expect(none.disabled).toBe(true);
-});
+  expect(address()).toBe("/leads?group=Qualified");
+  await waitFor(() => expect(names()).toEqual(["Desmond Achterberg"]));
 
-test("a search that matches nothing says so, restates the search and offers Clear filters", async () => {
-  startDashboard("/leads?q=zzzz&verdict=valid");
-  renderScreen(<PipelineScreen />);
+  fireEvent.change(screen.getByLabelText("Lead Status"), {
+    target: { value: "" },
+  });
+  fireEvent.change(screen.getByLabelText("Rep"), {
+    target: { value: "unassigned" },
+  });
+  expect(address()).toBe("/leads?owner=unassigned");
+  await waitFor(() => expect(names()).toEqual(["Beatrix Olander"]));
 
-  await screen.findByText("No leads match");
-  // The empty-state library's filtered variant says so in words.
-  expect(screen.getByText("Filtered view")).toBeDefined();
-  expect(
-    screen.getByText("Nothing in All open matches “zzzz”, verdict Valid."),
-  ).toBeDefined();
+  fireEvent.change(screen.getByLabelText("Stage"), {
+    target: { value: "qualified" },
+  });
+  expect(address()).toBe("/leads?owner=unassigned&tab=qualified");
+  const none = await screen.findByText("No leads match these filters");
+  expect(none).toBeDefined();
   fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
   expect(address()).toBe("/leads");
-  await screen.findByRole("button", { name: "Show more leads" });
+  await waitFor(() => expect(names()).toHaveLength(5));
+
+  fireEvent.change(screen.getByLabelText("Showing"), {
+    target: { value: "true" },
+  });
+  expect(address()).toBe("/leads?archived=true");
+  await waitFor(() => expect(names()).toEqual(["Jonas Whitlock"]));
 });
 
-test("a tab with no leads says so, without blaming a filter", async () => {
-  startDashboard("/leads?tab=nurture");
-  const empty = { items: [], nextCursor: null, total: 0 };
-  vi.mocked(fetch).mockImplementation(async (input) =>
-    String(input).startsWith("/api/leads?")
-      ? Response.json(empty)
-      : Response.json({
-          open: 3,
-          stages: {
-            new: 3,
-            discovery_booked: 0,
-            qualified: 0,
-            review_booked: 0,
-            proposal_sent: 0,
-            won: 0,
-          },
-          exits: { spam: 0, nurture: 0, lost: 0 },
-          needs: { suspects: 0, calls_today: 0, proposals: 0, invoices: 0 },
-          owners: [],
-        }),
-  );
+test("a row opens its lead; the name is a link to it too", async () => {
   renderScreen(<PipelineScreen />);
-  await screen.findByText("No leads in Nurture");
-  expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
-  expect(screen.queryByText("Filtered view")).toBeNull();
+  await loaded();
+  const imogen = row("Imogen Vasquez");
+  expect(imogen.querySelector("a")?.getAttribute("href")).toBe(
+    "/leads/lead-imogen",
+  );
+  fireEvent.click(within(imogen).getByText("Discovery Call Booked"));
+  expect(router.push).toHaveBeenCalledWith("/leads/lead-imogen");
 });
 
-test("with no leads at all, the empty state says where leads come from", async () => {
-  vi.mocked(fetch).mockImplementation(async (input) =>
-    String(input).startsWith("/api/leads?")
-      ? Response.json({ items: [], nextCursor: null, total: 0 })
-      : Response.json({
-          open: 0,
-          stages: {
-            new: 0,
-            discovery_booked: 0,
-            qualified: 0,
-            review_booked: 0,
-            proposal_sent: 0,
-            won: 0,
-          },
-          exits: { spam: 0, nurture: 0, lost: 0 },
-          needs: { suspects: 0, calls_today: 0, proposals: 0, invoices: 0 },
-          owners: [],
-        }),
+test("the sync indicator says the last write and its result; an admin's opens the sync log", async () => {
+  renderScreen(<PipelineScreen />);
+  await loaded();
+  const written = within(row("Imogen Vasquez")).getByRole("link", {
+    name: "Validation verdict: written. Open the sync log",
+  });
+  expect(written.getAttribute("href")).toBe("/admin/sync-log");
+  expect(
+    within(row("Sofia Lindgren")).getByRole("link", {
+      name: "Nothing written to the CRM yet. Open the sync log",
+    }),
+  ).toBeDefined();
+
+  cleanup();
+  viewAs("rep");
+  renderScreen(<PipelineScreen />);
+  await loaded();
+  await waitFor(() => expect(screen.getByText(/^Your leads/)).toBeDefined());
+  // A rep reads it on hover or focus; the sync log is not theirs to open.
+  expect(
+    within(row("Imogen Vasquez")).getByLabelText("Validation verdict: written")
+      .tagName,
+  ).toBe("SPAN");
+  expect(document.querySelector('a[href="/admin/sync-log"]')).toBeNull();
+});
+
+test("Archive says it writes nothing to the CRM; confirming archives once and the row leaves the list", async () => {
+  renderScreen(<PipelineScreen />);
+  await loaded();
+
+  fireEvent.click(
+    within(row("Imogen Vasquez")).getByRole("button", {
+      name: "Archive Imogen Vasquez",
+    }),
   );
+  const dialog = await screen.findByRole("alertdialog");
+  expect(within(dialog).getByText(/^Nothing in the CRM/)).toBeDefined();
+  fireEvent.change(within(dialog).getByLabelText("Reason (optional)"), {
+    target: { value: "Duplicate of Desmond" },
+  });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Archive lead" }));
+
+  await screen.findByText("Archived Imogen Vasquez");
+  expect(api.calls().filter((call) => call.startsWith("POST"))).toEqual([
+    "POST /api/leads/lead-imogen/archive",
+  ]);
+  await waitFor(() => expect(names()).not.toContain("Imogen Vasquez"));
+  // Opening the dialog or confirming never opened the lead.
+  expect(router.push).not.toHaveBeenCalled();
+});
+
+test("the suspects banner links to the review queue", async () => {
+  renderScreen(<PipelineScreen />);
+  const banner = await screen.findByRole("link", {
+    name: "1 suspect is waiting for review",
+  });
+  expect(banner.getAttribute("href")).toBe("/review-queue");
+});
+
+test("a failed load shows the error state, and Try again loads the leads", async () => {
+  api.fail("GET", /^\/api\/leads$/, 500, { once: true });
+  renderScreen(<PipelineScreen />);
+  await screen.findByText("The leads could not be loaded");
+  fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+  await loaded();
+  expect(names()).toHaveLength(5);
+});
+
+test("with no leads at all, the empty state is the registry's", async () => {
+  viewAs("rep");
+  const { updateLead } = await import("@/test/lead-store");
+  for (const id of ["lead-imogen", "lead-desmond"]) {
+    updateLead(id, { owner: null });
+  }
   renderScreen(<PipelineScreen />);
   await screen.findByText("No leads yet");
   expect(
@@ -313,63 +283,13 @@ test("with no leads at all, the empty state says where leads come from", async (
   ).toBeDefined();
 });
 
-test("while the list is loading, skeleton rows stand in for it", async () => {
-  const release = api.hold("GET", /^\/api\/leads$/);
-  renderScreen(<PipelineScreen />);
-
-  expect(
-    await screen.findByRole("status", { name: "Loading leads" }),
-  ).toBeDefined();
-  expect(screen.queryByRole("list")).toBeNull();
-
-  release();
-  await loaded();
-  expect(screen.queryByRole("status", { name: "Loading leads" })).toBeNull();
-});
-
-test("when the list fails, the error state offers Try again and the tabs and strip stay", async () => {
-  api.fail("GET", /^\/api\/leads$/);
-  renderScreen(<PipelineScreen />);
-
-  await screen.findByText("The leads could not be loaded");
-  expect(screen.getByRole("alert")).toBeDefined();
-  expect(tab(/^All open/).textContent).toMatch(/\d/);
-  expect(
-    screen.getByRole("link", { name: /Suspects to review/ }),
-  ).toBeDefined();
-
-  api.restore();
-  fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-  await loaded();
-  expect(rows().length).toBeGreaterThan(0);
-});
-
-test("when the counts fail, they show no numbers rather than zeros, and the list still works", async () => {
-  api.fail("GET", /^\/api\/pipeline\/summary$/);
+test("the navbar's lead search lands here: its words narrow the list and Clear search takes them out", async () => {
+  startDashboard("/leads?q=desmond");
   renderScreen(<PipelineScreen />);
   await loaded();
-
-  expect(screen.getByText("The counts could not be loaded.")).toBeDefined();
-  expect(tab(/^All open/).textContent).toBe("All open");
-  expect(screen.getAllByText("unavailable")).toHaveLength(4);
-  expect(rows()).toHaveLength(25);
-
-  api.restore();
-  fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-  await waitFor(() => expect(tab(/^All open/).textContent).toMatch(/\d/));
-});
-
-test("when loading more fails, the rows already loaded stay and an inline retry takes over", async () => {
-  renderScreen(<PipelineScreen />);
-  await screen.findByRole("button", { name: "Show more leads" });
-
-  api.fail("GET", /^\/api\/leads$/);
-  fireEvent.click(screen.getByRole("button", { name: "Show more leads" }));
-  await screen.findByText("More leads could not be loaded.");
-  expect(rows()).toHaveLength(25);
-
-  api.restore();
-  fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-  await screen.findByText(/^All \d+ leads shown$/);
-  expect(rows().length).toBeGreaterThan(25);
+  expect(names()).toEqual(["Desmond Achterberg"]);
+  expect(screen.getByText("Leads matching “desmond”")).toBeDefined();
+  fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+  expect(address()).toBe("/leads");
+  await waitFor(() => expect(names()).toHaveLength(5));
 });

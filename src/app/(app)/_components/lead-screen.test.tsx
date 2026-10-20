@@ -7,15 +7,15 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
-import { getLead, getPipelineSummary } from "@/lib/data/leads";
 import {
   api,
   FORBIDDEN,
-  leadIdOf,
   renderScreen,
   startDashboard,
   stopDashboard,
+  viewAs,
 } from "@/test/dashboard";
+import { research, resetLeadStore } from "@/test/lead-store";
 
 import { LeadScreen } from "./lead-screen";
 
@@ -31,514 +31,292 @@ vi.mock(
   "next/navigation",
   async () => (await import("@/test/navigation")).navigationModule,
 );
+vi.mock("@/lib/data/leads", async (original) => ({
+  ...(await original<typeof import("@/lib/data/leads")>()),
+  ...(await import("@/test/lead-store")).leadsModule,
+}));
 vi.mock(
-  "@/lib/navigate",
-  async () => (await import("@/test/render")).navigateModule,
+  "@/lib/data/research",
+  async () => (await import("@/test/lead-store")).researchModule,
 );
 
-beforeEach(() => startDashboard("/leads/x"));
+beforeEach(() => {
+  startDashboard("/leads/lead-imogen");
+  resetLeadStore();
+});
 afterEach(() => {
   cleanup();
   stopDashboard();
+  vi.unstubAllEnvs();
 });
 
-/** Opens the detail page of the sample lead with this name. */
-async function open(name: string) {
-  const leadId = await leadIdOf(name);
+async function open(leadId = "lead-imogen") {
   renderScreen(<LeadScreen leadId={leadId} />);
-  await screen.findByRole("heading", { level: 1, name: new RegExp(name) });
-  return leadId;
+  await screen.findByRole("heading", { level: 1 });
 }
-const button = (name: string | RegExp) =>
-  screen.getByRole<HTMLButtonElement>("button", { name });
-const noButton = (name: string | RegExp) =>
-  expect(screen.queryByRole("button", { name })).toBeNull();
-const chips = () =>
-  within(screen.getByRole("list", { name: "Where this lead stands" }))
-    .getAllByRole("listitem")
-    .map((item) => item.textContent);
-const hint = () =>
-  document.querySelector('[data-slot="hint-line"]')?.textContent ?? "";
-const timeline = () =>
-  within(
-    screen.getByRole("heading", { name: "Activity" })
-      .parentElement as HTMLElement,
-  ).getAllByRole("listitem");
-const confirmIn = (name: RegExp) =>
-  within(screen.getByRole("alertdialog", { name }));
+/** Waits until the viewer's role has arrived and the admin actions are drawn. */
+const asAdmin = () => screen.findByRole("button", { name: "Change status" });
+const posts = () => api.calls().filter((call) => call.startsWith("POST"));
+const button = (name: string | RegExp) => screen.getByRole("button", { name });
+const tab = (name: string) => screen.getByRole("tab", { name });
+const seam = () => screen.getByRole("list", { name: "Writes to the CRM" });
 
-const panel = (title: string) =>
-  within(
-    screen
-      .getByRole("heading", { name: title })
-      .closest("section") as HTMLElement,
+async function confirm(trigger: string, confirmLabel: string) {
+  fireEvent.click(button(trigger));
+  const dialog = await screen.findByRole("alertdialog");
+  const text = dialog.textContent ?? "";
+  fireEvent.click(within(dialog).getByRole("button", { name: confirmLabel }));
+  return text;
+}
+
+test("the header, the six tabs, the next step and the seam", async () => {
+  await open();
+  expect(
+    screen.getByRole("heading", { level: 1, name: "Imogen Vasquez" }),
+  ).toBeDefined();
+  expect(screen.getByText("Vasquez Co")).toBeDefined();
+  const chips = within(
+    screen.getByRole("list", { name: "Where this lead stands" }),
   );
-
-test("shows the header chips, details, form answers, verdict box, the three status panels and the timeline", async () => {
-  const leadId = await open("Kwame Asante");
-
-  expect(chips()).toEqual([
-    "Stage: Qualified",
-    "Qualified",
+  for (const chip of [
     "Verdict: Valid",
-    "Owner: Tom Lindqvist",
-    "Proposal: Draft",
-  ]);
-  expect(screen.getByText("Asante Solar")).toBeDefined();
-
-  // Email, phone and website are links.
-  expect(
-    screen
-      .getByRole("link", { name: "kwame@asantesolar.example" })
-      .getAttribute("href"),
-  ).toBe("mailto:kwame@asantesolar.example");
-  expect(
-    screen.getByRole("link", { name: /^\(555\) 555-01/ }).getAttribute("href"),
-  ).toMatch(/^tel:/);
-  const site = screen.getByRole("link", { name: /^asantesolar\.example/ });
-  expect(site.getAttribute("href")).toBe("https://asantesolar.example");
-  expect(site.getAttribute("target")).toBe("_blank");
-  expect(screen.getByText("No call booked")).toBeDefined();
-
-  expect(screen.getByText("What service are you interested in?")).toBeDefined();
-  expect(screen.getByText("Paid search")).toBeDefined();
-
-  const verdict = document.querySelector('[data-slot="verdict-box"]');
-  expect(verdict?.getAttribute("data-tone")).toBe("ok");
-  expect(verdict?.textContent).toContain("Valid");
-  expect(verdict?.textContent).toContain("Installer registration matches.");
-
-  // Deck, proposal and invoice: where each stands, and the way into it.
-  expect(panel("Deck").getByText("Discovery template")).toBeDefined();
-  expect(
-    panel("Deck").getByRole("link", { name: "Open deck" }).getAttribute("href"),
-  ).toBe(`/decks/${leadId}`);
-  expect(panel("Proposal").getByText("Draft")).toBeDefined();
-  expect(
-    panel("Proposal")
-      .getByRole("link", { name: "Open proposal" })
-      .getAttribute("href"),
-  ).toBe(`/proposals/${leadId}`);
-  expect(
-    panel("Invoice").getByText(
-      "No invoice yet. A draft is created when the proposal is signed.",
-    ),
-  ).toBeDefined();
-  expect(document.getElementById("invoice")).toBe(
-    screen.getByRole("heading", { name: "Invoice" }).closest("section"),
-  );
-  expect(screen.queryByText(/Not available yet/)).toBeNull();
-  // No invoice, so none is asked for.
-  expect(api.calls().some((call) => call.includes("/invoice"))).toBe(false);
-
-  // Newest first, each saying who or what acted.
-  const entries = timeline().map((item) => item.textContent);
-  expect(entries[0]).toContain("Tom Lindqvist");
-  expect(entries.at(-1)).toContain("Form submitted");
-  expect(entries.at(-1)).toContain("CRM");
-  expect(entries.some((entry) => entry?.includes("System"))).toBe(true);
-
-  expect(document.body.textContent).not.toMatch(FORBIDDEN);
-});
-
-test("a lead with little shows a dash for each missing value and says there are no answers", async () => {
-  await open("Callum Adeyemi");
-  expect(screen.getAllByText("Not given").length).toBeGreaterThanOrEqual(3);
-  expect(screen.getByText("No form answers on this lead.")).toBeDefined();
-  // Awaiting a verdict: the box says so and gives no reasons.
-  const verdict = document.querySelector('[data-slot="verdict-box"]');
-  expect(verdict?.getAttribute("data-tone")).toBe("warn");
-  expect(verdict?.textContent).toContain("The AI is still checking this lead.");
-  expect(verdict?.querySelector("li")).toBeNull();
-});
-
-// One sample lead per row of the action table in spec 06.
-test.each([
-  [
-    "Imogen Vasquez",
-    null,
-    "The AI is still checking this lead. Nothing to do yet.",
-  ],
-  [
-    "Lena Marchetti",
-    "Review suspect",
-    "The AI is unsure about this lead. Decide whether it is genuine.",
-  ],
-  [
-    "Sofia Lindgren",
-    null,
-    "Waiting for the lead to book a call. Your CRM is following up.",
-  ],
-  [
-    "Odette Blackwood",
-    null,
-    "Waiting for the lead to book a call. Your CRM is following up.",
-  ],
-  [
-    "Priscilla Nwosu",
-    "Open deck",
-    "Present the deck on the call. Come back here afterwards to record the outcome.",
-  ],
-  [
-    "Desmond Achterberg",
-    "Qualified",
-    "The call is done. Record whether this lead is a fit.",
-  ],
-  ["Beatrix Olander", "Start proposal", "Qualified. Build the proposal next."],
-  [
-    "Emeka Obi",
-    "Finish proposal",
-    "A review call is booked. Have the proposal ready to send.",
-  ],
-  [
-    "Anneliese Brandt",
-    null,
-    "Proposal sent. Waiting for the lead to view and sign it.",
-  ],
-  ["Jonas Whitlock", "Check invoice draft", "Signed. Check the invoice draft."],
-])(
-  "%s: the main action and the hint line follow the action table",
-  async (name, main, text) => {
-    const leadId = await open(name);
-    expect(hint()).toBe(text);
-
-    const actions = within(screen.getByRole("region", { name: "Actions" }));
-    const primary = [
-      ...actions.queryAllByRole("button"),
-      ...actions.queryAllByRole("link"),
-    ].filter((control) => control.className.includes("bg-primary"));
-    expect(primary.map((control) => control.textContent)).toEqual(
-      main ? [main] : [],
-    );
-
-    // Where the actions that open another screen lead: its mock, for this lead.
-    const destination: Record<string, string> = {
-      "Review suspect": `/review-queue?lead=${leadId}`,
-      "Open deck": `/decks/${leadId}`,
-      "Start proposal": `/proposals/${leadId}`,
-      "Finish proposal": `/proposals/${leadId}`,
-      // The invoice draft is on this page (spec 15).
-      "Check invoice draft": `/leads/${leadId}#invoice`,
-    };
-    if (main && destination[main]) {
-      expect(primary[0].getAttribute("href")).toBe(destination[main]);
-    }
-    // While a proposal is out there is nothing to do but wait; it can be opened.
-    expect(
-      actions
-        .queryAllByRole("link", { name: "Open proposal" })
-        .map((link) => link.getAttribute("href")),
-    ).toEqual(name === "Anneliese Brandt" ? [`/proposals/${leadId}`] : []);
-    // Not qualified sits beside Qualified, and nowhere else.
-    expect(
-      actions.queryAllByRole("button", { name: "Not qualified" }),
-    ).toHaveLength(main === "Qualified" ? 1 : 0);
-    // The standing actions: lost while in the pipeline, spam until the lead has won.
-    expect(actions.getByRole("button", { name: "Mark lost" })).toBeDefined();
-    expect(
-      actions.queryAllByRole("button", { name: "Mark spam" }),
-    ).toHaveLength(name === "Jonas Whitlock" ? 0 : 1);
-  },
-);
-
-test("an exited lead is struck through, names its exit, explains itself and offers no action", async () => {
-  await open("Cordelia Vance");
-  const heading = screen.getByRole("heading", { level: 1 });
-  expect(heading.querySelector("s")?.textContent).toBe("Cordelia Vance");
-  expect(chips().slice(0, 2)).toEqual(["Exit: Lead Lost", "Not a fit"]);
-  expect(hint()).toContain("This lead left the pipeline: Lead Lost.");
-  expect(hint()).toContain("Not qualified after the discovery call.");
-  expect(
-    within(screen.getByRole("region", { name: "Actions" })).queryAllByRole(
-      "button",
-    ),
-  ).toEqual([]);
-  expect(screen.queryByRole("link", { name: /deck|proposal/i })).toBeNull();
-});
-
-test("a reviewed suspect shows the outcome, who decided and when", async () => {
-  await open("Odette Blackwood");
-  const verdict = document.querySelector('[data-slot="verdict-box"]');
-  expect(verdict?.getAttribute("data-tone")).toBe("ok");
-  expect(verdict?.textContent).toContain("Valid");
-  expect(verdict?.textContent).toMatch(
-    /The AI was unsure about this lead\. Priya Nair cleared it as valid on \w{3}, Oct \d+, \d+:\d\d [AP]M\./,
-  );
-
-  cleanup();
-  await open("Wendell Krause");
-  expect(
-    document.querySelector('[data-slot="verdict-box"]')?.textContent,
-  ).toContain("Tom Lindqvist marked it as spam on");
-  expect(screen.getByText("(Cancelled)")).toBeDefined();
-});
-
-test("Qualified moves the lead on: stage, status, main action and a timeline entry naming the signed-in user", async () => {
-  const leadId = await open("Desmond Achterberg");
-  const entries = timeline().length;
-  const before = await getPipelineSummary({ tz: "UTC" });
-
-  fireEvent.click(button("Qualified"));
-
-  await screen.findAllByRole("link", { name: "Start proposal" });
-  expect(chips().slice(0, 2)).toEqual(["Stage: Qualified", "Qualified"]);
-  expect(hint()).toBe("Qualified. Build the proposal next.");
-  noButton("Not qualified");
-  expect(timeline()).toHaveLength(entries + 1);
-  expect(timeline()[0].textContent).toContain("Ada Lovelace");
-  expect(timeline()[0].textContent).toContain(
-    "Marked qualified after the discovery call.",
-  );
-  await screen.findByText("Marked qualified: Desmond Achterberg");
-
-  // The Pipeline's counts moved with it.
-  expect((await getLead(leadId)).stage).toBe("qualified");
-  const after = await getPipelineSummary({ tz: "UTC" });
-  expect(after.stages.qualified).toBe(before.stages.qualified + 1);
-  expect(after.stages.discovery_booked).toBe(
-    before.stages.discovery_booked - 1,
-  );
-});
-
-test("Not qualified asks first: Cancel changes nothing, confirming moves the lead to Lead Lost as Not a fit", async () => {
-  const leadId = await open("Rosalind Mbeki");
-
-  fireEvent.click(button("Not qualified"));
-  const dialog = confirmIn(/Mark Rosalind Mbeki not qualified\?/);
-  expect(dialog.getByText(/leaves the pipeline as Lead Lost/)).toBeDefined();
-  fireEvent.click(dialog.getByRole("button", { name: "Cancel" }));
-  await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
-  expect((await getLead(leadId)).exit).toBeNull();
-  expect(chips()[0]).toBe("Stage: Discovery Call Booked");
-
-  fireEvent.click(button("Not qualified"));
-  fireEvent.click(
-    confirmIn(/Mark Rosalind Mbeki not qualified\?/).getByRole("button", {
-      name: "Mark not qualified",
-    }),
-  );
-  await waitFor(() =>
-    expect(chips().slice(0, 2)).toEqual(["Exit: Lead Lost", "Not a fit"]),
-  );
-  noButton("Qualified");
-  noButton("Mark lost");
-  noButton("Mark spam");
-});
-
-test("Mark lost takes an optional reason, and the timeline entry shows it", async () => {
-  await open("Anneliese Brandt");
-
-  fireEvent.click(button("Mark lost"));
-  const dialog = confirmIn(/Mark Anneliese Brandt lost\?/);
-  fireEvent.change(dialog.getByLabelText("Reason (optional)"), {
-    target: { value: "  Chose another agency " },
-  });
-  fireEvent.click(dialog.getByRole("button", { name: "Mark lost" }));
-
-  await waitFor(() => expect(chips()[0]).toBe("Exit: Lead Lost"));
-  expect(chips()[1]).toBe("Removed from pipeline");
-  expect(timeline()[0].textContent).toContain("Reason: Chose another agency");
-  expect(timeline()[0].textContent).toContain("Ada Lovelace");
-  expect(hint()).toContain("This lead left the pipeline: Lead Lost.");
-});
-
-test("Mark spam moves the lead to Spam, shows its call as cancelled and removes every action", async () => {
-  await open("Henrik Solberg");
-  expect(screen.getByText("(Confirmed)")).toBeDefined();
-
-  fireEvent.click(button("Mark spam"));
-  const dialog = confirmIn(/Mark Henrik Solberg as spam\?/);
-  expect(dialog.getByText(/any upcoming call is cancelled/)).toBeDefined();
-  fireEvent.click(dialog.getByRole("button", { name: "Mark as spam" }));
-
-  await waitFor(() => expect(chips()[0]).toBe("Exit: Spam"));
-  expect(screen.getByText("(Cancelled)")).toBeDefined();
-  expect(screen.queryByText("(Confirmed)")).toBeNull();
-  expect(screen.getAllByText("No call booked").length).toBeGreaterThan(0);
-  expect(
-    within(screen.getByRole("region", { name: "Actions" })).queryAllByRole(
-      "button",
-    ),
-  ).toEqual([]);
-  expect(screen.queryByRole("link", { name: "Open deck" })).toBeNull();
-});
-
-test("while an action is in progress the pressed button shows it and no other action can be pressed", async () => {
-  await open("Ignatius Petrov");
-  const release = api.hold("POST", /\/qualification$/);
-
-  fireEvent.click(button("Qualified"));
-  await waitFor(() =>
-    expect(button(/^(Loading\s*)?Qualified$/).getAttribute("aria-busy")).toBe(
-      "true",
-    ),
-  );
-  for (const name of ["Not qualified", "Mark lost", "Mark spam"]) {
-    expect(button(name).disabled).toBe(true);
+    "Stage: Discovery Call Booked",
+    "Lead Status: Appointment - Completed",
+    "Rep: Maya Okafor",
+  ]) {
+    expect(chips.getByText(chip)).toBeDefined();
   }
-  // A second press records nothing more.
-  fireEvent.click(button(/^(Loading\s*)?Qualified$/));
-
-  release();
-  await screen.findAllByRole("link", { name: "Start proposal" });
-  expect(api.calls().filter((call) => call.startsWith("POST "))).toHaveLength(
-    1,
-  );
-});
-
-test("when an action fails the lead is unchanged, a message says so and Try again repeats it", async () => {
-  const leadId = await open("Desmond Achterberg");
-  const before = await getLead(leadId);
-  api.fail("POST", /\/qualification$/);
-
-  fireEvent.click(button("Qualified"));
-  await screen.findByText("That did not go through. The lead is unchanged.");
-  expect(chips()[0]).toBe("Stage: Discovery Call Booked");
-  expect(button("Qualified").disabled).toBe(false);
-  expect(await getLead(leadId)).toEqual(before);
-
-  api.restore();
-  fireEvent.click(button("Try again"));
-  await screen.findAllByRole("link", { name: "Start proposal" });
-  expect(screen.queryByText(/did not go through/)).toBeNull();
-});
-
-test("an action the lead no longer allows is refused, and the page shows the lead as it now is", async () => {
-  const leadId = await open("Desmond Achterberg");
-  // Someone else marks the lead lost while this page is open.
-  const { markLost } = await import("@/lib/data/leads");
-  await markLost(leadId, { reason: "Duplicate" });
-
-  fireEvent.click(button("Qualified"));
-  await screen.findByText(
-    /This lead had changed, so that action no longer applies/,
-  );
-  await waitFor(() => expect(chips()[0]).toBe("Exit: Lead Lost"));
-  noButton("Qualified");
-});
-
-test("an unknown lead id shows the not-found panel with a way back, not the error state", async () => {
-  renderScreen(<LeadScreen leadId="lead-999" />);
-  await screen.findByText("This lead does not exist");
-  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.getAllByRole("tab").map((item) => item.textContent)).toEqual([
+    "Overview",
+    "Research",
+    "Decks",
+    "Proposals",
+    "Meetings",
+    "Timeline",
+  ]);
   expect(
-    screen
-      .getByRole("link", { name: "Back to the Pipeline" })
-      .getAttribute("href"),
-  ).toBe("/leads");
-
-  // When the server already knows, nothing is requested at all.
-  cleanup();
-  vi.mocked(fetch).mockClear();
-  renderScreen(<LeadScreen leadId="lead-999" missing />);
-  expect(screen.getByText("This lead does not exist")).toBeDefined();
-  expect(fetch).not.toHaveBeenCalled();
-});
-
-test("loading shows a skeleton; a failed load shows the error state with Try again and a way back", async () => {
-  const leadId = await leadIdOf("Sofia Lindgren");
-  api.fail("GET", /^\/api\/leads\/lead-/);
-  renderScreen(<LeadScreen leadId={leadId} />);
-
-  expect(screen.getByRole("status", { name: "Loading lead" })).toBeDefined();
-  await screen.findByText("This lead could not be loaded");
-  expect(screen.getByRole("alert")).toBeDefined();
-  expect(
-    screen.getByRole("link", { name: "Back to the Pipeline" }),
+    screen.getByText("The call is done. Record whether this lead is a fit."),
   ).toBeDefined();
-
-  api.restore();
-  fireEvent.click(button("Try again"));
-  await screen.findByRole("heading", { level: 1, name: "Sofia Lindgren" });
-});
-
-test("a long timeline shows the newest 20 until Show earlier is pressed", async () => {
-  await open("Philippa Ashdown");
-  expect(timeline()).toHaveLength(20);
-  fireEvent.click(button(/^Show earlier \(\d+\)$/));
-  expect(timeline().length).toBeGreaterThan(20);
-  expect(timeline().at(-1)?.textContent).toContain("Form submitted");
-  noButton(/^Show earlier/);
-});
-
-test("the way back to the Pipeline carries the filters the rep last had there", async () => {
-  sessionStorage.setItem(
-    "dealwright:pipeline-search",
-    "tab=qualified&q=asante",
-  );
-  await open("Kwame Asante");
-  expect(
-    screen.getByRole("link", { name: "Pipeline" }).getAttribute("href"),
-  ).toBe("/leads?tab=qualified&q=asante");
-});
-
-test("the proposal panel offers the way into the builder that fits: start, open, or not yet", async () => {
-  const beatrix = await open("Beatrix Olander");
-  expect(panel("Proposal").getByText("Not started")).toBeDefined();
-  expect(
-    panel("Proposal")
-      .getByRole("link", { name: "Start proposal" })
-      .getAttribute("href"),
-  ).toBe(`/proposals/${beatrix}`);
-
-  cleanup();
-  await open("Sofia Lindgren");
-  expect(panel("Proposal").queryByRole("link")).toBeNull();
-  expect(
-    panel("Proposal").getByText(
-      "A proposal can be started once the lead is Qualified.",
-    ),
-  ).toBeDefined();
-  expect(panel("Deck").getByText("Not generated yet")).toBeDefined();
-
-  // A lost lead's proposal can still be read.
-  cleanup();
-  await open("Seraphina Duarte");
-  expect(panel("Proposal").getByText("Lost")).toBeDefined();
-  expect(
-    panel("Proposal").getByRole("link", { name: "Open proposal" }),
-  ).toBeDefined();
-  expect(panel("Deck").queryByRole("link")).toBeNull();
-});
-
-test("a won lead shows its invoice draft: status, lines, total, when it was drafted and where to finish it", async () => {
-  await open("Jonas Whitlock");
-  const invoice = panel("Invoice");
-  await invoice.findByText("Draft");
-
-  expect(
-    within(invoice.getByRole("list", { name: "Invoice lines" }))
-      .getAllByRole("listitem")
-      .map((line) => line.textContent),
-  ).toEqual(["Paid search management$1,200", "Analytics and reporting$400"]);
-  expect(invoice.getByText("$1,600")).toBeDefined();
-  expect(invoice.getByText(/^Drafted/).querySelector("time")).not.toBeNull();
-  expect(
-    invoice.getByText(
-      "Finish and send it in the invoice service. Sample data: there is nothing to open.",
-    ),
-  ).toBeDefined();
+  expect(within(seam()).getByText("Validation verdict")).toBeDefined();
+  expect(within(seam()).getByText("Written")).toBeDefined();
   expect(document.body.textContent).not.toMatch(FORBIDDEN);
+});
 
-  // One the sample says was already sent.
-  cleanup();
-  await open("Ingrid Aaltonen");
-  await panel("Invoice").findByText("Sent");
+test("Qualified names its CRM write before confirming, calls the write once, and says it was skipped with writes off (check 3)", async () => {
+  await open();
+  const text = await confirm("Qualified", "Mark qualified");
+  expect(text).toContain(
+    "In the CRM: sets Qualification Decision to Qualified on the opportunity, and moves it to the Qualified stage.",
+  );
+  expect(text).toContain("The CRM then sends the follow-up email.");
+
+  await screen.findByText("Marked Imogen Vasquez qualified");
   expect(
-    panel("Invoice").getByText(/It was sent from the invoice service\./),
+    screen.getByText(
+      "Qualification decision was skipped. Writes to the CRM are off, so nothing was sent.",
+    ),
+  ).toBeDefined();
+  expect(posts()).toEqual(["POST /api/leads/lead-imogen/qualification"]);
+
+  // The seam shows the write; the header shows the new stage.
+  expect(within(seam()).getByText("Qualification decision")).toBeDefined();
+  expect(within(seam()).getByText("Skipped")).toBeDefined();
+  expect(screen.getByText("Stage: Qualified")).toBeDefined();
+});
+
+test("Not qualified names Lead Lost; Cancel writes nothing", async () => {
+  await open();
+  fireEvent.click(button("Not qualified"));
+  const dialog = await screen.findByRole("alertdialog");
+  expect(dialog.textContent).toContain(
+    "sets Qualification Decision to Not qualified on the opportunity, and moves it to the Lead Lost stage.",
+  );
+  fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+  expect(posts()).toEqual([]);
+});
+
+test("Mark as spam names Validation Status Spam and the CRM's removal, then writes once (check 3)", async () => {
+  await open();
+  const text = await confirm("Mark as spam", "Mark as spam");
+  expect(text).toContain(
+    "In the CRM: sets Validation Status to Spam on the contact.",
+  );
+  expect(text).toContain(
+    "The CRM then cancels any booking, sends its note and removes the record.",
+  );
+  await screen.findByText("Marked Imogen Vasquez as spam");
+  expect(posts()).toEqual(["POST /api/leads/lead-imogen/spam"]);
+  expect(within(seam()).getByText("Marked as spam")).toBeDefined();
+  // Gone from the pipeline: no action is left to press.
+  expect(screen.queryByRole("button", { name: "Mark as spam" })).toBeNull();
+});
+
+test("Change status is an admin's, says it is app only and may be overwritten, and writes once", async () => {
+  await open();
+  await asAdmin();
+  fireEvent.click(button("Change status"));
+  const dialog = await screen.findByRole("alertdialog");
+  expect(dialog.textContent).toContain(
+    "Nothing in the CRM. The status changes in this app only, and the CRM's own workflows may set it again at the next sync.",
+  );
+  fireEvent.change(within(dialog).getByLabelText("Lead Status"), {
+    target: { value: "Engaging - Hot Lead" },
+  });
+  fireEvent.click(
+    within(dialog).getByRole("button", { name: "Change status" }),
+  );
+
+  await screen.findByText("Lead Status is now Engaging - Hot Lead");
+  expect(posts()).toEqual(["POST /api/leads/lead-imogen/status"]);
+  expect(screen.getByText("Lead Status: Engaging - Hot Lead")).toBeDefined();
+});
+
+test("Assign rep is an admin's, app only, and writes once", async () => {
+  await open();
+  await asAdmin();
+  fireEvent.click(button("Assign rep"));
+  const dialog = await screen.findByRole("alertdialog");
+  expect(dialog.textContent).toContain("Nothing in the CRM.");
+  await within(dialog).findByRole("option", { name: "Jonah Pike" });
+  fireEvent.change(within(dialog).getByLabelText("Rep"), {
+    target: { value: "00000000-0000-4000-8000-0000000000b2" },
+  });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Assign" }));
+
+  await screen.findByText("Assigned Imogen Vasquez to Jonah Pike");
+  expect(posts()).toEqual(["POST /api/leads/lead-imogen/assign"]);
+  expect(screen.getByText("Rep: Jonah Pike")).toBeDefined();
+});
+
+test("a rep sees their own lead with no admin actions, and another rep's lead does not exist (check 1)", async () => {
+  viewAs("rep");
+  await open();
+  await screen.findByRole("button", { name: "Qualified" });
+  expect(screen.queryByRole("button", { name: "Change status" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Assign rep" })).toBeNull();
+  expect(document.querySelector('a[href="/admin/sync-log"]')).toBeNull();
+
+  cleanup();
+  renderScreen(<LeadScreen leadId="lead-sofia" />);
+  await screen.findByText("This lead does not exist");
+});
+
+test("the research tab shows the brief, its claims with their sources, and the cost before a refresh", async () => {
+  await open();
+  fireEvent.click(tab("Research"));
+  await screen.findByRole("heading", { name: "What they sell" });
+  expect(screen.getByText("Family dentistry in two clinics.")).toBeDefined();
+  expect(screen.getByText("Reviews mention short waits")).toBeDefined();
+  const source = screen.getByRole("link", {
+    name: /vasquez\.example\/locations/,
+  });
+  expect(source.getAttribute("href")).toBe("https://vasquez.example/locations");
+  expect(
+    screen.getByText("The model's inference, no source page"),
+  ).toBeDefined();
+
+  const text = await confirm("Refresh research", "Refresh research");
+  expect(text).toContain("≈ $0.06 per run");
+  expect(text).toContain("Nothing in the CRM.");
+  await screen.findByText(
+    "Researching this lead. The brief updates here when it is ready.",
+  );
+  expect(posts()).toEqual(["POST /api/leads/lead-imogen/research"]);
+  // The previous brief stays while the new one is made.
+  expect(screen.getByText("Family dentistry in two clinics.")).toBeDefined();
+});
+
+test("a failed research run says so, keeps the previous brief and offers to try again (check 4)", async () => {
+  const current = research.get("lead-imogen");
+  if (!current) throw new Error("no brief for Imogen");
+  research.set("lead-imogen", {
+    ...current,
+    run: {
+      status: "failed",
+      error: "the website did not answer",
+      createdAt: "2026-10-07T11:00:00.000Z",
+    },
+  });
+  await open();
+  fireEvent.click(tab("Research"));
+
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toContain(
+    "The latest research run failed: the website did not answer. The brief below is the last one that finished.",
+  );
+  expect(screen.getByText("Family dentistry in two clinics.")).toBeDefined();
+
+  const text = await confirm("Try again", "Refresh research");
+  expect(text).toContain("≈ $0.06 per run");
+  await screen.findByText(
+    "Researching this lead. The brief updates here when it is ready.",
+  );
+  expect(posts()).toEqual(["POST /api/leads/lead-imogen/research"]);
+});
+
+test("a lead with no research yet says so", async () => {
+  await open("lead-sofia");
+  fireEvent.click(tab("Research"));
+  await screen.findByText("No research yet");
+  expect(
+    screen.getByText("Research runs automatically after intake."),
+  ).toBeDefined();
+
+  // The first run says so, and that its cost has not been measured yet.
+  const text = await confirm("Research now", "Research now");
+  expect(text).toContain("Research this lead?");
+  expect(text).toContain("Not measured");
+  await screen.findByText(
+    "Researching this lead. The brief updates here when it is ready.",
+  );
+  expect(posts()).toEqual(["POST /api/leads/lead-sofia/research"]);
+});
+
+test("nothing links to a screen that is not live: unshipped tabs show their empty state and no button (check 5)", async () => {
+  // In production the deck, proposal and review-queue mockups are not live.
+  vi.stubEnv("NODE_ENV", "production");
+  await open("lead-desmond");
+  expect(screen.getByText("Qualified. Build the proposal next.")).toBeDefined();
+
+  for (const [name, empty] of [
+    ["Decks", "No decks yet"],
+    ["Proposals", "No proposals yet"],
+    ["Meetings", "No meetings yet"],
+  ]) {
+    fireEvent.click(tab(name));
+    await screen.findByText(empty);
+  }
+  const hrefs = [...document.querySelectorAll("a")].map((link) =>
+    link.getAttribute("href"),
+  );
+  for (const href of hrefs) {
+    expect(href, String(href)).toMatch(
+      /^(\/leads(\/|$|\?)|\/admin\/sync-log$|mailto:|tel:|https:)/,
+    );
+  }
+  expect(screen.queryByRole("link", { name: "Start proposal" })).toBeNull();
+});
+
+test("a refused action says the lead changed; a failed one says nothing was sent", async () => {
+  api.fail("POST", /\/qualification$/, 409, { once: true });
+  await open();
+  await confirm("Qualified", "Mark qualified");
+  await screen.findByText("That no longer applies");
+
+  api.fail("POST", /\/spam$/, 500, { once: true });
+  await confirm("Mark as spam", "Mark as spam");
+  await screen.findByText("That did not go through");
+  expect(
+    screen.getByText("The lead is unchanged and nothing was sent. Try again."),
   ).toBeDefined();
 });
 
-test("an invoice that cannot be loaded says so in its panel, and Try again loads it", async () => {
-  api.fail("GET", /\/invoice$/);
-  await open("Jonas Whitlock");
-  expect(screen.getByRole("status", { name: "Loading invoice" })).toBeDefined();
-  await panel("Invoice").findByText("The invoice could not be loaded.");
-  // The rest of the lead is unaffected.
-  expect(chips()[0]).toBe("Stage: Lead Won");
-
-  api.restore();
-  fireEvent.click(panel("Invoice").getByRole("button", { name: "Try again" }));
-  await panel("Invoice").findByText("Draft");
-  expect(screen.queryByText("The invoice could not be loaded.")).toBeNull();
+test("loading shows a skeleton; a failed load shows the error state with Try again", async () => {
+  api.fail("GET", /^\/api\/leads\/lead-imogen$/, 500, { once: true });
+  renderScreen(<LeadScreen leadId="lead-imogen" />);
+  expect(screen.getByLabelText("Loading lead")).toBeDefined();
+  await screen.findByText("This lead could not be loaded");
+  fireEvent.click(button("Try again"));
+  await screen.findByRole("heading", { level: 1, name: "Imogen Vasquez" });
 });
