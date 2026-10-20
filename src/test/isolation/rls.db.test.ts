@@ -4,10 +4,12 @@ import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { getTableConfig, type PgTable } from "drizzle-orm/pg-core";
-import pg from "pg";
+import type pg from "pg";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 import * as schema from "@/db/schema";
+
+import { SETUP_TIMEOUT, testTransaction } from "./test-transaction";
 
 /*
  * The database check (spec 01 section 4, acceptance check 4; ADR-0007): as
@@ -143,13 +145,14 @@ const rows = (n: 0 | 1): [PgTable, Record<string, unknown>][] => [
 const tables = rows(0).map(([table]) => table);
 
 describe.skipIf(!DIRECT_URL)(SUITE, () => {
+  let transaction: ReturnType<typeof testTransaction> | undefined;
   let client: pg.Client | undefined;
   let db: NodePgDatabase<typeof schema>;
 
   beforeAll(async () => {
-    client = new pg.Client({ connectionString: DIRECT_URL });
-    await client.connect();
-    await client.query("begin");
+    transaction = testTransaction(DIRECT_URL as string, "isolation:rls");
+    client = transaction.client;
+    await transaction.ready;
     db = drizzle({ client, schema });
     for (const [i, id] of ids.profile.entries()) {
       await client.query(
@@ -158,12 +161,9 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
       );
     }
     for (const [table, row] of rows(0)) await db.insert(table).values(row);
-  });
+  }, SETUP_TIMEOUT);
 
-  afterAll(async () => {
-    await client?.query("rollback");
-    await client?.end();
-  });
+  afterAll(() => transaction?.rollback());
 
   test("the check covers all eighteen tables", () => {
     expect(tables).toHaveLength(18);
