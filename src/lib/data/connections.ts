@@ -14,16 +14,14 @@ import {
 } from "@/lib/data/fixtures/connections";
 import { listVisibleLeads } from "@/lib/data/leads";
 import { sampleStore } from "@/lib/data/sample";
-import { AccessError } from "@/lib/data/users";
-import { requireCapability } from "@/lib/data/viewer";
+import { AccessError, requireAdmin } from "@/lib/data/users";
 import * as crm from "@/lib/services/crm";
 
 /*
  * Data access for Connections (spec 09's Connection row; spec 16; ADR-0006).
  *
  * THE SEAM. Every exported function starts with the guard
- * (`requireCapability("manage_connections")`: the current user, then their
- * role) and then reads or changes the sample store. Going live means replacing
+ * (`requireAdmin`: a rep is refused with "forbidden") and then reads or changes the sample store. Going live means replacing
  * the bodies of the exported functions below with queries on the viewer's
  * Workspace's Connection rows, replacing the bodies in
  * `src/lib/services/crm.ts` with the real adapter client, and deleting
@@ -81,7 +79,7 @@ async function toConnection(record: ConnectionRecord): Promise<Connection> {
 
 /** One Connection per type, in the order CRM, proposals, invoices, decks. */
 export async function listConnections(): Promise<Connection[]> {
-  await requireCapability("manage_connections");
+  await requireAdmin();
   return Promise.all(CONNECTION_TYPES.map((type) => toConnection(find(type))));
 }
 
@@ -94,7 +92,7 @@ export async function connect(
   type: ConnectionType,
   input: ConnectInput,
 ): Promise<Connection> {
-  await requireCapability("manage_connections");
+  await requireAdmin();
   const record = find(type);
   if (isConnected(record)) throw new AccessError("conflict");
 
@@ -110,7 +108,7 @@ export async function connect(
 
 /** Disconnects a service and forgets where its credential was kept. */
 export async function disconnect(type: ConnectionType): Promise<Connection> {
-  await requireCapability("manage_connections");
+  await requireAdmin();
   const record = find(type);
   if (!isConnected(record)) throw new AccessError("conflict");
 
@@ -122,7 +120,7 @@ export async function disconnect(type: ConnectionType): Promise<Connection> {
 
 /** Checks the CRM now and records when. Only the CRM syncs. */
 export async function syncNow(_type: "crm"): Promise<Connection> {
-  await requireCapability("manage_connections");
+  await requireAdmin();
   const record = connectedCrm();
 
   const { healthy, syncedAt } = await crm.syncStatus();
@@ -136,7 +134,7 @@ export async function syncNow(_type: "crm"): Promise<Connection> {
  * not duplicate (spec 09, rule 1), so it can be run again safely.
  */
 export async function importLeads(): Promise<ImportResult> {
-  await requireCapability("manage_connections");
+  await requireAdmin();
   connectedCrm();
 
   const known = (await listVisibleLeads()).map((lead) => lead.id);
@@ -145,7 +143,7 @@ export async function importLeads(): Promise<ImportResult> {
 
 /** The CRM's stage names and which one each of the app's stages becomes. */
 export async function getStageMapping(): Promise<StageMapping> {
-  await requireCapability("manage_connections");
+  await requireAdmin();
   connectedCrm();
   return readStageMapping();
 }
@@ -154,7 +152,7 @@ export async function getStageMapping(): Promise<StageMapping> {
 export async function saveStageMapping(
   input: StageMappingInput,
 ): Promise<StageMapping> {
-  await requireCapability("manage_connections");
+  await requireAdmin();
   connectedCrm();
 
   const crmStages = await crm.listStages();

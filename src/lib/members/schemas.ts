@@ -10,14 +10,14 @@ import { roleSchema } from "@/lib/roles";
  * server-only imports and no fixtures. The external CRM user id is not here
  * and never reaches the browser.
  *
- * The three roles and what each sees (question 7, PROPOSED) live in
+ * The two roles and what each sees live in
  * `src/lib/roles.ts` and are not repeated here.
  */
 
 /**
  * Spec 12 follows the handoff, which lists "Invite, change role, remove"; the
  * architecture review lists only "Change a role, remove access". MOCK CHOICE:
- * inviting is offered to admins and owners. False hides the form and makes
+ * inviting is offered to admins. False hides the form and makes
  * the data-access layer refuse an invite.
  */
 export const INVITING_IS_OFFERED = true;

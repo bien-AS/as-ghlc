@@ -7,32 +7,28 @@ import { FieldError } from "@/components/ui/field";
 import { useSignInWithGoogle } from "@/hooks/use-auth";
 import { authErrorMessage } from "@/lib/auth/errors";
 
-/** "Continue with Google"; behaves the same on sign-in and sign-up. */
+/** "Continue with Google", the only way to sign in. */
 export function GoogleButton({
   next,
-  disabled,
 }: {
-  /** Where to land afterwards; already limited to a path inside the app. */
-  next: string;
-  disabled?: boolean;
+  /** The remembered page, already limited to an app screen; null for none. */
+  next: string | null;
 }) {
   const google = useSignInWithGoogle();
+  // Stays in progress after success: the browser is leaving for Google.
+  const leaving = google.isPending || google.isSuccess;
 
   return (
     <div className="flex flex-col gap-2">
       <Button
         size="lg"
         className="w-full"
-        // Stays in progress after success: the browser is leaving for Google.
-        loading={google.isPending || google.isSuccess}
-        disabled={disabled}
+        loading={leaving}
         onClick={() => {
-          if (!google.isPending) google.mutate(next);
+          if (!leaving) google.mutate(next);
         }}
       >
-        {!(google.isPending || google.isSuccess) && (
-          <FcGoogle aria-hidden="true" data-icon="inline-start" />
-        )}
+        {!leaving && <FcGoogle aria-hidden="true" data-icon="inline-start" />}
         Continue with Google
       </Button>
       {google.isError && (

@@ -313,13 +313,6 @@
     :is([data-slot="button"], [data-slot="link-button"], [data-slot="input"]) {
     min-height: 44px;
   }
-  [data-slot="auth-shell"] [data-slot="password-toggle"] {
-    width: 44px;
-  }
-  [data-slot="auth-shell"]
-    [data-slot="input"]:has(+ [data-slot="password-toggle"]) {
-    padding-right: 44px;
-  }
 }
 
 /* biome-ignore-start lint/complexity/noImportantStyles: the reduced-motion override has to beat every component's own transition */

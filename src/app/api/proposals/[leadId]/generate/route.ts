@@ -1,6 +1,6 @@
 import { invalidInput, refusal } from "@/lib/api/respond";
 import { generateProposal } from "@/lib/data/proposals";
-import { requireUser } from "@/lib/data/users";
+import { requireProfile } from "@/lib/data/users";
 import { emptyInputSchema } from "@/lib/proposals/schemas";
 
 /** Mock generate: starts a draft for the lead. */
@@ -10,7 +10,7 @@ export async function POST(
 ) {
   try {
     // Guard first (AGENTS.md): who is asking is settled before the input is read.
-    await requireUser();
+    await requireProfile();
 
     const parsed = emptyInputSchema.safeParse(
       await request.json().catch(() => ({})),

@@ -1,49 +1,63 @@
 import { safeRedirectTarget } from "@/lib/auth/redirect-target";
 
-/** The three answers of the current-user resolver (spec 02, "Who is sent where"). */
-export type AuthStatus = "signed-out" | "no-profile" | "ready";
+/**
+ * Where a request stands (spec 01 section 5): no session, a session with no
+ * profile (not provisioned), a deactivated profile, or a profile that may use
+ * the app.
+ */
+export type AuthStatus = "signed-out" | "no-profile" | "inactive" | "ready";
 
 /** Short codes carried in the address by a redirect; never free text, never an email. */
-export const NOTICE = {
-  linkInvalid: "link_invalid",
-  googleFailed: "google_failed",
-  signedOut: "signed_out",
+export const NOTICE = { googleFailed: "google_failed" } as const;
+
+/** Why /access-denied was reached: which of ADR-0008's three checks failed. */
+export const DENIED = {
+  notCompany: "not_company",
+  notProvisioned: "not_provisioned",
+  deactivated: "deactivated",
 } as const;
+export type DeniedReason = (typeof DENIED)[keyof typeof DENIED];
 
-const SIGNED_OUT_FORMS = ["/sign-in", "/sign-up", "/reset-password"];
-
-/** Every page that holds an auth form. */
-const AUTH_PAGES = [
-  ...SIGNED_OUT_FORMS,
-  "/reset-password/update",
-  "/profile-setup",
-];
-const NOTICE_CODES: string[] = Object.values(NOTICE);
+export const accessDenied = (reason: DeniedReason) =>
+  `/access-denied?reason=${reason}`;
 
 /**
- * Defence in depth for an address that carries form fields (a password, an
- * email, a name), which is what a form submitted by the browser itself with
- * GET would produce. An auth page accepts two query parameters and nothing
- * else: `next`, when it is a path inside the app, and `notice`, when it is one
- * of our codes. Returns the cleaned address to redirect to, or null when the
- * address is already clean or is not an auth page. Nothing is echoed or logged.
+ * The first segment of every registry screen in the (app) route group
+ * (`screen-registry.json`). A signed-out visitor is sent to /login from any
+ * address under one of them, so a screen added to the registry is protected
+ * without being listed here.
  */
-export function cleanAuthAddress(pathname: string, search: string) {
-  const path = pathname.replace(/\/+$/, "") || "/";
-  if (!AUTH_PAGES.includes(path)) return null;
+const APP_SECTIONS = [
+  "/dashboard",
+  "/leads",
+  "/review-queue",
+  "/pipeline",
+  "/decks",
+  "/proposals",
+  "/invoices",
+  "/recordings",
+  "/notifications",
+  "/reports",
+  "/settings",
+  "/welcome",
+  "/admin",
+];
 
-  const given = new URLSearchParams(search);
-  const kept = new URLSearchParams();
-  const next = given.get("next");
-  if (next && safeRedirectTarget(next) === next) kept.set("next", next);
-  const notice = given.get("notice");
-  if (notice && NOTICE_CODES.includes(notice)) kept.set("notice", notice);
+const pathnameOf = (path: string) =>
+  path.split(/[?#]/)[0].replace(/\/+$/, "") || "/";
 
-  given.sort();
-  kept.sort();
-  if (given.toString() === kept.toString()) return null;
-  const query = kept.toString();
-  return query ? `${path}?${query}` : path;
+const inApp = (path: string) => {
+  const pathname = pathnameOf(path);
+  return APP_SECTIONS.some(
+    (section) => pathname === section || pathname.startsWith(`${section}/`),
+  );
+};
+
+/** The remembered page, kept only when it is a safe path to an app screen. */
+export function rememberedPage(value: string | null | undefined) {
+  return value && safeRedirectTarget(value) === value && inApp(value)
+    ? value
+    : null;
 }
 
 /**
@@ -52,43 +66,25 @@ export function cleanAuthAddress(pathname: string, search: string) {
  * when the route is shown. The proxy applies it for signed-out visitors (it is
  * the one place that knows the requested address); pages apply it again with
  * the full state through `enforceRoute`.
- *
- * Everything under /dashboard is covered by the prefix rule, so new dashboard
- * routes are protected without being listed here.
  */
 export function decideRedirect(
   path: string,
   status: AuthStatus,
 ): string | null {
-  const pathname = path.split(/[?#]/)[0].replace(/\/+$/, "") || "/";
-
-  if (SIGNED_OUT_FORMS.includes(pathname)) {
-    if (status === "no-profile") return "/profile-setup";
-    if (status === "ready") return "/dashboard";
-    return null;
+  if (pathnameOf(path) === "/login") {
+    return status === "ready" ? "/dashboard" : null;
   }
 
-  if (pathname === "/reset-password/update") {
-    return status === "signed-out"
-      ? `/reset-password?notice=${NOTICE.linkInvalid}`
-      : null;
-  }
-
-  if (pathname === "/profile-setup") {
-    if (status === "signed-out") return "/sign-in";
-    if (status === "ready") return "/dashboard";
-    return null;
-  }
-
-  if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) {
+  if (inApp(path)) {
     if (status === "signed-out") {
-      return `/sign-in?next=${encodeURIComponent(path)}`;
+      return `/login?next=${encodeURIComponent(path)}`;
     }
-    if (status === "no-profile") return "/profile-setup";
+    if (status === "no-profile") return accessDenied(DENIED.notProvisioned);
+    if (status === "inactive") return accessDenied(DENIED.deactivated);
     return null;
   }
 
-  // "/", /auth/*, /api/* and anything else: never redirected here. API routes
-  // refuse with 401 / 403 through the data-access guards instead.
+  // "/", /access-denied, /auth/*, /api/* and anything else: never redirected
+  // here. API routes refuse with 401 / 403 through the data-access guards.
   return null;
 }

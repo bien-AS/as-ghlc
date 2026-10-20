@@ -1,7 +1,11 @@
 import { buildSampleLeads, type LeadRecord } from "@/lib/data/fixtures/leads";
 import { resetSampleData, SAMPLE_DATA, sampleStore } from "@/lib/data/sample";
-import { AccessError } from "@/lib/data/users";
-import { canSeeLead, getViewer, type Viewer } from "@/lib/data/viewer";
+import {
+  AccessError,
+  leadScope,
+  type Profile,
+  requireProfile,
+} from "@/lib/data/users";
 import { effectiveVerdict, nextStep } from "@/lib/leads/rules";
 import {
   EXITS,
@@ -21,11 +25,11 @@ import {
 /*
  * Data access for leads (spec 04, "The sample-data seam"; ADR-0006).
  *
- * THE SEAM. Every exported function starts with the guard (`getViewer`: the
- * current user, then their role) and then reads or changes the sample store.
+ * THE SEAM. Every exported function starts with the guard (`requireProfile`)
+ * and reads only the leads in the profile's `leadScope`, then reads or changes
+ * the sample store.
  * Going live means replacing the bodies of the exported functions below with
- * database queries (the Workspace ownership check goes in `getViewer`, spec
- * 12), deleting `fixtures/`, and setting SAMPLE_DATA to false. Schemas, Route
+ * database queries (`leadScope` becomes their where clause), deleting `fixtures/`, and setting SAMPLE_DATA to false. Schemas, Route
  * Handlers, query options, hooks and components do not change.
  *
  * This is the only module, with its tests, that imports the fixtures.
@@ -134,13 +138,12 @@ function needsOf(lead: LeadDetail, today: string, timeZone: string): Need[] {
   return needs;
 }
 
-/** The leads this viewer may see (spec 12: staff see only their own). */
-const visible = (viewer: Viewer) =>
-  records().filter((lead) => canSeeLead(viewer, lead));
+/** The leads this profile may see (spec 01: a rep only their own). */
+const visible = (profile: Profile) => records().filter(leadScope(profile));
 
 /** A lead the viewer may not see answers as if it did not exist. */
-function find(leadId: string, viewer: Viewer): LeadRecord {
-  const record = visible(viewer).find((lead) => lead.id === leadId);
+function find(leadId: string, profile: Profile): LeadRecord {
+  const record = visible(profile).find((lead) => lead.id === leadId);
   if (!record) throw new AccessError("not_found");
   return record;
 }
@@ -178,7 +181,7 @@ function cancelUpcomingBookings(record: LeadRecord) {
 
 /** A page of list items for the Pipeline and the suspect queue. */
 export async function listLeads(query: ListLeadsQuery): Promise<LeadPage> {
-  const viewer = await getViewer();
+  const viewer = await requireProfile();
 
   const today = localDay(Date.now(), query.tz);
   const text = query.q?.toLowerCase();
@@ -232,7 +235,7 @@ export async function listLeads(query: ListLeadsQuery): Promise<LeadPage> {
 export async function getPipelineSummary(query: {
   tz: string;
 }): Promise<PipelineSummary> {
-  const viewer = await getViewer();
+  const viewer = await requireProfile();
 
   const today = localDay(Date.now(), query.tz);
   const zero = <K extends string>(keys: readonly K[]) =>
@@ -264,7 +267,7 @@ export async function getPipelineSummary(query: {
 
 /** One lead in detail. */
 export async function getLead(leadId: string): Promise<LeadDetail> {
-  return toDetail(find(leadId, await getViewer()));
+  return toDetail(find(leadId, await requireProfile()));
 }
 
 /** Records a rep's decision on a suspect (spec 07). */
@@ -272,9 +275,8 @@ export async function reviewSuspect(
   leadId: string,
   input: ReviewInput,
 ): Promise<LeadDetail> {
-  const viewer = await getViewer();
-  const { user } = viewer;
-  const record = find(leadId, viewer);
+  const user = await requireProfile();
+  const record = find(leadId, user);
   if (!nextStep(toDetail(record)).canReview || !record.verdictRecord) {
     throw new AccessError("conflict");
   }
@@ -314,9 +316,8 @@ export async function setQualification(
   leadId: string,
   input: QualificationInput,
 ): Promise<LeadDetail> {
-  const viewer = await getViewer();
-  const { user } = viewer;
-  const record = find(leadId, viewer);
+  const user = await requireProfile();
+  const record = find(leadId, user);
   if (!nextStep(toDetail(record)).canQualify) throw new AccessError("conflict");
 
   const actor = `${user.firstName} ${user.lastName}`;
@@ -350,9 +351,8 @@ export async function markLost(
   leadId: string,
   input: LostInput,
 ): Promise<LeadDetail> {
-  const viewer = await getViewer();
-  const { user } = viewer;
-  const record = find(leadId, viewer);
+  const user = await requireProfile();
+  const record = find(leadId, user);
   if (!nextStep(toDetail(record)).canMarkLost)
     throw new AccessError("conflict");
 
@@ -370,9 +370,8 @@ export async function markLost(
 
 /** Marks a lead spam and cancels its upcoming booking (spec 06; question 5, assumed). */
 export async function markSpam(leadId: string): Promise<LeadDetail> {
-  const viewer = await getViewer();
-  const { user } = viewer;
-  const record = find(leadId, viewer);
+  const user = await requireProfile();
+  const record = find(leadId, user);
   if (!nextStep(toDetail(record)).canMarkSpam)
     throw new AccessError("conflict");
 
@@ -398,7 +397,7 @@ export async function markSpam(leadId: string): Promise<LeadDetail> {
 
 /** Every lead the viewer may see, in detail, in no particular order. */
 export async function listVisibleLeads(): Promise<LeadDetail[]> {
-  return visible(await getViewer()).map(toDetail);
+  return visible(await requireProfile()).map(toDetail);
 }
 
 /**
@@ -411,11 +410,11 @@ export async function recordProposalStatus(
   leadId: string,
   status: NonNullable<LeadDetail["proposal"]>["status"],
 ): Promise<LeadDetail> {
-  const viewer = await getViewer();
+  const viewer = await requireProfile();
   const record = find(leadId, viewer);
   if (record.exit) throw new AccessError("conflict");
 
-  const actor = `${viewer.user.firstName} ${viewer.user.lastName}`;
+  const actor = `${viewer.firstName} ${viewer.lastName}`;
   const time = new Date().toISOString();
   record.proposal = { status };
   if (status === "draft") {
@@ -459,7 +458,7 @@ export async function recordProposalStatus(
 
 /** Records that an invoice draft now exists for a won lead (spec 15). */
 export async function recordInvoiceDraft(leadId: string): Promise<LeadDetail> {
-  const record = find(leadId, await getViewer());
+  const record = find(leadId, await requireProfile());
   if (record.stage !== "won" || record.exit) throw new AccessError("conflict");
 
   record.invoice = { status: "draft" };
@@ -478,14 +477,14 @@ export async function recordDeckTemplate(
   leadId: string,
   templateName: string,
 ): Promise<LeadDetail> {
-  const viewer = await getViewer();
+  const viewer = await requireProfile();
   const record = find(leadId, viewer);
   if (!record.deck) throw new AccessError("not_found");
 
   record.deck.templateName = templateName;
   addActivity(
     record,
-    `${viewer.user.firstName} ${viewer.user.lastName}`,
+    `${viewer.firstName} ${viewer.lastName}`,
     "Deck template changed",
     `The deck now uses the ${templateName} template.`,
     new Date().toISOString(),

@@ -1,55 +1,48 @@
+import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 
+import { db } from "@/db/client";
+import { profiles } from "@/db/schema";
+
 import { type AuthStatus, decideRedirect } from "@/lib/auth/routing";
-import {
-  type CurrentUser,
-  type ProfileInput,
-  profileSchema,
-} from "@/lib/auth/schemas";
-import { prisma } from "@/lib/prisma";
+import type { CurrentUser, ProfileInput } from "@/lib/auth/schemas";
 import { createClient } from "@/lib/supabase/server";
 
 /*
- * Data access for the User resource, and the shared guards every other
- * data-access function calls first (ADR-0002, AGENTS.md).
+ * Data access for the signed-in person's profile, and THE GUARDS (spec 01
+ * section 4; ADR-0002). Every data-access function calls one first:
  *
- * Server only: this module reads the session cookies and the database. The
- * ownership half of the guard (membership of the owning Workspace) has nothing
- * to check until spec 12; `requireUser` is where it will go.
+ *  - `requireProfile()`: a verified session and an active profile;
+ *  - `requireAdmin()`: the same, with the admin role;
+ *  - `leadScope(profile)`, applied by every lead read: an admin sees every
+ *    lead, a rep only the leads assigned to them. Anything that belongs to a
+ *    lead is reached through the lead, so through its scope.
+ *
+ * Profiles are created only by provisioning (ADR-0008: `pnpm seed:admins`,
+ * then the admin screen in spec 15), never by the person signing in.
+ *
+ * Server only: this module reads the session cookies and the database.
  */
 
-/** Sign-up stores the typed names on the auth user under keys Google does not use. */
-export const SIGN_UP_NAME_KEYS = {
-  firstName: "dw_first_name",
-  lastName: "dw_last_name",
-} as const;
-
-/** What the verified session says about the person. Never built from client input. */
-export type SessionIdentity = {
-  id: string;
-  email: string;
-  /** Both names typed at email sign-up, when present and valid. */
-  signUpNames: ProfileInput | null;
-  /** Best guess for prefilling the form (sign-up names, else the Google profile). */
-  suggestedNames: { firstName: string; lastName: string };
-  /** How this session was established, from the token's `amr` claim. */
-  methods: string[];
+/** The signed-in person's profile row, as the guards read it. */
+export type Profile = CurrentUser & {
+  role: "admin" | "rep";
+  active: boolean;
 };
 
 export type CurrentUserResult =
   | { status: "signed-out" }
-  | { status: "no-profile"; identity: SessionIdentity }
-  | { status: "ready"; identity: SessionIdentity; user: CurrentUser };
+  | { status: "no-profile" }
+  | { status: "ready"; user: Profile };
 
 export type AccessErrorCode =
   | "unauthenticated"
   | "profile_required"
-  | "email_conflict"
   // The resource does not exist, or its current state does not allow the write.
   | "not_found"
   | "conflict"
-  // Signed in, but the role does not allow this resource (spec 12).
+  // Signed in, but the role does not allow this, or the profile is deactivated.
   | "forbidden";
 
 /** A data-access function refused. Route Handlers turn the code into 401 / 403 / 404 / 409. */
@@ -60,131 +53,126 @@ export class AccessError extends Error {
   }
 }
 
-const text = (value: unknown) =>
-  typeof value === "string" ? value.trim() : "";
-
-function suggestNames(meta: Record<string, unknown>) {
-  const firstName =
-    text(meta[SIGN_UP_NAME_KEYS.firstName]) || text(meta.given_name);
-  const lastName =
-    text(meta[SIGN_UP_NAME_KEYS.lastName]) || text(meta.family_name);
-  if (firstName || lastName) return { firstName, lastName };
-  // Google supplies one display name; the person checks the split on the form.
-  const [first = "", ...rest] = (text(meta.full_name) || text(meta.name))
-    .split(/\s+/)
-    .filter(Boolean);
-  return { firstName: first, lastName: rest.join(" ") };
-}
+/** ADR-0008 check 1: the only addresses let in. Shared with /auth/callback. */
+export const COMPANY_DOMAIN = "@authoritysolutions.com";
 
 /**
  * Verifies the session with Supabase (`getClaims` checks the token's signature
- * against the project's keys and refreshes an expired session) and reads the
- * identity from the verified claims.
+ * against the project's keys and refreshes an expired session) and returns the
+ * auth user id from the verified claims. ADR-0008 check 1, re-made on every
+ * request: the session came through OAuth (Google is the only provider) with a
+ * company address. Anything else (a password or magic-link session) is not a
+ * session this app recognises, so it reads as signed out.
  */
-async function getSessionIdentity(): Promise<SessionIdentity | null> {
+async function getSessionUserId(): Promise<string | null> {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getClaims();
   const claims = data?.claims;
   if (error || !claims?.sub || typeof claims.email !== "string") return null;
-  if (!claims.email) return null;
-
-  const meta = (claims.user_metadata ?? {}) as Record<string, unknown>;
-  const names = profileSchema.safeParse({
-    firstName: meta[SIGN_UP_NAME_KEYS.firstName],
-    lastName: meta[SIGN_UP_NAME_KEYS.lastName],
-  });
-  const methods = (claims.amr ?? []).map((entry) =>
-    typeof entry === "string" ? entry : entry.method,
+  if (!claims.email.toLowerCase().endsWith(COMPANY_DOMAIN)) return null;
+  // `amr` is AMREntry[] or string[] (@supabase/auth-js JwtPayload).
+  const viaOAuth = claims.amr?.some(
+    (entry) => (typeof entry === "string" ? entry : entry.method) === "oauth",
   );
-
-  return {
-    id: claims.sub,
-    email: claims.email,
-    signUpNames: names.success ? names.data : null,
-    suggestedNames: suggestNames(meta),
-    methods,
-  };
+  return viaOAuth ? claims.sub : null;
 }
 
-/**
- * The current-user resolver: signed out, signed in without a profile, or the
- * User. One read by primary key, because User.id is the auth user id
- * (ADR-0005). Memoised for the length of one server render.
- */
-export const getCurrentUser = cache(async (): Promise<CurrentUserResult> => {
-  const identity = await getSessionIdentity();
-  if (!identity) return { status: "signed-out" };
+/** The profile columns a CurrentUser carries. */
+const CURRENT_USER = {
+  id: profiles.id,
+  email: profiles.email,
+  firstName: profiles.firstName,
+  lastName: profiles.lastName,
+};
 
-  const user = await prisma.user.findUnique({ where: { id: identity.id } });
-  return user
-    ? { status: "ready", identity, user }
-    : { status: "no-profile", identity };
+const findProfile = (id: string): Promise<Profile | undefined> =>
+  db.query.profiles.findFirst({
+    where: eq(profiles.id, id),
+    columns: {
+      id: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      role: true,
+      active: true,
+    },
+  });
+
+const toCurrentUser = ({ id, email, firstName, lastName }: CurrentUser) => ({
+  id,
+  email,
+  firstName,
+  lastName,
 });
 
 /**
- * The guard for application data: authenticated, then has a profile. Every
- * data-access function that serves application data starts here, and a Route
- * Handler that takes input calls it before reading that input, so the order
- * of refusals is always 401, 403, then 400.
+ * The current-user resolver: signed out, signed in without a profile, or the
+ * profile. One read by primary key, because profiles.id is the auth user id
+ * (ADR-0008). Memoised for the length of one server render.
+ */
+export const getCurrentUser = cache(async (): Promise<CurrentUserResult> => {
+  const id = await getSessionUserId();
+  if (!id) return { status: "signed-out" };
+
+  const user = await findProfile(id);
+  return user ? { status: "ready", user } : { status: "no-profile" };
+});
+
+/**
+ * The guard for application data: a verified session, a profile, and the
+ * profile active (ADR-0008: a deactivated rep's next request is refused). Every
+ * data-access function starts here, and a Route Handler that takes input calls
+ * it before reading that input, so the order of refusals is always 401, 403,
+ * then 400.
  *
  * ponytail: outside a server render `cache` does not memoise, so such a
  * handler resolves the session twice (here and in the data function): one
- * extra token check and one read by primary key. Pass the resolved user into
- * the data functions if that ever shows up in timings.
+ * extra token check and one read by primary key. Pass the resolved profile
+ * into the data functions if that ever shows up in timings.
  */
-export async function requireUser(): Promise<CurrentUser> {
+export async function requireProfile(): Promise<Profile> {
   const current = await getCurrentUser();
   if (current.status === "signed-out") throw new AccessError("unauthenticated");
   if (current.status === "no-profile") {
     throw new AccessError("profile_required");
   }
+  if (!current.user.active) throw new AccessError("forbidden");
   return current.user;
 }
 
-/**
- * The guard for the one write a person without a profile may make (creating
- * it): authenticated, and nothing more.
- */
-export async function requireSession(): Promise<
-  Exclude<CurrentUserResult, { status: "signed-out" }>
-> {
-  const current = await getCurrentUser();
-  if (current.status === "signed-out") throw new AccessError("unauthenticated");
-  return current;
+/** The guard for the admin cluster (reps, integrations) and invoice actions. */
+export async function requireAdmin(): Promise<Profile> {
+  const profile = await requireProfile();
+  if (profile.role !== "admin") throw new AccessError("forbidden");
+  return profile;
 }
+
+/**
+ * The leads a profile may reach: an admin every lead, a rep only those
+ * assigned to them. ponytail: a predicate over the sample leads (ADR-0006);
+ * it becomes `eq(leads.assignedTo, profile.id)` (or nothing, for an admin)
+ * when leads are read from the table (spec 06).
+ */
+export const leadScope =
+  (profile: Profile) =>
+  (lead: { owner: { id: string } }): boolean =>
+    profile.role === "admin" || lead.owner.id === profile.id;
+
+/**
+ * What /auth/callback checks after the code exchange (ADR-0008): whether the
+ * auth user has a provisioned profile, whether it is active, and whether this
+ * is the first sign-in. The one read made without a guard, because it is the
+ * gate itself; the id comes from the session the exchange just established.
+ */
+export const getSignInProfile = (authUserId: string) =>
+  db.query.profiles.findFirst({
+    where: eq(profiles.id, authUserId),
+    columns: { active: true, firstRun: true },
+  });
 
 /** The current User, for GET /api/me and for server prefetch (ADR-0001). */
 export async function getMe(): Promise<CurrentUser> {
-  return requireUser();
-}
-
-/**
- * Creates the User row for the signed-in person. The id and email come from
- * the verified session and nowhere else; `input` supplies the two names only,
- * and any other property on it is ignored. Safe to call twice.
- */
-export async function createProfile(input: ProfileInput): Promise<CurrentUser> {
-  const current = await requireSession();
-  if (current.status === "ready") return current.user;
-
-  const { id, email } = current.identity;
-  try {
-    return await prisma.user.create({
-      data: {
-        id,
-        email,
-        firstName: input.firstName,
-        lastName: input.lastName,
-      },
-    });
-  } catch (error) {
-    if ((error as { code?: unknown } | null)?.code !== "P2002") throw error;
-    // Unique violation: either a second submit won the race (same id, fine),
-    // or another profile already uses this email.
-    const existing = await prisma.user.findUnique({ where: { id } });
-    if (existing) return existing;
-    throw new AccessError("email_conflict");
-  }
+  return toCurrentUser(await requireProfile());
 }
 
 /**
@@ -193,75 +181,19 @@ export async function createProfile(input: ProfileInput): Promise<CurrentUser> {
  * names only, so the email and the id cannot be changed here.
  */
 export async function updateProfile(input: ProfileInput): Promise<CurrentUser> {
-  const user = await requireUser();
-  return prisma.user.update({
-    where: { id: user.id },
-    data: { firstName: input.firstName, lastName: input.lastName },
-  });
+  const user = await requireProfile();
+  const [updated] = await db
+    .update(profiles)
+    .set({ firstName: input.firstName, lastName: input.lastName })
+    .where(eq(profiles.id, user.id))
+    .returning(CURRENT_USER);
+  return updated;
 }
 
-/**
- * The silent-path rule (spec 02): the names for a profile that may be created
- * without showing the form, or null when the form must be shown. Only for a
- * session established by an emailed link or by email and password, never one
- * established through Google, and only when sign-up supplied both names.
- */
-export function silentProfileNames(
-  identity: SessionIdentity,
-): ProfileInput | null {
-  if (identity.methods.includes("oauth")) return null;
-  const byEmail = identity.methods.some(
-    (method) => method === "otp" || method === "password",
-  );
-  return byEmail ? identity.signUpNames : null;
-}
-
-/** What may be logged about a failure: what kind it was, never what it said. */
-function describeFailure(error: unknown) {
-  const e = error as { name?: unknown; code?: unknown } | null;
-  return {
-    // A class name ("PrismaClientKnownRequestError") and a code ("P2002",
-    // "email_conflict"). Never the message: it can quote the values involved.
-    name: typeof e?.name === "string" ? e.name : typeof error,
-    code: typeof e?.code === "string" ? e.code : undefined,
-  };
-}
-
-/**
- * The silent path (spec 02), as a write the browser asks for with POST: it is
- * never a side effect of rendering a page, so a prefetch or a speculative
- * render cannot create a profile. Applies `silentProfileNames` to the
- * verified session; the caller supplies nothing.
- *
- * Returns the User (created now, or already there), or null when the form
- * must be shown: the rule does not allow it, or the write failed. A failure
- * is logged with the step and the kind of error only, never personal data.
- */
-export async function createProfileSilently(): Promise<CurrentUser | null> {
-  let step = "resolve-session";
-  try {
-    const current = await getCurrentUser();
-    if (current.status === "signed-out") {
-      throw new AccessError("unauthenticated");
-    }
-    if (current.status === "ready") return current.user;
-
-    const names = silentProfileNames(current.identity);
-    if (!names) return null;
-
-    step = "create-profile";
-    return await createProfile(names);
-  } catch (error) {
-    if (error instanceof AccessError && error.code === "unauthenticated") {
-      throw error;
-    }
-    console.error("[profile-setup] silent profile creation failed", {
-      step,
-      ...describeFailure(error),
-    });
-    return null;
-  }
-}
+const statusOf = (current: CurrentUserResult): AuthStatus =>
+  current.status === "ready" && !current.user.active
+    ? "inactive"
+    : current.status;
 
 /**
  * Applies the "who is sent where" table to a page: redirects when the table
@@ -270,7 +202,7 @@ export async function createProfileSilently(): Promise<CurrentUser | null> {
  */
 export async function enforceRoute(path: string): Promise<CurrentUserResult> {
   const current = await getCurrentUser();
-  const destination = decideRedirect(path, current.status satisfies AuthStatus);
+  const destination = decideRedirect(path, statusOf(current));
   if (destination) redirect(destination);
   return current;
 }

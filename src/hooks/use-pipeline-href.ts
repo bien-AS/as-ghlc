@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from "react";
 
 const KEY = "dealwright:pipeline-search";
-const PIPELINE = "/dashboard";
+const PIPELINE = "/leads";
 const subscribe = () => () => {};
 
 /** Called by the Pipeline whenever its filters change. */

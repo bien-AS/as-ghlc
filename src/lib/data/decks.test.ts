@@ -15,7 +15,6 @@ import {
 } from "@/lib/data/decks";
 import { buildSampleDecks, seedDeck } from "@/lib/data/fixtures/decks";
 import { getLead, listVisibleLeads, resetSampleLeads } from "@/lib/data/leads";
-import { PREVIEW_ROLE_COOKIE } from "@/lib/data/viewer";
 import { DECK_TEMPLATE_LABEL } from "@/lib/decks/rules";
 import {
   bookingSlotSchema,
@@ -26,15 +25,15 @@ import {
   parseDeckAddress,
   slideFormSchema,
 } from "@/lib/decks/schemas";
-import { fake, resetFakes, signIn } from "@/test/server-fakes";
+import { fake, resetFakes, signIn, viewAs } from "@/test/server-fakes";
 
 vi.mock(
   "@/lib/supabase/server",
   async () => (await import("@/test/server-fakes")).supabaseServerModule,
 );
 vi.mock(
-  "@/lib/prisma",
-  async () => (await import("@/test/server-fakes")).prismaModule,
+  "@/db/client",
+  async () => (await import("@/test/server-fakes")).dbModule,
 );
 
 const ORIGIN = "http://localhost:3000";
@@ -64,15 +63,14 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const viewAs = (role: string) => fake.cookies.set(PREVIEW_ROLE_COOKIE, role);
 const refusedWith = (code: string) => expect.objectContaining({ code });
 
-/** The id of the sample lead with this name. Asked as an owner, who sees every lead. */
+/** The id of the sample lead with this name. Asked as an admin, who sees every lead. */
 async function idOf(name: string) {
-  const role = fake.cookies.get(PREVIEW_ROLE_COOKIE);
-  fake.cookies.delete(PREVIEW_ROLE_COOKIE);
+  const claims = fake.claims;
+  viewAs("admin");
   const lead = (await listVisibleLeads()).find((item) => item.name === name);
-  if (role) fake.cookies.set(PREVIEW_ROLE_COOKIE, role);
+  fake.claims = claims;
   if (!lead) throw new Error(`no sample lead called ${name}`);
   return lead.id;
 }
@@ -426,10 +424,10 @@ test("the PDF route answers a PDF download named after the lead, one page per sl
 
 // --- roles -------------------------------------------------------------------
 
-test("staff reach only their own leads' decks; another rep's deck answers not found", async () => {
+test("a rep reaches only their own leads' decks; another rep's deck answers not found", async () => {
   const mine = await idOf(MAYAS);
   const theirs = await idOf(DANIELS);
-  viewAs("staff");
+  viewAs("rep");
 
   const decks = await listDecks();
   expect(decks.length).toBeGreaterThan(0);
@@ -447,7 +445,7 @@ test("staff reach only their own leads' decks; another rep's deck answers not fo
   }
 
   // The refused writes changed nothing.
-  viewAs("owner");
+  viewAs("admin");
   const deck = await getDeck(theirs);
   expect(deck.template).toBe("discovery");
   expect(deck.slides.find((slide) => slide.id === "goals")?.heading).toBe(
@@ -455,12 +453,10 @@ test("staff reach only their own leads' decks; another rep's deck answers not fo
   );
 });
 
-test("an admin and an owner reach every deck", async () => {
+test("an admin reaches every deck", async () => {
   const theirs = await idOf(DANIELS);
-  for (const role of ["admin", "owner"]) {
-    viewAs(role);
-    expect((await getDeck(theirs)).lead.name).toBe(DANIELS);
-  }
+  viewAs("admin");
+  expect((await getDeck(theirs)).lead.name).toBe(DANIELS);
 });
 
 // --- the contract's two readers ----------------------------------------------

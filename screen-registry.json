@@ -56,7 +56,7 @@
       "dimension": "Auth & Identity",
       "tier": 1,
       "phase": 1,
-      "status": "planned",
+      "status": "built",
       "rbac": {
         "admin": "full",
         "operator": "full"
@@ -111,7 +111,7 @@
       "dimension": "Auth & Identity",
       "tier": 2,
       "phase": 1,
-      "status": "planned",
+      "status": "built",
       "rbac": {
         "admin": "full",
         "operator": "full"
@@ -172,7 +172,7 @@
       "dimension": "Auth & Identity",
       "tier": 2,
       "phase": 1,
-      "status": "planned",
+      "status": "built",
       "rbac": {
         "admin": "full",
         "operator": "full"
@@ -229,7 +229,7 @@
       "dimension": "Reporting & Analytics",
       "tier": 1,
       "phase": 1,
-      "status": "planned",
+      "status": "built",
       "rbac": {
         "admin": "full",
         "operator": "full"
@@ -340,7 +340,7 @@
       "dimension": "Core Workflow",
       "tier": 1,
       "phase": 1,
-      "status": "planned",
+      "status": "built",
       "rbac": {
         "admin": "full",
         "operator": "full"
@@ -436,7 +436,7 @@
       "dimension": "Detail Pages",
       "tier": 1,
       "phase": 1,
-      "status": "planned",
+      "status": "built",
       "rbac": {
         "admin": "full",
         "operator": "full"
@@ -585,7 +585,7 @@
       "dimension": "AI Layer",
       "tier": 1,
       "phase": 1,
-      "status": "planned",
+      "status": "built",
       "rbac": {
         "admin": "full",
         "operator": "full"
@@ -737,7 +737,7 @@
       "dimension": "Core Workflow",
       "tier": 1,
       "phase": 1,
-      "status": "planned",
+      "status": "built",
       "rbac": {
         "admin": "full",
         "operator": "full"
@@ -1139,7 +1139,7 @@
       "dimension": "Detail Pages",
       "tier": 1,
       "phase": 2,
-      "status": "planned",
+      "status": "built",
       "rbac": {
         "admin": "full",
         "operator": "full"
@@ -1553,7 +1553,7 @@
       "dimension": "Notifications",
       "tier": 2,
       "phase": 2,
-      "status": "planned",
+      "status": "built",
       "rbac": {
         "admin": "full",
         "operator": "full"
@@ -1624,7 +1624,7 @@
       "dimension": "Personal Account & Profile",
       "tier": 2,
       "phase": 2,
-      "status": "planned",
+      "status": "built",
       "rbac": {
         "admin": "full",
         "operator": "full"
@@ -1745,7 +1745,7 @@
       "dimension": "Team & Permissions",
       "tier": 2,
       "phase": 2,
-      "status": "planned",
+      "status": "built",
       "rbac": {
         "admin": "full",
         "operator": "hidden"
@@ -1824,7 +1824,7 @@
       "dimension": "Integrations & API",
       "tier": 2,
       "phase": 2,
-      "status": "planned",
+      "status": "built",
       "rbac": {
         "admin": "full",
         "operator": "hidden"
@@ -2296,7 +2296,7 @@
       "dimension": "State Coverage",
       "tier": 1,
       "phase": 1,
-      "status": "planned",
+      "status": "built",
       "rbac": {
         "admin": "full",
         "operator": "full"
@@ -2336,7 +2336,7 @@
       "dimension": "State Coverage",
       "tier": 1,
       "phase": 1,
-      "status": "planned",
+      "status": "built",
       "rbac": {
         "admin": "full",
         "operator": "full"

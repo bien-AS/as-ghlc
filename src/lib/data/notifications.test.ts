@@ -15,7 +15,6 @@ import {
   listNotifications,
   markNotificationRead,
 } from "@/lib/data/notifications";
-import { PREVIEW_ROLE_COOKIE, PREVIEW_STAFF_REP } from "@/lib/data/viewer";
 import { notificationText } from "@/lib/notifications/rules";
 import {
   NOTIFICATION_TYPES,
@@ -24,15 +23,21 @@ import {
   notificationPageSchema,
   unreadCountSchema,
 } from "@/lib/notifications/schemas";
-import { fake, resetFakes, signIn } from "@/test/server-fakes";
+import {
+  fake,
+  resetFakes,
+  SAMPLE_REP,
+  signIn,
+  viewAs,
+} from "@/test/server-fakes";
 
 vi.mock(
   "@/lib/supabase/server",
   async () => (await import("@/test/server-fakes")).supabaseServerModule,
 );
 vi.mock(
-  "@/lib/prisma",
-  async () => (await import("@/test/server-fakes")).prismaModule,
+  "@/db/client",
+  async () => (await import("@/test/server-fakes")).dbModule,
 );
 
 const ORIGIN = "http://localhost:3000";
@@ -56,7 +61,6 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-const viewAs = (role: string) => fake.cookies.set(PREVIEW_ROLE_COOKIE, role);
 const everything = async () => (await listNotifications({ limit: 100 })).items;
 const refusedWith = (code: string) => expect.objectContaining({ code });
 const key = (n: Notification) => `${n.lead.id}:${n.type}`;
@@ -220,50 +224,47 @@ test("marking an unknown notification read is not found", async () => {
 
 // --- who is notified (question 7, assumed) ---------------------------------------
 
-test("staff see notifications only for the leads they own; admins and owners see every lead's", async () => {
-  const forOwner = await everything();
+test("a rep sees notifications only for the leads they own; an admin sees every lead's", async () => {
   viewAs("admin");
-  expect(await everything()).toEqual(forOwner);
+  const forAdmin = await everything();
 
-  viewAs("staff");
-  const forStaff = await everything();
+  viewAs("rep");
+  const forRep = await everything();
   const own = (await listVisibleLeads()).map((lead) => lead.id);
-  expect(forStaff.length).toBeGreaterThan(0);
-  expect(forStaff.length).toBeLessThan(forOwner.length);
-  expect(forStaff).toEqual(
-    forOwner.filter((item) => own.includes(item.lead.id)),
-  );
+  expect(forRep.length).toBeGreaterThan(0);
+  expect(forRep.length).toBeLessThan(forAdmin.length);
+  expect(forRep).toEqual(forAdmin.filter((item) => own.includes(item.lead.id)));
   expect(await getUnreadCount()).toEqual({
-    count: forStaff.filter((item) => !item.read).length,
+    count: forRep.filter((item) => !item.read).length,
   });
 });
 
 test("the sample is the same whichever role reads it first", async () => {
-  const ownerFirst = await everything();
+  const adminFirst = await everything();
 
   resetSampleLeads();
-  viewAs("staff");
+  viewAs("rep");
   await everything();
-  viewAs("owner");
-  expect(await everything()).toEqual(ownerFirst);
+  viewAs("admin");
+  expect(await everything()).toEqual(adminFirst);
 });
 
-test("for staff, another rep's notification is not found: it cannot be marked read", async () => {
+test("for a rep, another rep's notification is not found: it cannot be marked read", async () => {
   const leads = await listVisibleLeads();
   const theirs = (await everything()).find(
     (item) =>
       !item.read &&
       leads.find((lead) => lead.id === item.lead.id)?.owner.id !==
-        PREVIEW_STAFF_REP.id,
+        SAMPLE_REP.id,
   ) as Notification;
 
-  viewAs("staff");
+  viewAs("rep");
   await expect(markNotificationRead(theirs.id)).rejects.toEqual(
     refusedWith("not_found"),
   );
   expect((await read(theirs.id)).status).toBe(404);
 
-  viewAs("owner");
+  viewAs("admin");
   expect((await everything()).find((item) => item.id === theirs.id)?.read).toBe(
     false,
   );
@@ -313,15 +314,15 @@ test("a notification raised before the list was ever read is not doubled by the 
   expect(mine).toHaveLength(1);
 });
 
-test("a notification cannot be raised for an unknown lead, or by staff for another rep's lead", async () => {
+test("a notification cannot be raised for an unknown lead, or by a rep for another rep's lead", async () => {
   await expect(
     createNotification({ leadId: "lead-nowhere", type: "proposal_signed" }),
   ).rejects.toEqual(refusedWith("not_found"));
 
   const theirs = (await listVisibleLeads()).find(
-    (lead) => lead.owner.id !== PREVIEW_STAFF_REP.id,
+    (lead) => lead.owner.id !== SAMPLE_REP.id,
   );
-  viewAs("staff");
+  viewAs("rep");
   await expect(
     createNotification({ leadId: theirs?.id ?? "", type: "proposal_signed" }),
   ).rejects.toEqual(refusedWith("not_found"));

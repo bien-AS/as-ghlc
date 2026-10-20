@@ -9,9 +9,7 @@ import { GET as getMe } from "@/app/api/me/route";
 import { GET as getSummary } from "@/app/api/pipeline/summary/route";
 import { Toaster } from "@/components/ui/toast";
 import { listLeads, resetSampleLeads } from "@/lib/data/leads";
-import { PREVIEW_ROLE_COOKIE } from "@/lib/data/viewer";
 import { listLeadsQuerySchema } from "@/lib/leads/schemas";
-import type { Role } from "@/lib/roles";
 import { resetNavigation } from "@/test/navigation";
 import { renderPage } from "@/test/render";
 import { fake, resetFakes, signIn } from "@/test/server-fakes";
@@ -23,7 +21,7 @@ import { fake, resetFakes, signIn } from "@/test/server-fakes";
  * the two outer boundaries faked: Supabase Auth and the database. Test files
  * wire the fakes in with
  *   vi.mock("@/lib/supabase/server", async () => (await import("@/test/server-fakes")).supabaseServerModule);
- *   vi.mock("@/lib/prisma", async () => (await import("@/test/server-fakes")).prismaModule);
+ *   vi.mock("@/db/client", async () => (await import("@/test/server-fakes")).dbModule);
  *   vi.mock("next/navigation", async () => (await import("@/test/navigation")).navigationModule);
  */
 
@@ -157,10 +155,8 @@ export const api = {
   },
 };
 
-/** Previews a role, as the "Viewing as" control would have left it. Call after `startDashboard`. */
-export function viewAs(role: Role) {
-  fake.cookies.set(PREVIEW_ROLE_COOKIE, role);
-}
+/** Signs in with another role (src/test/server-fakes.ts). Call after `startDashboard`. */
+export { viewAs } from "@/test/server-fakes";
 
 /** Call in `beforeEach`: a signed-in user with a profile, fresh sample leads, a clean address. */
 export function startDashboard(at = "/dashboard") {

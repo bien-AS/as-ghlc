@@ -1,6 +1,6 @@
 import { invalidInput, refusal } from "@/lib/api/respond";
 import { switchTemplate } from "@/lib/data/decks";
-import { requireUser } from "@/lib/data/users";
+import { requireProfile } from "@/lib/data/users";
 import { switchTemplateInputSchema } from "@/lib/decks/schemas";
 
 export async function POST(
@@ -9,7 +9,7 @@ export async function POST(
 ) {
   try {
     // Guard first (AGENTS.md): who is asking is settled before the input is read.
-    await requireUser();
+    await requireProfile();
 
     const parsed = switchTemplateInputSchema.safeParse(
       await request.json().catch(() => null),

@@ -27,7 +27,6 @@ import {
   simulateProposalEvent,
 } from "@/lib/data/proposals";
 import { AccessError } from "@/lib/data/users";
-import { PREVIEW_ROLE_COOKIE, PREVIEW_STAFF_REP } from "@/lib/data/viewer";
 import { invoiceResponseSchema, invoiceSchema } from "@/lib/invoices/schemas";
 import {
   catalogueServiceSchema,
@@ -36,15 +35,21 @@ import {
   proposalViewSchema,
 } from "@/lib/proposals/schemas";
 import { toAppStatus } from "@/lib/services/proposal-service";
-import { fake, resetFakes, signIn } from "@/test/server-fakes";
+import {
+  fake,
+  resetFakes,
+  SAMPLE_REP,
+  signIn,
+  viewAs,
+} from "@/test/server-fakes";
 
 vi.mock(
   "@/lib/supabase/server",
   async () => (await import("@/test/server-fakes")).supabaseServerModule,
 );
 vi.mock(
-  "@/lib/prisma",
-  async () => (await import("@/test/server-fakes")).prismaModule,
+  "@/db/client",
+  async () => (await import("@/test/server-fakes")).dbModule,
 );
 // The real function still runs; the test only watches what it is asked to raise.
 vi.mock("@/lib/data/notifications", async (original) => {
@@ -84,7 +89,6 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 const refusedWith = (code: AccessError["code"]) => new AccessError(code);
-const viewAs = (role: string) => fake.cookies.set(PREVIEW_ROLE_COOKIE, role);
 
 /** The id of the sample lead with this name. */
 async function idOf(name: string) {
@@ -515,7 +519,7 @@ test("a lead that is not Qualified yet, or has left the pipeline, takes no propo
 
 // --- roles ------------------------------------------------------------------------
 
-test("staff reach only their own leads' proposals and invoices; another rep's answer 404", async () => {
+test("a rep reaches only their own leads' proposals and invoices; another rep's answer 404", async () => {
   const all = await listProposalLeads();
   const leads = await listVisibleLeads();
   const ownerOf = (id: string) =>
@@ -524,15 +528,13 @@ test("staff reach only their own leads' proposals and invoices; another rep's an
   const kwame = await idOf("Kwame Asante");
   const anneliese = await idOf("Anneliese Brandt");
   const ingrid = await idOf("Ingrid Aaltonen");
-  expect(ownerOf(anneliese)).toBe(PREVIEW_STAFF_REP.id);
+  expect(ownerOf(anneliese)).toBe(SAMPLE_REP.id);
 
-  viewAs("staff");
+  viewAs("rep");
   const mine = await listProposalLeads();
   expect(mine.length).toBeGreaterThan(0);
   expect(mine.length).toBeLessThan(all.length);
-  expect(mine.every((lead) => ownerOf(lead.id) === PREVIEW_STAFF_REP.id)).toBe(
-    true,
-  );
+  expect(mine.every((lead) => ownerOf(lead.id) === SAMPLE_REP.id)).toBe(true);
 
   for (const [name, call] of [
     ...everyRoute(kwame).slice(1, 6),
@@ -541,8 +543,9 @@ test("staff reach only their own leads' proposals and invoices; another rep's an
     const response = await call();
     expect(response.status, name).toBe(404);
   }
+  // A rep cannot act on invoices at all (spec 01), whoever's lead it is.
   await expect(createInvoiceDraft(jonas)).rejects.toEqual(
-    refusedWith("not_found"),
+    refusedWith("forbidden"),
   );
 
   // Their own: readable, and theirs to act on.
@@ -553,7 +556,7 @@ test("staff reach only their own leads' proposals and invoices; another rep's an
   );
 
   // Nothing of the other rep's changed.
-  viewAs("owner");
+  viewAs("admin");
   expect((await getProposal(kwame)).proposal?.status).toBe("draft");
   expect((await getLead(kwame)).stage).toBe("qualified");
 });

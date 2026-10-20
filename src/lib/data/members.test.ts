@@ -19,7 +19,6 @@ import {
   revokeInvite,
 } from "@/lib/data/members";
 import { resetSampleData } from "@/lib/data/sample";
-import { PREVIEW_ROLE_COOKIE } from "@/lib/data/viewer";
 import { inviteExpiresAt, memberLock } from "@/lib/members/rules";
 import {
   INVITE_EXPIRES_AFTER_DAYS,
@@ -27,15 +26,15 @@ import {
   memberListSchema,
   memberSchema,
 } from "@/lib/members/schemas";
-import { fake, resetFakes, signIn } from "@/test/server-fakes";
+import { fake, resetFakes, signIn, viewAs } from "@/test/server-fakes";
 
 vi.mock(
   "@/lib/supabase/server",
   async () => (await import("@/test/server-fakes")).supabaseServerModule,
 );
 vi.mock(
-  "@/lib/prisma",
-  async () => (await import("@/test/server-fakes")).prismaModule,
+  "@/db/client",
+  async () => (await import("@/test/server-fakes")).dbModule,
 );
 
 const ORIGIN = "http://localhost:3000";
@@ -56,7 +55,6 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-const viewAs = (role: string) => fake.cookies.set(PREVIEW_ROLE_COOKIE, role);
 const refusedWith = (code: string) => expect.objectContaining({ code });
 const named = (members: Member[], who: string) => {
   const found = members.find(
@@ -82,7 +80,7 @@ const at = (name: string, id: string) => ({
 });
 const routes = {
   list: () => getMembers(),
-  invite: (body: unknown = { email: "new@northgate.example", role: "staff" }) =>
+  invite: (body: unknown = { email: "new@northgate.example", role: "rep" }) =>
     postInvite(request("POST", body)),
   role: (id: string, body: unknown = { role: "admin" }) =>
     patchMember(request("PATCH", body), at("memberId", id)),
@@ -127,22 +125,23 @@ test("every sample person parses against the contract, is invented, and keeps th
       (member) =>
         !member.isViewer && member.role === role && member.status === status,
     ).length;
-  expect([roles("owner"), roles("admin"), roles("staff")]).toEqual([1, 1, 4]);
+  expect([roles("admin"), roles("rep")]).toEqual([2, 4]);
   expect(listed.filter((member) => member.status === "invited")).toHaveLength(
     2,
   );
 });
 
-test("the sample Staff are exactly the reps on the sample leads", async () => {
+test("the sample reps are exactly the reps on the sample leads", async () => {
   const { owners } = await getPipelineSummary({ tz: "UTC" });
-  const staff = (await listMembers())
-    .filter((member) => member.role === "staff" && member.status === "active")
+  const reps = (await listMembers())
+    .filter((member) => member.role === "rep" && member.status === "active")
     .map((member) => member.name);
-  expect(staff.sort()).toEqual(owners.map((owner) => owner.name).sort());
+  expect(reps.sort()).toEqual(owners.map((owner) => owner.name).sort());
 });
 
-test("the list starts with the viewer, marked as you with the previewed role, then users, then pending invites", async () => {
-  for (const role of ["owner", "admin"] as const) {
+test("the list starts with the viewer, marked as you with their role, then users, then pending invites", async () => {
+  // Only an admin reaches this list (spec 01: `requireAdmin`).
+  for (const role of ["admin"] as const) {
     viewAs(role);
     const [you, ...others] = await listMembers();
     expect(you).toEqual({
@@ -169,12 +168,12 @@ test("the list starts with the viewer, marked as you with the previewed role, th
 
 // --- who may ask ---------------------------------------------------------------
 
-test("a staff caller gets 403 forbidden on every route, signed out 401, without a profile 403, and nothing changes", async () => {
+test("a rep gets 403 forbidden on every route, signed out 401, without a profile 403, and nothing changes", async () => {
   const before = await listMembers();
   const userId = named(before, "Maya Okafor").id;
   const inviteId = named(before, JONAS).id;
 
-  viewAs("staff");
+  viewAs("rep");
   for (const response of await Promise.all(everyRoute(userId, inviteId))) {
     expect(response.status).toBe(403);
     expect(await codeOf(response)).toBe("forbidden");
@@ -184,7 +183,7 @@ test("a staff caller gets 403 forbidden on every route, signed out 401, without 
   expect((await routes.role(userId, {})).status).toBe(403);
   for (const call of [
     listMembers(),
-    inviteMember({ email: "x@northgate.example", role: "staff" }),
+    inviteMember({ email: "x@northgate.example", role: "rep" }),
     changeMemberRole(userId, "admin"),
     removeMember(userId),
     revokeInvite(inviteId),
@@ -193,7 +192,7 @@ test("a staff caller gets 403 forbidden on every route, signed out 401, without 
     await expect(call).rejects.toEqual(refusedWith("forbidden"));
   }
 
-  viewAs("owner");
+  viewAs("admin");
   fake.users.clear();
   for (const response of await Promise.all(everyRoute(userId, inviteId))) {
     expect(response.status).toBe(403);
@@ -209,73 +208,70 @@ test("a staff caller gets 403 forbidden on every route, signed out 401, without 
   expect(await listMembers()).toEqual(before);
 });
 
-test.each(["admin", "owner"] as const)(
-  "an %s can list, invite, change a role, remove, revoke and send again, and each write shows in a later read",
-  async (role) => {
-    viewAs(role);
-    const before = await listOf(await routes.list());
-    expect(before).toHaveLength(9);
+test("an admin can list, invite, change a role, remove, revoke and send again, and each write shows in a later read", async () => {
+  viewAs("admin");
+  const before = await listOf(await routes.list());
+  expect(before).toHaveLength(9);
 
-    // Invite: the address is trimmed and lower-cased, and the invite is pending.
-    const invited = await listOf(
-      await routes.invite({
-        email: "  New.Rep@Northgate.example ",
-        role: "staff",
-      }),
-    );
-    const invite = named(invited, "new.rep@northgate.example");
-    expect(invite).toMatchObject({
-      name: null,
-      role: "staff",
-      status: "invited",
-      invitedAt: NOW.toISOString(),
-    });
-    expect(invited.at(-1)).toEqual(invite);
+  // Invite: the address is trimmed and lower-cased, and the invite is pending.
+  const invited = await listOf(
+    await routes.invite({
+      email: "  New.Rep@Northgate.example ",
+      role: "rep",
+    }),
+  );
+  const invite = named(invited, "new.rep@northgate.example");
+  expect(invite).toMatchObject({
+    name: null,
+    role: "rep",
+    status: "invited",
+    invitedAt: NOW.toISOString(),
+  });
+  expect(invited.at(-1)).toEqual(invite);
 
-    // Change a role: a user's, and the role a pending invite will give.
-    const maya = named(before, "Maya Okafor");
-    await listOf(await routes.role(maya.id, { role: "admin" }));
-    await listOf(await routes.role(invite.id, { role: "admin" }));
-    let now = await listOf(await routes.list());
-    expect(named(now, "Maya Okafor").role).toBe("admin");
-    expect(named(now, invite.email).role).toBe("admin");
+  // Change a role: a user's, and the role a pending invite will give.
+  const maya = named(before, "Maya Okafor");
+  await listOf(await routes.role(maya.id, { role: "admin" }));
+  await listOf(await routes.role(invite.id, { role: "admin" }));
+  let now = await listOf(await routes.list());
+  expect(named(now, "Maya Okafor").role).toBe("admin");
+  expect(named(now, invite.email).role).toBe("admin");
 
-    // Send again: the sent time moves, and with it the expiry.
-    const jonas = named(before, JONAS);
-    expect(jonas.invitedAt).toBe("2026-10-05T12:00:00.000Z");
-    vi.setSystemTime(new Date("2026-10-08T09:30:00.000Z"));
-    await listOf(await routes.resend(jonas.id));
-    now = await listOf(await routes.list());
-    expect(named(now, JONAS).invitedAt).toBe("2026-10-08T09:30:00.000Z");
+  // Send again: the sent time moves, and with it the expiry.
+  const jonas = named(before, JONAS);
+  expect(jonas.invitedAt).toBe("2026-10-05T12:00:00.000Z");
+  vi.setSystemTime(new Date("2026-10-08T09:30:00.000Z"));
+  await listOf(await routes.resend(jonas.id));
+  now = await listOf(await routes.list());
+  expect(named(now, JONAS).invitedAt).toBe("2026-10-08T09:30:00.000Z");
 
-    // Remove and revoke: gone from the next read, and gone for good.
-    await listOf(await routes.remove(maya.id));
-    await listOf(await routes.revoke(jonas.id));
-    now = await listOf(await routes.list());
-    expect(now.map((member) => member.id)).not.toContain(maya.id);
-    expect(now.map((member) => member.id)).not.toContain(jonas.id);
-    expect(now).toHaveLength(8);
-    expect((await routes.remove(maya.id)).status).toBe(404);
-    expect((await routes.resend(jonas.id)).status).toBe(404);
-  },
-);
+  // Remove and revoke: gone from the next read, and gone for good.
+  await listOf(await routes.remove(maya.id));
+  await listOf(await routes.revoke(jonas.id));
+  now = await listOf(await routes.list());
+  expect(now.map((member) => member.id)).not.toContain(maya.id);
+  expect(now.map((member) => member.id)).not.toContain(jonas.id);
+  expect(now).toHaveLength(8);
+  expect((await routes.remove(maya.id)).status).toBe(404);
+  expect((await routes.resend(jonas.id)).status).toBe(404);
+});
 
 // --- what is refused -----------------------------------------------------------
 
 test("an invite needs a valid address and a role; an address that already has access or an invite is a conflict", async () => {
   for (const bad of [
-    { email: "", role: "staff" },
-    { email: "not-an-address", role: "staff" },
+    { email: "", role: "rep" },
+    { email: "not-an-address", role: "rep" },
     { email: "a@northgate.example", role: "root" },
     { email: "a@northgate.example" },
-    { email: "a@northgate.example", role: "staff", extra: 1 },
+    { email: "a@northgate.example", role: "rep", extra: 1 },
     null,
   ]) {
     const response = await routes.invite(bad);
     expect(response.status).toBe(400);
     expect(await codeOf(response)).toBe("invalid_input");
   }
-  const noEmail = await routes.invite({ email: "nope", role: "staff" });
+  const noEmail = await routes.invite({ email: "nope", role: "rep" });
   expect((await noEmail.json()).error.fields.email).toEqual([
     "Enter a valid email address, like name@example.com.",
   ]);
@@ -289,7 +285,7 @@ test("an invite needs a valid address and a role; an address that already has ac
     JONAS, // a pending invite
     ada.email, // the viewer
   ]) {
-    const response = await routes.invite({ email: taken, role: "staff" });
+    const response = await routes.invite({ email: taken, role: "rep" });
     expect(response.status).toBe(409);
     expect(await codeOf(response)).toBe("conflict");
   }
@@ -315,60 +311,22 @@ test("an unknown id is not found, and a user's routes do not act on an invite or
   expect(await listMembers()).toHaveLength(9);
 });
 
-test("you cannot remove yourself or change your own role here", async () => {
-  for (const role of ["admin", "owner"] as const) {
-    viewAs(role);
-    expect((await routes.role(ada.id, { role: "staff" })).status).toBe(409);
-    expect((await routes.remove(ada.id)).status).toBe(409);
-    await expect(changeMemberRole(ada.id, "staff")).rejects.toEqual(
-      refusedWith("conflict"),
-    );
-    const [you, ...others] = await listMembers();
-    expect(you.role).toBe(role);
-    expect(memberLock([you, ...others], you)).toBe("self");
-  }
-});
-
-test("the last owner cannot be removed or demoted; with a second owner, either can be", async () => {
-  // Seen as an Admin, the sample Owner is the only owner.
+test("you cannot remove yourself or change your own role here; another admin can be changed and removed", async () => {
   viewAs("admin");
-  let people = await listMembers();
-  const helena = named(people, "Helena Brandt");
-  expect(memberLock(people, helena)).toBe("last_owner");
-  expect(memberLock(people, named(people, "Samir Haddad"))).toBeNull();
-
-  for (const response of [
-    await routes.role(helena.id, { role: "admin" }),
-    await routes.remove(helena.id),
-  ]) {
-    expect(response.status).toBe(409);
-    expect(await codeOf(response)).toBe("conflict");
-  }
-  expect(named(await listMembers(), "Helena Brandt").role).toBe("owner");
-  // Keeping the role is not a demotion.
-  expect((await routes.role(helena.id, { role: "owner" })).status).toBe(200);
-
-  // An invited owner has not joined, so does not count.
-  await inviteMember({ email: "second@northgate.example", role: "owner" });
-  expect((await routes.remove(helena.id)).status).toBe(409);
-
-  // A second owner who has joined frees the first.
-  const samir = named(people, "Samir Haddad");
-  await changeMemberRole(samir.id, "owner");
-  people = await listMembers();
-  expect(memberLock(people, named(people, "Helena Brandt"))).toBeNull();
-  expect((await routes.remove(helena.id)).status).toBe(200);
-
-  // And now Samir is the last one.
-  people = await listMembers();
-  expect(memberLock(people, named(people, "Samir Haddad"))).toBe("last_owner");
-  await expect(changeMemberRole(samir.id, "staff")).rejects.toEqual(
+  expect((await routes.role(ada.id, { role: "rep" })).status).toBe(409);
+  expect((await routes.remove(ada.id)).status).toBe(409);
+  await expect(changeMemberRole(ada.id, "rep")).rejects.toEqual(
     refusedWith("conflict"),
   );
+  const [you, ...others] = await listMembers();
+  expect(you.role).toBe("admin");
+  expect(memberLock(you)).toBe("self");
 
-  // Seen as an Owner, the viewer is an owner too, so Samir can be changed.
-  viewAs("owner");
-  expect((await changeMemberRole(samir.id, "staff")).length).toBeGreaterThan(0);
+  // You are always an admin here, so another admin is never the last one.
+  const helena = named(others, "Helena Brandt");
+  expect(memberLock(helena)).toBeNull();
+  expect((await routes.role(helena.id, { role: "rep" })).status).toBe(200);
+  expect((await routes.remove(helena.id)).status).toBe(200);
 });
 
 test("an invite expires a fixed number of days after it was last sent (mock choice)", () => {

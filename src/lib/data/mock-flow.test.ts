@@ -14,10 +14,9 @@ import {
   sendProposal,
   simulateProposalEvent,
 } from "@/lib/data/proposals";
-import { PREVIEW_ROLE_COOKIE } from "@/lib/data/viewer";
 import { listLeadsQuerySchema } from "@/lib/leads/schemas";
 import { listNotificationsQuerySchema } from "@/lib/notifications/schemas";
-import { fake, resetFakes, signIn } from "@/test/server-fakes";
+import { fake, resetFakes, signIn, viewAs } from "@/test/server-fakes";
 
 /*
  * The mockups are separate data-access modules that meet on a lead. This file
@@ -30,8 +29,8 @@ vi.mock(
   async () => (await import("@/test/server-fakes")).supabaseServerModule,
 );
 vi.mock(
-  "@/lib/prisma",
-  async () => (await import("@/test/server-fakes")).prismaModule,
+  "@/db/client",
+  async () => (await import("@/test/server-fakes")).dbModule,
 );
 
 beforeEach(() => {
@@ -95,10 +94,10 @@ test("signing a proposal wins the lead, drafts its invoice and raises both notif
   ).toEqual([lead.id, lead.id]);
 });
 
-test("a role preview narrows every mockup the same way: staff reach one rep's leads, decks, proposals and notifications", async () => {
+test("leadScope narrows every mockup the same way: a rep reaches only their own leads, decks, proposals and notifications", async () => {
   const everyNotification = (await firstPage()).items.length;
 
-  fake.cookies.set(PREVIEW_ROLE_COOKIE, "staff");
+  viewAs("rep");
   const own = new Set(
     (
       await listLeads(listLeadsQuerySchema.parse({ tab: "open", limit: "100" }))
@@ -108,13 +107,13 @@ test("a role preview narrows every mockup the same way: staff reach one rep's le
   expect(notified.length).toBeLessThan(everyNotification);
   expect(notified.every((item) => own.has(item.lead.id))).toBe(true);
 
-  fake.cookies.set(PREVIEW_ROLE_COOKIE, "owner");
+  viewAs("admin");
   const other = (
     await listLeads(listLeadsQuerySchema.parse({ tab: "open", limit: "100" }))
   ).items.find((lead) => !own.has(lead.id));
   if (!other) throw new Error("no lead owned by another rep");
 
-  fake.cookies.set(PREVIEW_ROLE_COOKIE, "staff");
+  viewAs("rep");
   for (const call of [
     () => getDeck(other.id),
     () => generateProposal(other.id),

@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
-import { cleanAuthAddress, decideRedirect } from "@/lib/auth/routing";
+import { decideRedirect } from "@/lib/auth/routing";
 
 /**
  * Runs before every matched request (Next.js 16 "proxy", formerly middleware).
@@ -10,25 +10,19 @@ import { cleanAuthAddress, decideRedirect } from "@/lib/auth/routing";
  *    request (so this render sees them) and the response (so the browser
  *    keeps them). Server Components cannot set cookies, so this is the only
  *    place a refresh can be persisted during a page load.
- * 2. Redirects signed-out visitors according to the "who is sent where" table.
- *    It is the one place that knows the requested address, so it is what
- *    remembers the page for /dashboard and everything below it.
+ * 2. Redirects signed-out visitors to /login according to the "who is sent
+ *    where" table. It is the one place that knows the requested address, so
+ *    it is what remembers the page for every app screen.
  *
- * 0. Strips every query parameter except a valid `next` and `notice` from the
- *    auth pages, so a leaked form field never stays in the address bar.
- *
- * It does not read the database and logs nothing. Whether a signed-in person has a profile is
- * decided by `enforceRoute` in the pages and by the data-access guards.
+ * It does not read the database and logs nothing, and it is not the access
+ * control: whether a signed-in person is provisioned and active is decided by
+ * `enforceRoute` in the pages and by the data-access guards (spec 01 section 5).
  */
 export async function proxy(request: NextRequest) {
-  // Before anything else, and before anything could read or log the address:
-  // an auth page never keeps form fields (a password above all) in its query.
-  const clean = cleanAuthAddress(
-    request.nextUrl.pathname,
-    request.nextUrl.search,
-  );
-  if (clean) {
-    return NextResponse.redirect(new URL(clean, request.nextUrl.origin), 303);
+  // There is no public page: the app is internal. The root has no page of its
+  // own (routes match the screen registry), so it is sent to the dashboard.
+  if (request.nextUrl.pathname === "/") {
+    return NextResponse.redirect(new URL("/dashboard", request.nextUrl.origin));
   }
 
   let response = NextResponse.next({ request });

@@ -3,8 +3,7 @@ import {
   type MemberRecord,
 } from "@/lib/data/fixtures/members";
 import { sampleStore } from "@/lib/data/sample";
-import { AccessError } from "@/lib/data/users";
-import { requireCapability, type Viewer } from "@/lib/data/viewer";
+import { AccessError, type Profile, requireAdmin } from "@/lib/data/users";
 import { inviteExpiresAt, memberLock } from "@/lib/members/rules";
 import {
   INVITING_IS_OFFERED,
@@ -18,8 +17,7 @@ import { sendInviteEmail } from "@/lib/services/invite-email";
  * Data access for who has access to the Workspace (spec 12; ADR-0006).
  *
  * THE SEAM. Every exported function starts with the guard
- * (`requireCapability("manage_users")`: the current user, then their role, so
- * a Staff caller is refused with "forbidden") and then reads or changes the
+ * (`requireAdmin`: a rep is refused with "forbidden") and then reads or changes the
  * sample store. Going live means replacing the bodies of the exported
  * functions below with queries on User and on wherever invites come to live,
  * replacing the body of `sendInviteEmail`, and deleting the fixtures. Schemas,
@@ -45,16 +43,15 @@ function workspaceRecords(): MemberRecord[] {
 
 /**
  * The viewer first, then users, then pending invites. The signed-in person is
- * in no sample list, so their row is built from the session, with the role
- * being previewed. Built field by field: the CRM user id stays behind.
+ * in no sample list, so their row is built from their profile; only an admin
+ * reaches this list. Built field by field: the CRM user id stays behind.
  */
-function toList(viewer: Viewer): Member[] {
-  const { user } = viewer;
+function toList(user: Profile): Member[] {
   const you: Member = {
     id: user.id,
     name: `${user.firstName} ${user.lastName}`,
     email: user.email,
-    role: viewer.role,
+    role: "admin",
     status: "active",
     isViewer: true,
     invitedAt: null,
@@ -86,18 +83,10 @@ function find(id: string, status?: Member["status"]): MemberRecord {
   return record;
 }
 
-/**
- * Refuses a change to yourself (your own row is not in the store: your role
- * follows the preview) and to the last owner (spec 12). `keepsOwner` is a
- * change that leaves the last owner an owner, which there is no reason to refuse.
- */
-function refuseIfLocked(viewer: Viewer, id: string, keepsOwner = false) {
-  const members = toList(viewer);
-  const member = members.find((candidate) => candidate.id === id);
-  const lock = member ? memberLock(members, member) : null;
-  if (lock === "self" || (lock === "last_owner" && !keepsOwner)) {
-    throw new AccessError("conflict");
-  }
+/** Refuses a change to yourself: your own row is not in the store. */
+function refuseIfLocked(viewer: Profile, id: string) {
+  const member = toList(viewer).find((candidate) => candidate.id === id);
+  if (member && memberLock(member)) throw new AccessError("conflict");
 }
 
 function drop(record: MemberRecord) {
@@ -118,7 +107,7 @@ async function send(record: MemberRecord) {
 
 /** Everyone with access to the Workspace, and every pending invite. */
 export async function listMembers(): Promise<Member[]> {
-  const viewer = await requireCapability("manage_users");
+  const viewer = await requireAdmin();
   return toList(viewer);
 }
 
@@ -127,7 +116,7 @@ export async function listMembers(): Promise<Member[]> {
  * already has an invite, is a "conflict".
  */
 export async function inviteMember(input: InviteInput): Promise<Member[]> {
-  const viewer = await requireCapability("manage_users");
+  const viewer = await requireAdmin();
   if (!INVITING_IS_OFFERED) throw new AccessError("forbidden");
 
   const email = input.email.toLowerCase();
@@ -155,15 +144,15 @@ export async function changeMemberRole(
   id: string,
   role: Role,
 ): Promise<Member[]> {
-  const viewer = await requireCapability("manage_users");
-  refuseIfLocked(viewer, id, role === "owner");
+  const viewer = await requireAdmin();
+  refuseIfLocked(viewer, id);
   find(id).role = role;
   return toList(viewer);
 }
 
 /** Removes a user from the Workspace: they lose access at once. */
 export async function removeMember(id: string): Promise<Member[]> {
-  const viewer = await requireCapability("manage_users");
+  const viewer = await requireAdmin();
   refuseIfLocked(viewer, id);
   drop(find(id, "active"));
   return toList(viewer);
@@ -171,14 +160,14 @@ export async function removeMember(id: string): Promise<Member[]> {
 
 /** Withdraws a pending invite: its link stops working. */
 export async function revokeInvite(id: string): Promise<Member[]> {
-  const viewer = await requireCapability("manage_users");
+  const viewer = await requireAdmin();
   drop(find(id, "invited"));
   return toList(viewer);
 }
 
 /** Sends a pending invite again, which also restarts its expiry. */
 export async function resendInvite(id: string): Promise<Member[]> {
-  const viewer = await requireCapability("manage_users");
+  const viewer = await requireAdmin();
   await send(find(id, "invited"));
   return toList(viewer);
 }

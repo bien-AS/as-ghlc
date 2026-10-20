@@ -1,13 +1,13 @@
 import { invalidInput, refusal } from "@/lib/api/respond";
 import { inviteMember } from "@/lib/data/members";
-import { requireCapability } from "@/lib/data/viewer";
+import { requireAdmin } from "@/lib/data/users";
 import { inviteInputSchema } from "@/lib/members/schemas";
 
 export async function POST(request: Request) {
   try {
     // Guard first (AGENTS.md): a caller who may not manage users gets 401 or
     // 403 whatever they sent.
-    await requireCapability("manage_users");
+    await requireAdmin();
 
     const parsed = inviteInputSchema.safeParse(
       await request.json().catch(() => null),

@@ -1,5 +1,9 @@
 allowBuilds:
-  '@prisma/engines': true
-  prisma: true
+  # Pulled in by drizzle-kit; the platform binary ships as an optional dependency, so its postinstall is not needed.
+  esbuild: false
+  # postinstall downloads the CLI binary; required for `pnpm dev:inngest`.
+  inngest-cli: true
+  # Transitive of inngest; its postinstall is optional codegen the runtime does not need.
+  protobufjs: false
   sharp: false
   unrs-resolver: false
