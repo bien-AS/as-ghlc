@@ -39,6 +39,7 @@ import {
   updateSlide,
 } from "@/lib/data/decks";
 import { SAMPLE_REPS } from "@/lib/data/fixtures/leads";
+import { requestGhlImport } from "@/lib/data/ghl";
 import { createInvoiceDraft, getInvoice } from "@/lib/data/invoices";
 import {
   getLead,
@@ -228,6 +229,7 @@ const adminCalls = (): Calls => ({
   importLeads,
   getStageMapping,
   saveStageMapping: () => saveStageMapping({} as never),
+  requestGhlImport,
 });
 
 /** A person's own things. */
