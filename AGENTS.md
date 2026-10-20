@@ -52,6 +52,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Charts need `useChartTokens()` + client-side import; no `dark:` variants on token-styled components.
 - Every GHL write goes through the one idempotent write path and lands in `ghl_sync_log`; never call the GHL API from anywhere else.
 - Mutating modals preview the GHL write they cause (the seam principle from the prototype).
+- `@vantage/design-system` is vendored as `vendor/vantage-design-system-6.7.6.tgz` (Vercel cannot read the private repo). To upgrade: install the new tag somewhere with GitHub access, `npm pack --pack-destination vendor` in its package dir, point `package.json` at the new file, delete the old one, `pnpm install`.
 
 ## Design workflow
 

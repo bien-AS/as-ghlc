@@ -24,8 +24,8 @@ importers:
         specifier: ^5.104.1
         version: 5.104.1(react@19.2.8)
       '@vantage/design-system':
-        specifier: github:Authority-Solutions/vantage-design-system#v6.7.6
-        version: git+https://github.com/Authority-Solutions/vantage-design-system.git#1ceecf9a3d74a0cd00d350b5a0e6b4420c3abc56(@types/react@19.3.0)(react-dom@19.2.8(react@19.2.8))(react-is@17.0.2)(react@19.2.8)(redux@5.0.1)
+        specifier: file:vendor/vantage-design-system-6.7.6.tgz
+        version: file:vendor/vantage-design-system-6.7.6.tgz(@types/react@19.3.0)(react-dom@19.2.8(react@19.2.8))(react-is@17.0.2)(react@19.2.8)(redux@5.0.1)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -2395,8 +2395,8 @@ packages:
   '@types/validate-npm-package-name@4.0.2':
     resolution: {integrity: sha512-lrpDziQipxCEeK5kWxvljWYhUvOiB2A9izZd9B2AFarYAkqZshb4lPbRs7zKEic6eGtH8V/2qJW+dPp9OtF6bw==}
 
-  '@vantage/design-system@git+https://github.com/Authority-Solutions/vantage-design-system.git#1ceecf9a3d74a0cd00d350b5a0e6b4420c3abc56':
-    resolution: {commit: 1ceecf9a3d74a0cd00d350b5a0e6b4420c3abc56, repo: https://github.com/Authority-Solutions/vantage-design-system.git, type: git}
+  '@vantage/design-system@file:vendor/vantage-design-system-6.7.6.tgz':
+    resolution: {integrity: sha512-ij0mkDEzDy8aZ5VPLKT6FVPfCMnmujnHjR3DAc76EBwguUr2rI0urJzMT4Yq+hFFfKOw4RD4eCVYNrK0msDEFA==, tarball: file:vendor/vantage-design-system-6.7.6.tgz}
     version: 6.7.6
     peerDependencies:
       react: ^18.3.1
@@ -7053,7 +7053,7 @@ snapshots:
 
   '@types/validate-npm-package-name@4.0.2': {}
 
-  '@vantage/design-system@git+https://github.com/Authority-Solutions/vantage-design-system.git#1ceecf9a3d74a0cd00d350b5a0e6b4420c3abc56(@types/react@19.3.0)(react-dom@19.2.8(react@19.2.8))(react-is@17.0.2)(react@19.2.8)(redux@5.0.1)':
+  '@vantage/design-system@file:vendor/vantage-design-system-6.7.6.tgz(@types/react@19.3.0)(react-dom@19.2.8(react@19.2.8))(react-is@17.0.2)(react@19.2.8)(redux@5.0.1)':
     dependencies:
       class-variance-authority: 0.7.1
       clsx: 2.1.1
