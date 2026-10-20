@@ -1,15 +1,20 @@
 "use client";
 
-import { type Column, DataTable } from "@vantage/design-system";
+import {
+  type Column,
+  DataTable,
+  useDebouncedValue,
+} from "@vantage/design-system";
 import { ArchiveIcon, ShieldQuestionIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useEffectEvent, useId, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { LocalTime } from "@/components/ui/local-time";
 import {
   NativeSelect,
@@ -24,6 +29,7 @@ import {
   useArchiveLead,
   useLeads,
   usePipelineSummary,
+  useStatusDefs,
 } from "@/hooks/use-leads";
 import { rememberPipelineSearch } from "@/hooks/use-pipeline-href";
 import { useTimeZone } from "@/hooks/use-time-zone";
@@ -49,7 +55,6 @@ import {
 } from "@/lib/leads/schemas";
 
 import { leadHref, REVIEW_QUEUE_HREF } from "../navigation";
-import { LEAD_STATUS_GROUPS } from "./lead-statuses";
 
 const SYNC_LOG_HREF = "/admin/sync-log";
 const DAY = 86_400_000;
@@ -72,7 +77,7 @@ const ageLabel = (days: number | null) =>
       ? "Today"
       : `${days} ${days === 1 ? "day" : "days"}`;
 
-/** The address filters: the bar's, and `q` from the navbar's lead search. */
+/** The address filters: the bar's, and `q`, the search (the navbar's lead search lands here too). */
 const FILTER_KEYS = [
   "tab",
   "verdict",
@@ -82,12 +87,23 @@ const FILTER_KEYS = [
   "q",
 ] as const;
 
+/** The orders the API sorts by, as "sort:dir". The first is the API's default. */
+const SORTS = [
+  ["recent:desc", "Recently updated"],
+  ["age:asc", "Age, youngest first"],
+  ["age:desc", "Age, oldest first"],
+  ["next_booking:asc", "Next booking, soonest first"],
+  ["next_booking:desc", "Next booking, latest first"],
+] as const;
+
 /**
  * The lead list (spec 07, registry `lead-list`). The address holds the
- * filters (stage, verdict, Lead Status group, rep for admins, archived), so a
- * view can be reloaded and shared; search, sort, density and columns are the
- * kit's DataTable's own. A rep's list is only their leads: the server scopes
- * it, and the rep column and filter are left out.
+ * search, the filters (stage, verdict, Lead Status group, rep for admins,
+ * archived) and the order, so a view can be reloaded and shared, and the
+ * server searches and sorts every lead, not just the loaded pages: a change
+ * starts again from page 1. Density and columns are the kit's DataTable's own.
+ * A rep's list is only their leads: the server scopes it, and the rep column
+ * and filter are left out.
  */
 export function PipelineScreen() {
   const router = useRouter();
@@ -99,6 +115,9 @@ export function PipelineScreen() {
   );
   const leads = useLeads(filters);
   const summary = usePipelineSummary();
+  const groups = [
+    ...new Set((useStatusDefs().data ?? []).map((status) => status.group)),
+  ];
   const isAdmin = useCan("see_all_leads");
 
   const search = searchParams.toString();
@@ -148,24 +167,10 @@ export function PipelineScreen() {
       <Filters
         filters={filters}
         summary={summary.data}
+        groups={groups}
         isAdmin={isAdmin}
         onChange={setFilters}
       />
-
-      {/* The navbar's lead search lands here with `q` in the address. */}
-      {filters.q && (
-        <p className="flex flex-wrap items-center gap-x-2 text-ink-2">
-          Leads matching “{filters.q}”
-          <Button
-            variant="link"
-            size="sm"
-            className="px-0"
-            onClick={() => setFilters({ q: undefined })}
-          >
-            Clear search
-          </Button>
-        </p>
-      )}
 
       <LeadTable
         leads={leads}
@@ -182,30 +187,43 @@ export function PipelineScreen() {
 function Filters({
   filters,
   summary,
+  groups,
   isAdmin,
   onChange,
 }: {
   filters: ReturnType<typeof parseLeadFilters>;
   summary: PipelineSummary | undefined;
+  groups: string[];
   isAdmin: boolean;
   onChange: (changes: Record<string, string | undefined>) => void;
 }) {
   const ids = {
+    search: useId(),
     stage: useId(),
     verdict: useId(),
     group: useId(),
     owner: useId(),
     archived: useId(),
+    sort: useId(),
   };
   const count = (n: number | undefined) => (n === undefined ? "" : ` (${n})`);
   // Two to a row on a phone, so the list starts on the first screen.
   const field = "min-w-0 nav:w-[200px]";
+  const sort = `${filters.sort ?? "recent"}:${filters.dir ?? "desc"}`;
 
   return (
     <search
       aria-label="Filter leads"
       className="grid grid-cols-2 items-end gap-3 nav:flex nav:flex-wrap"
     >
+      <Field className="col-span-2 min-w-0 nav:w-[240px]">
+        <FieldLabel htmlFor={ids.search}>Search</FieldLabel>
+        <SearchBox
+          id={ids.search}
+          q={filters.q ?? ""}
+          onSearch={(q) => onChange({ q })}
+        />
+      </Field>
       <Field className={field}>
         <FieldLabel htmlFor={ids.stage}>Stage</FieldLabel>
         <NativeSelect
@@ -261,7 +279,7 @@ function Filters({
           className="w-full"
         >
           <NativeSelectOption value="">Any Lead Status</NativeSelectOption>
-          {LEAD_STATUS_GROUPS.map((group) => (
+          {groups.map((group) => (
             <NativeSelectOption key={group} value={group}>
               {group}
             </NativeSelectOption>
@@ -302,7 +320,65 @@ function Filters({
           <NativeSelectOption value="true">Archived leads</NativeSelectOption>
         </NativeSelect>
       </Field>
+      <Field className={field}>
+        <FieldLabel htmlFor={ids.sort}>Sort by</FieldLabel>
+        <NativeSelect
+          id={ids.sort}
+          value={sort}
+          onChange={(event) => {
+            const [value, dir] = event.target.value.split(":");
+            const fallback = event.target.value === SORTS[0][0];
+            onChange({
+              sort: fallback ? undefined : value,
+              dir: fallback ? undefined : dir,
+            });
+          }}
+          className="w-full"
+        >
+          {SORTS.map(([value, label]) => (
+            <NativeSelectOption key={value} value={value}>
+              {label}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </Field>
     </search>
+  );
+}
+
+/**
+ * The search box: what is typed goes in the address as `q` once typing
+ * pauses, and the server searches every lead's name, company and email.
+ */
+function SearchBox({
+  id,
+  q,
+  onSearch,
+}: {
+  id: string;
+  q: string;
+  onSearch: (q: string | undefined) => void;
+}) {
+  const [text, setText] = useState(q);
+  const typed = useDebouncedValue(text.trim(), 300);
+  const search = useEffectEvent((value: string) => {
+    if (value !== q) onSearch(value || undefined);
+  });
+  useEffect(() => search(typed), [typed]);
+  // `q` changed elsewhere (the navbar's search, Clear filters): show it.
+  const show = useEffectEvent((value: string) => {
+    if (value !== typed) setText(value);
+  });
+  useEffect(() => show(q), [q]);
+
+  return (
+    <Input
+      id={id}
+      type="search"
+      value={text}
+      placeholder="Name, company or email"
+      onChange={(event) => setText(event.target.value)}
+    />
   );
 }
 
@@ -357,7 +433,6 @@ function LeadTable({
       id: "lead",
       header: "Lead",
       locked: true,
-      value: (lead) => `${lead.name} ${lead.company ?? ""}`,
       cell: (lead) => (
         <span className="flex min-w-0 flex-col">
           <Link
@@ -376,7 +451,6 @@ function LeadTable({
     {
       id: "verdict",
       header: "Verdict",
-      value: (lead) => VERDICT_META[lead.verdict].label,
       cell: (lead) => (
         <Badge variant={VERDICT_META[lead.verdict].tone}>
           {VERDICT_META[lead.verdict].label}
@@ -386,7 +460,6 @@ function LeadTable({
     {
       id: "stage",
       header: "Stage",
-      value: (lead) => stageText(lead),
       cell: (lead) => (
         <span className={lead.exit || !lead.stage ? "text-ink-3" : undefined}>
           {stageText(lead) ?? "Not synced yet"}
@@ -396,7 +469,6 @@ function LeadTable({
     {
       id: "status",
       header: "Lead Status",
-      value: (lead) => lead.status?.value ?? null,
       cell: (lead) => {
         const status = statusMeta(lead.status);
         // A long status wraps inside its cell rather than running into the next one.
@@ -415,7 +487,6 @@ function LeadTable({
           {
             id: "rep",
             header: "Rep",
-            value: (lead) => lead.owner?.name ?? null,
             cell: (lead) =>
               lead.owner?.name ?? (
                 <span className="text-ink-3">Unassigned</span>
@@ -428,7 +499,6 @@ function LeadTable({
       header: "Age",
       title: "Days since the lead's last activity",
       numeric: true,
-      value: ageInDays,
       cell: (lead) => {
         const days = ageInDays(lead);
         return (
@@ -441,7 +511,6 @@ function LeadTable({
     {
       id: "booking",
       header: "Next booking",
-      value: (lead) => lead.nextBooking?.time ?? null,
       cell: (lead) =>
         lead.nextBooking ? (
           <span className="flex flex-col">
@@ -457,7 +526,6 @@ function LeadTable({
     {
       id: "next",
       header: "Next step",
-      value: (lead) => nextStepOf(lead).label,
       cell: (lead) => {
         const step = nextStepOf(lead);
         return (
@@ -494,7 +562,12 @@ function LeadTable({
       <div
         // The rows on screen stay, dimmed, until the new ones arrive.
         aria-busy={leads.isPlaceholderData || undefined}
-        className="transition-opacity duration-150 ease-out aria-busy:opacity-60"
+        // ponytail: the kit's DataTable searches and sorts only the rows it
+        // holds, with no controlled mode, so no column has a `value` (no
+        // header sorting) and its search box is hidden: the bar above
+        // searches and sorts on the server. Use the kit's own once it can be
+        // controlled.
+        className="transition-opacity duration-150 ease-out aria-busy:opacity-60 [&_div:has(>input[type=search])]:hidden"
       >
         <DataTable
           caption={archived ? "Archived leads" : "Leads"}
@@ -502,16 +575,13 @@ function LeadTable({
           columns={columns}
           rowId={(lead) => lead.id}
           loading={leads.isPending}
-          searchPlaceholder="Search name or company"
+          searchPlaceholder="Search the loaded leads"
           densityKey="lead-list"
           onRowClick={onOpen}
           emptyTitle="No leads yet"
           emptyBody="New form fills land here automatically."
         />
       </div>
-      {/* ponytail: search and sort run over the loaded pages (25 a page);
-          past that, "Show more" loads the rest. Move sort to the address
-          (the API takes sort and dir) when lists outgrow a few pages. */}
       {leads.hasNextPage && (
         <div className="flex justify-center">
           <Button

@@ -39,6 +39,10 @@ vi.mock(
   "@/lib/data/research",
   async () => (await import("@/test/lead-store")).researchModule,
 );
+vi.mock(
+  "@/lib/data/status-defs",
+  async () => (await import("@/test/lead-store")).statusDefsModule,
+);
 
 beforeEach(() => {
   startDashboard("/leads/lead-imogen");

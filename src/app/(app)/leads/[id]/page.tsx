@@ -3,8 +3,9 @@ import type { Metadata } from "next";
 
 import { getLead } from "@/lib/data/leads";
 import { getLatestResearch } from "@/lib/data/research";
+import { listStatusDefs } from "@/lib/data/status-defs";
 import { AccessError, enforceRoute } from "@/lib/data/users";
-import { leadOptions } from "@/lib/queries/leads";
+import { leadOptions, statusDefsOptions } from "@/lib/queries/leads";
 import { researchOptions } from "@/lib/queries/research";
 import { getQueryClient } from "@/lib/query-client";
 
@@ -27,10 +28,17 @@ export default async function LeadPage({ params }: PageProps<"/leads/[id]">) {
     });
     // The research tab is one click away, so its brief is on first paint too.
     // prefetchQuery never throws: a failure is left for the client hook.
-    await queryClient.prefetchQuery({
-      ...researchOptions(leadId),
-      queryFn: () => getLatestResearch(leadId),
-    });
+    // So is the Change status picklist.
+    await Promise.all([
+      queryClient.prefetchQuery({
+        ...researchOptions(leadId),
+        queryFn: () => getLatestResearch(leadId),
+      }),
+      queryClient.prefetchQuery({
+        ...statusDefsOptions(),
+        queryFn: listStatusDefs,
+      }),
+    ]);
   } catch (error) {
     // An unknown lead is a screen of its own, not an error. Any other failure
     // is left for the client hook, which shows the error state with a retry.

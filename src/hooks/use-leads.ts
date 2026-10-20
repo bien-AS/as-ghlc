@@ -26,6 +26,7 @@ import {
   leadListOptions,
   leadOptions,
   pipelineSummaryOptions,
+  statusDefsOptions,
 } from "@/lib/queries/leads";
 
 /*
@@ -48,6 +49,11 @@ export function usePipelineSummary() {
     // The counts stay on screen while they are re-read for another time zone.
     placeholderData: keepPreviousData,
   });
+}
+
+/** GHL's Lead Status picklist, for the group filter and Change status. */
+export function useStatusDefs() {
+  return useQuery(statusDefsOptions());
 }
 
 export function useLead(leadId: string | undefined) {

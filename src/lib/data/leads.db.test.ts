@@ -27,11 +27,13 @@ import {
   reviewSuspect,
   setQualification,
 } from "@/lib/data/leads";
+import { listStatusDefs } from "@/lib/data/status-defs";
 import {
   dashboardSchema,
   leadDetailSchema,
   leadPageSchema,
   listLeadsQuerySchema,
+  statusDefSchema,
 } from "@/lib/leads/schemas";
 import { writeQualification } from "@/lib/services/ghl/writes";
 import { TEST_IDS } from "@/test/ghl-ids";
@@ -173,6 +175,19 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
+  });
+
+  test("the Lead Status picklist is status_defs' 28 values, in GHL's order", async () => {
+    const defs = statusDefSchema.array().parse(await listStatusDefs());
+    expect(defs).toHaveLength(28);
+    const positions = defs.map((status) => status.position);
+    expect(positions).toEqual(positions.toSorted((a, b) => a - b));
+    expect(defs[0]).toEqual({
+      value: "New - Contacted",
+      group: "New",
+      position: 0,
+      tone: "neutral",
+    });
   });
 
   test("sorting by age or next booking puts never-measured leads last, in both directions (check 2)", async () => {

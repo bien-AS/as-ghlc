@@ -87,6 +87,12 @@ export const leadStatusSchema = z.object({
 });
 export type LeadStatus = z.infer<typeof leadStatusSchema>;
 
+/** One entry of GHL's Lead Status picklist (status_defs), for the group filter and Change status. */
+export const statusDefSchema = leadStatusSchema.extend({
+  position: z.number().int(),
+});
+export type StatusDef = z.infer<typeof statusDefSchema>;
+
 /** One write to GHL for this lead (ghl_sync_log): the seam (spec 06). */
 export const syncEntrySchema = z.object({
   id: z.string(),

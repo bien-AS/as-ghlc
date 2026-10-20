@@ -33,6 +33,7 @@ import {
   useMarkSpam,
   usePipelineSummary,
   useSetQualification,
+  useStatusDefs,
 } from "@/hooks/use-leads";
 import { usePipelineHref } from "@/hooks/use-pipeline-href";
 import { useCan } from "@/hooks/use-viewer";
@@ -54,7 +55,6 @@ import type { LeadDetail, SyncEntry } from "@/lib/leads/schemas";
 
 import { deckHref, proposalHref, suspectHref } from "../navigation";
 import { ResearchTab } from "./lead-research";
-import { LEAD_STATUS_OPTIONS } from "./lead-statuses";
 
 const SYNC_LOG_HREF = "/admin/sync-log";
 /** How many timeline entries show before "Show earlier". */
@@ -436,6 +436,10 @@ function StatusDialog({
 }) {
   const [value, setValue] = useState(lead.status?.value ?? "");
   const id = useId();
+  // GHL's picklist, in its order, under its groups.
+  const groups = Object.entries(
+    Object.groupBy(useStatusDefs().data ?? [], (status) => status.group),
+  );
   return (
     <ConfirmDialog
       tone="neutral"
@@ -477,9 +481,9 @@ function StatusDialog({
               Choose a status
             </NativeSelectOption>
           )}
-          {LEAD_STATUS_OPTIONS.map(([group, values]) => (
+          {groups.map(([group, statuses = []]) => (
             <NativeSelectOptGroup key={group} label={group}>
-              {values.map((status) => (
+              {statuses.map(({ value: status }) => (
                 <NativeSelectOption key={status} value={status}>
                   {status}
                 </NativeSelectOption>

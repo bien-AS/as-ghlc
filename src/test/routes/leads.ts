@@ -5,10 +5,12 @@ import {
   POST as postResearch,
 } from "@/app/api/leads/[leadId]/research/route";
 import { POST as postStatus } from "@/app/api/leads/[leadId]/status/route";
+import { GET as getStatusDefs } from "@/app/api/status-defs/route";
 import type { TestRoute } from "@/test/dashboard";
 
-/** The lead routes src/test/dashboard.tsx does not list itself. */
+/** The lead routes src/test/dashboard.tsx does not list itself, and the Lead Status picklist. */
 export const routes: TestRoute[] = [
+  ["GET", /^\/api\/status-defs$/, getStatusDefs],
   ["POST", /^\/api\/leads\/(?<leadId>[^/]+)\/status$/, postStatus],
   ["POST", /^\/api\/leads\/(?<leadId>[^/]+)\/assign$/, postAssign],
   ["POST", /^\/api\/leads\/(?<leadId>[^/]+)\/archive$/, postArchive],

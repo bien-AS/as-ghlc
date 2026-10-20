@@ -15,7 +15,7 @@ import {
   stopDashboard,
   viewAs,
 } from "@/test/dashboard";
-import { resetLeadStore } from "@/test/lead-store";
+import { addLeads, resetLeadStore, updateLead } from "@/test/lead-store";
 import { address, router } from "@/test/navigation";
 
 import { PipelineScreen } from "./pipeline-screen";
@@ -40,6 +40,10 @@ vi.mock(
   "@/lib/data/research",
   async () => (await import("@/test/lead-store")).researchModule,
 );
+vi.mock(
+  "@/lib/data/status-defs",
+  async () => (await import("@/test/lead-store")).statusDefsModule,
+);
 
 beforeEach(() => {
   startDashboard("/leads");
@@ -62,7 +66,12 @@ const row = (name: string) => {
   return found;
 };
 const loaded = () => screen.findByRole("table");
-const header = (name: string) => within(table()).getByRole("button", { name });
+/** The list requests, as "path?query". */
+const listCalls = () =>
+  api
+    .calls()
+    .filter((call) => call.startsWith("GET /api/leads?"))
+    .map((call) => call.slice(4));
 
 test("an admin sees every active lead, the rep column and the rep filter (check 1)", async () => {
   renderScreen(<PipelineScreen />);
@@ -115,36 +124,77 @@ test("a rep sees only their own leads, with no rep column and no rep filter (che
   expect(document.body.textContent).not.toContain("Jonah Pike");
 });
 
-test("age shows Not measured for a never-synced lead, never 0, and sorts it last in both directions (check 2)", async () => {
+test("age shows Not measured for a never-synced lead, never 0", async () => {
   renderScreen(<PipelineScreen />);
   await loaded();
   expect(within(row("Sofia Lindgren")).getByText("Not measured")).toBeDefined();
   expect(
     within(row("Beatrix Olander")).getByText("Not measured"),
   ).toBeDefined();
-
-  fireEvent.click(header("Age"));
-  expect(names().slice(0, 3)).toEqual([
-    "Emeka Obi",
-    "Imogen Vasquez",
-    "Desmond Achterberg",
-  ]);
-  expect(names().slice(3).sort()).toEqual([
-    "Beatrix Olander",
-    "Sofia Lindgren",
-  ]);
-
-  fireEvent.click(header("Age"));
-  expect(names().slice(0, 3)).toEqual([
-    "Desmond Achterberg",
-    "Imogen Vasquez",
-    "Emeka Obi",
-  ]);
-  expect(names().slice(3).sort()).toEqual([
-    "Beatrix Olander",
-    "Sofia Lindgren",
-  ]);
+  // The API sorts; no column header offers a sort over the loaded rows.
+  for (const header of within(table()).getAllByRole("columnheader")) {
+    expect(within(header).queryByRole("button")).toBeNull();
+  }
 });
+
+test("the server sorts the whole list by age, never-synced leads last in both directions, from page 1 (check 2)", async () => {
+  // 26 active leads: one more than a page.
+  addLeads(21);
+  renderScreen(<PipelineScreen />);
+  await loaded();
+  const sortBy = (label: string) =>
+    fireEvent.change(screen.getByLabelText("Sort by"), {
+      target: {
+        value: [
+          ...screen.getByLabelText<HTMLSelectElement>("Sort by").options,
+        ].find((option) => option.text === label)?.value,
+      },
+    });
+  const showAll = async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Show more leads" }));
+    await waitFor(() => expect(names()).toHaveLength(26));
+  };
+
+  sortBy("Age, oldest first");
+  expect(address()).toBe("/leads?sort=age&dir=desc");
+  await waitFor(() => expect(names()[0]).toBe("Extra Lead20"));
+  expect(names()).toHaveLength(25);
+  expect(listCalls().at(-1)).toMatch(/^\/api\/leads\?.*sort=age&dir=desc/);
+  expect(listCalls().at(-1)).not.toContain("cursor");
+  await showAll();
+  expect(names().slice(21, 24)).toEqual([
+    "Desmond Achterberg",
+    "Imogen Vasquez",
+    "Emeka Obi",
+  ]);
+  expect(names().slice(24).sort()).toEqual([
+    "Beatrix Olander",
+    "Sofia Lindgren",
+  ]);
+
+  // A new order starts again from page 1.
+  sortBy("Age, youngest first");
+  expect(address()).toBe("/leads?sort=age&dir=asc");
+  await waitFor(() => expect(names()[0]).toBe("Emeka Obi"));
+  expect(names()).toHaveLength(25);
+  expect(listCalls().at(-1)).toMatch(/sort=age&dir=asc/);
+  expect(listCalls().at(-1)).not.toContain("cursor");
+  expect(names().slice(0, 4)).toEqual([
+    "Emeka Obi",
+    "Imogen Vasquez",
+    "Desmond Achterberg",
+    "Extra Lead0",
+  ]);
+  await showAll();
+  expect(names().at(-3)).toBe("Extra Lead20");
+  expect(names().slice(24).sort()).toEqual([
+    "Beatrix Olander",
+    "Sofia Lindgren",
+  ]);
+
+  sortBy("Recently updated");
+  expect(address()).toBe("/leads");
+}, 15_000); // Four lists of 25 and more rows, drawn as a table and as cards.
 
 test("each filter goes in the address and narrows the list; Clear filters takes them all out", async () => {
   renderScreen(<PipelineScreen />);
@@ -159,6 +209,19 @@ test("each filter goes in the address and narrows the list; Clear filters takes 
   fireEvent.change(screen.getByLabelText("Verdict"), {
     target: { value: "" },
   });
+  // The groups are status_defs', in GHL's order.
+  const groups = within(screen.getByLabelText("Lead Status"));
+  await groups.findByRole("option", { name: "Qualified" });
+  expect(
+    groups.getAllByRole("option").map((option) => option.textContent),
+  ).toEqual([
+    "Any Lead Status",
+    "New",
+    "Engaging",
+    "Appointment",
+    "Qualified",
+    "Lost",
+  ]);
   fireEvent.change(screen.getByLabelText("Lead Status"), {
     target: { value: "Qualified" },
   });
@@ -283,13 +346,48 @@ test("with no leads at all, the empty state is the registry's", async () => {
   ).toBeDefined();
 });
 
-test("the navbar's lead search lands here: its words narrow the list and Clear search takes them out", async () => {
+test("search goes in the address and the server searches every lead, from page 1", async () => {
+  addLeads(21);
+  // Updated longest ago: on the second page by the default order.
+  updateLead("lead-sofia", { updatedAt: "2026-09-01T12:00:00.000Z" });
+  renderScreen(<PipelineScreen />);
+  await loaded();
+  expect(names()).toHaveLength(25);
+  expect(names()).not.toContain("Sofia Lindgren");
+
+  // Found on the server, and by her email, which no column shows.
+  fireEvent.change(screen.getByLabelText("Search"), {
+    target: { value: " sofia@ " },
+  });
+  await waitFor(() => expect(address()).toBe("/leads?q=sofia%40"));
+  await waitFor(() => expect(names()).toEqual(["Sofia Lindgren"]));
+  expect(listCalls().at(-1)).toMatch(/^\/api\/leads\?q=sofia%40&/);
+  expect(listCalls().at(-1)).not.toContain("cursor");
+
+  fireEvent.change(screen.getByLabelText("Search"), {
+    target: { value: "" },
+  });
+  await waitFor(() => expect(address()).toBe("/leads"));
+  await waitFor(() => expect(names()).toHaveLength(25));
+}, 15_000); // A page of 25 rows, drawn as a table and as cards, twice.
+
+test("the navbar's lead search lands here: the box shows its words, and Clear filters empties it", async () => {
   startDashboard("/leads?q=desmond");
   renderScreen(<PipelineScreen />);
   await loaded();
   expect(names()).toEqual(["Desmond Achterberg"]);
-  expect(screen.getByText("Leads matching “desmond”")).toBeDefined();
-  fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+  expect(screen.getByLabelText<HTMLInputElement>("Search").value).toBe(
+    "desmond",
+  );
+
+  fireEvent.change(screen.getByLabelText("Verdict"), {
+    target: { value: "suspect" },
+  });
+  fireEvent.click(await screen.findByRole("button", { name: "Clear filters" }));
   expect(address()).toBe("/leads");
   await waitFor(() => expect(names()).toHaveLength(5));
+  expect(screen.getByLabelText<HTMLInputElement>("Search").value).toBe("");
+  // Emptying the box from the address writes nothing back.
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  expect(address()).toBe("/leads");
 });

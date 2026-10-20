@@ -7,6 +7,7 @@ import type {
   LeadFilters,
   LeadPage,
   PipelineSummary,
+  StatusDef,
 } from "@/lib/leads/schemas";
 
 /*
@@ -54,6 +55,13 @@ export const dashboardOptions = (tz: string) =>
   queryOptions({
     queryKey: [...leadKeys.dashboards, tz],
     queryFn: () => apiFetch<Dashboard>(`/api/dashboard?${query({ tz })}`),
+  });
+
+/** GHL's Lead Status picklist (status_defs), in its order. */
+export const statusDefsOptions = () =>
+  queryOptions({
+    queryKey: ["status-defs"],
+    queryFn: () => apiFetch<StatusDef[]>("/api/status-defs"),
   });
 
 /** Counts depend on the viewer's day, so the time zone is part of the key. */

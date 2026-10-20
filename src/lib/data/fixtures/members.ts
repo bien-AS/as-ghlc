@@ -5,9 +5,10 @@ import type { Member } from "@/lib/members/schemas";
  * by the data-access layer and its tests only. Everyone is invented and every
  * address uses a reserved example domain.
  *
- * The four reps are the reps on the sample leads. Lead fixtures belong to the
- * leads module, so the names are repeated here; `members.test.ts` checks them
- * against the Pipeline's rep list.
+ * The four reps are invented too, and linked to nothing: leads come from the
+ * synced `leads` table and the lead list's rep filter reads active profiles
+ * (spec 07), not these members. `members.test.ts` checks only that each is
+ * active and named once.
  */
 
 /** A member as stored. Whether a row is the viewer is decided on read. */

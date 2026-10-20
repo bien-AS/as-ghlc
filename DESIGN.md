@@ -98,7 +98,7 @@ Recorded in commit `f82164f` ("Findings of the design review of the reskin"); ea
 Known gaps the review left open:
 
 1. The page title shows twice (top bar and page heading), and lead detail repeats the breadcrumb as a back link. Vantage uses one header band.
-2. The lead list is not yet the kit's `DataTable` (no sort, density or column choice).
+2. ~~The lead list is not yet the kit's `DataTable`.~~ Resolved: it is, with the kit's density and column choice. The kit's `DataTable` sorts and searches only the rows it holds and cannot be controlled, so the lead list hides its search box and offers no header sort; the filter bar's Search and Sort by go through the address to the API, across every lead.
 3. Controls are 28px tall on phones; the 44px touch rule covers only the sign-in screen.
 4. Scrollbars are unstyled.
 

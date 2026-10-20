@@ -9,6 +9,7 @@ import {
   NEEDS,
   type PipelineSummary,
   STAGES,
+  type StatusDef,
   type SyncEntry,
   UNASSIGNED,
 } from "@/lib/leads/schemas";
@@ -18,14 +19,16 @@ import { SAMPLE_REP } from "@/test/server-fakes";
 /*
  * An in-memory lead table for the lead list and lead detail screen tests.
  * Leads live in Postgres (spec 07), which jsdom has not got; this answers the
- * data-access functions' contract (scope by role, nulls-last age, the writes
- * and their sync-log entries with writes off) so a screen test can run the
+ * data-access functions' contract (scope by role, the sort orders with nulls
+ * last, offset paging, the writes and their sync-log entries with writes off,
+ * the Lead Status picklist) so a screen test can run the
  * whole path through the real Route Handlers. Wire it in with
  *   vi.mock("@/lib/data/leads", async (original) => ({
  *     ...(await original<typeof import("@/lib/data/leads")>()),
  *     ...(await import("@/test/lead-store")).leadsModule,
  *   }));
  *   vi.mock("@/lib/data/research", async () => (await import("@/test/lead-store")).researchModule);
+ *   vi.mock("@/lib/data/status-defs", async () => (await import("@/test/lead-store")).statusDefsModule);
  * The SQL itself is proven against a real database in src/lib/data/leads.db.test.ts.
  */
 
@@ -174,6 +177,17 @@ export function resetLeadStore() {
   research.set("lead-imogen", structuredClone(BRIEF));
 }
 
+/** Adds `count` of Maya's leads, each a day older than the last (20 days and up), for paging. */
+export function addLeads(count: number) {
+  for (let i = 0; i < count; i += 1) {
+    leads.push(
+      lead(`lead-extra-${i}`, `Extra Lead${i}`, {
+        lastActivityAt: ago(20 + i),
+      }),
+    );
+  }
+}
+
 /** For a test to set up a lead's state before it renders. */
 export function updateLead(id: string, fields: Partial<LeadDetail>) {
   const found = leads.find((item) => item.id === id);
@@ -257,11 +271,37 @@ async function listLeads(query: ListLeadsQuery): Promise<LeadPage> {
         !q ||
         `${item.name} ${item.company} ${item.email}`.toLowerCase().includes(q),
     )
+    .sort(byQuery(query))
     .map(toItem);
+  // The cursor is an offset, as in listLeads.
+  const start = Number(query.cursor ?? 0);
+  const end = start + query.limit;
   return {
-    items: structuredClone(items),
-    nextCursor: null,
+    items: structuredClone(items.slice(start, end)),
+    nextCursor: end < items.length ? String(end) : null,
     total: items.length,
+  };
+}
+
+const SORT_KEY: Record<
+  ListLeadsQuery["sort"],
+  (item: LeadDetail) => string | null
+> = {
+  recent: (item) => item.updatedAt,
+  age: (item) => item.lastActivityAt,
+  next_booking: (item) => item.nextBooking?.time ?? null,
+};
+
+/** listLeads' order: age runs the other way from its time, and nulls go last both ways. */
+function byQuery(query: ListLeadsQuery) {
+  const key = SORT_KEY[query.sort];
+  const ascending = (query.sort === "age") !== (query.dir === "asc");
+  return (a: LeadDetail, b: LeadDetail) => {
+    const [x, y] = [key(a), key(b)];
+    if (x === y) return 0;
+    if (x === null) return 1;
+    if (y === null) return -1;
+    return x < y === ascending ? -1 : 1;
   };
 }
 
@@ -400,6 +440,38 @@ export const leadsModule = {
   changeStatus,
   assignRep,
   archiveLead,
+};
+
+/** Part of GHL's Lead Status picklist (status_defs), in its order: what the screens use. */
+const STATUS_DEFS: StatusDef[] = [
+  { value: "New - Contacted", group: "New", position: 0, tone: "neutral" },
+  {
+    value: "Engaging - Hot Lead",
+    group: "Engaging",
+    position: 4,
+    tone: "brand",
+  },
+  {
+    value: "Appointment - Completed",
+    group: "Appointment",
+    position: 8,
+    tone: "brand",
+  },
+  {
+    value: "Qualified - Pending Proposal",
+    group: "Qualified",
+    position: 12,
+    tone: "ok",
+  },
+  { value: "Lost - Spam", group: "Lost", position: 26, tone: "crit" },
+];
+
+/** Wire in with vi.mock("@/lib/data/status-defs", async () => (await import("@/test/lead-store")).statusDefsModule). */
+export const statusDefsModule = {
+  listStatusDefs: async () => {
+    await requireProfile();
+    return structuredClone(STATUS_DEFS);
+  },
 };
 
 async function getLatestResearch(leadId: string): Promise<LeadResearch> {

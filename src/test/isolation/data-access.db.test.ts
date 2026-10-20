@@ -83,6 +83,7 @@ import {
   requestResearch,
 } from "@/lib/data/research";
 import { resetSampleData } from "@/lib/data/sample";
+import { listStatusDefs } from "@/lib/data/status-defs";
 import { listSyncLog, retryWrite } from "@/lib/data/sync-log";
 import { getMe, updateProfile } from "@/lib/data/users";
 import { getViewerSummary } from "@/lib/data/viewer";
@@ -188,6 +189,7 @@ const listCalls = (): Calls => ({
   listNotifications: () => listNotifications(notificationsQuery()),
   getUnreadCount,
   estimateResearchCost,
+  listStatusDefs,
 });
 
 /** Every read or write of one lead, or of something that belongs to it. */
