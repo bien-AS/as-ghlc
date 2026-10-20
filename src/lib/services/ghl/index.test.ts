@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import {
   checkGhlIds,
+  GhlError,
   ghlConfig,
   ghlRequest,
   leadFromGhl,
@@ -150,6 +151,49 @@ test("a 429 is retried after the window GHL asks for, then succeeds", async () =
   await vi.advanceTimersByTimeAsync(2_000); // then exponential: 2s
   expect(await result).toEqual({ ok: true });
   expect(fetchMock).toHaveBeenCalledTimes(3);
+});
+
+test("a 429 asking to wait more than 60s fails with a GhlError 429 instead of sleeping", async () => {
+  vi.useFakeTimers();
+  const fetchMock = vi.fn(
+    async () =>
+      new Response("slow down", {
+        status: 429,
+        headers: { "Retry-After": "120" },
+      }),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+
+  let error: unknown;
+  ghlRequest("/anything").catch((e: unknown) => {
+    error = e;
+  });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(error).toBeInstanceOf(GhlError);
+  expect((error as GhlError).status).toBe(429);
+  expect(vi.getTimerCount()).toBe(0); // nothing left sleeping
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test("a write method is refused before any call unless GHL_WRITES_ENABLED is exactly 'true'", async () => {
+  const fetchMock = vi.fn(async () => Response.json({ ok: true }));
+  vi.stubGlobal("fetch", fetchMock);
+  for (const value of [undefined, "false", "TRUE", "1"]) {
+    vi.stubEnv("GHL_WRITES_ENABLED", value);
+    for (const method of ["POST", "PUT", "DELETE", "patch"]) {
+      await expect(ghlRequest("/contacts/c-1", { method })).rejects.toThrow(
+        /GHL_WRITES_ENABLED/,
+      );
+    }
+    // Reads still go.
+    expect(await ghlRequest("/contacts/c-1")).toEqual({ ok: true });
+  }
+  expect(fetchMock).toHaveBeenCalledTimes(4);
+
+  vi.stubEnv("GHL_WRITES_ENABLED", "true");
+  expect(await ghlRequest("/contacts/c-1", { method: "PUT" })).toEqual({
+    ok: true,
+  });
 });
 
 test("check 11: an error never carries the token, even when GHL echoes it", async () => {

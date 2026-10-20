@@ -17,37 +17,42 @@ import { runWrite, type SyncLogEntry, type WritePlan } from "./runner";
  *
  * ASSUMED request shapes, to confirm in the supervised write session (or on a
  * dev sub-account) before writes are switched on:
- *  - contact fields: POST /contacts/upsert { locationId, email, phone,
- *    customFields: [{ id, value }] }, matching on email or phone and answering
- *    `"new": false` when it updated (anything else is recorded failed);
+ *  - contact fields: PUT /contacts/{ghlContactId} { customFields: [{ id, value }] }
+ *    on the lead's own contact, by id. Not POST /contacts/upsert: that matches
+ *    on email or phone, so it can create or update some other contact;
  *  - opportunity: PUT /opportunities/{id} { pipelineId, pipelineStageId,
- *    customFields: [{ id, field_value }] }, then read back (check 9).
+ *    customFields: [{ id, field_value }] }.
+ * Both are read back afterwards (check 9), so a wrong shape that GHL answers
+ * 200 to and ignores is recorded failed, never succeeded.
  */
 
 type Lead = typeof leads.$inferSelect;
-export type ContactLead = Pick<Lead, "id" | "email" | "phone">;
+export type ContactLead = Pick<Lead, "id" | "ghlContactId">;
 export type OpportunityLead = Pick<Lead, "id"> & { ghlOpportunityId: string };
 
 type ContactField = keyof GhlConfig["contactFields"];
 
-function contactUpsert(
+function contactUpdate(
   lead: ContactLead,
   fields: Partial<Record<ContactField, string>>,
 ): WritePlan {
   const cfg = ghlConfig();
+  const customFields = Object.fromEntries(
+    Object.entries(fields).map(([key, value]) => [
+      cfg.contactFields[key as ContactField],
+      value,
+    ]),
+  );
   return {
-    method: "POST",
-    path: "/contacts/upsert",
+    method: "PUT",
+    path: `/contacts/${encodeURIComponent(lead.ghlContactId)}`,
     body: {
-      locationId: cfg.locationId,
-      ...(lead.email && { email: lead.email }),
-      ...(lead.phone && { phone: lead.phone }),
-      customFields: Object.entries(fields).map(([key, value]) => ({
-        id: cfg.contactFields[key as ContactField],
+      customFields: Object.entries(customFields).map(([id, value]) => ({
+        id,
         value,
       })),
     },
-    expect: "existing_contact",
+    expect: { contactId: lead.ghlContactId, customFields },
   };
 }
 
@@ -68,7 +73,7 @@ export const writeValidationVerdict = (
     leadId: lead.id,
     writeType: "w1_verdict",
     idempotencyKey: `w1_verdict:${lead.id}:${verdict}:${decisionId}`,
-    plan: contactUpsert(lead, {
+    plan: contactUpdate(lead, {
       validation_status: VALIDATION_STATUS[verdict],
       validation_summary: summary,
     }),
@@ -84,7 +89,7 @@ export const writeDeckLink = async (
         leadId: lead.id,
         writeType: "w2_deck_link",
         idempotencyKey: `w2_deck_link:${lead.id}:${deckUrl}`,
-        plan: contactUpsert(lead, { ds_deck_link: deckUrl }),
+        plan: contactUpdate(lead, { ds_deck_link: deckUrl }),
       })
     : null;
 
@@ -129,5 +134,5 @@ export const writeMarkSpam = (
     leadId: lead.id,
     writeType: "w4_mark_spam",
     idempotencyKey: `w4_mark_spam:${lead.id}:spam:${decisionId}`,
-    plan: contactUpsert(lead, { validation_status: "Spam" }),
+    plan: contactUpdate(lead, { validation_status: "Spam" }),
   });

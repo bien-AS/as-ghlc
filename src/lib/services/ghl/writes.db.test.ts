@@ -18,6 +18,7 @@ import {
 
 import * as schema from "@/db/schema";
 import { listSyncLog, retryWrite } from "@/lib/data/sync-log";
+import { AccessError } from "@/lib/data/users";
 import { TEST_IDS } from "@/test/ghl-ids";
 import { resetFakes, signIn } from "@/test/server-fakes";
 
@@ -62,9 +63,13 @@ vi.mock(
 
 type Db = NodePgDatabase<typeof schema>;
 
-/** The stubbed GHL: one opportunity whose stage a PUT moves, unless `stuck`. */
+/**
+ * The stubbed GHL: one opportunity whose stage a PUT moves, and one contact
+ * (any id) whose custom fields a PUT sets, unless `stuck`.
+ */
 const ghl = {
   stage: TEST_IDS.stages["Discovery Call Booked"],
+  fields: {} as Record<string, unknown>,
   stuck: false,
   /** Answers to hand out before the normal ones, in order. */
   queue: [] as (Response | Error)[],
@@ -76,8 +81,22 @@ const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
   if (next) return next;
   const { pathname } = new URL(url);
   const method = init?.method ?? "GET";
-  if (method === "POST" && pathname === "/contacts/upsert") {
-    return Response.json({ new: false, contact: { id: "contact-1" } });
+  const contactId = /^\/contacts\/([^/]+)$/.exec(pathname)?.[1];
+  if (contactId && contactId !== "upsert") {
+    if (method === "PUT" && !ghl.stuck) {
+      for (const { id, value } of JSON.parse(String(init?.body)).customFields) {
+        ghl.fields[id] = value;
+      }
+    }
+    return Response.json({
+      contact: {
+        id: contactId,
+        customFields: Object.entries(ghl.fields).map(([id, value]) => ({
+          id,
+          value,
+        })),
+      },
+    });
   }
   if (pathname === "/opportunities/opp-1") {
     if (method === "PUT" && !ghl.stuck) {
@@ -111,8 +130,20 @@ const ADMIN = {
 describe.skipIf(!DIRECT_URL)(SUITE, () => {
   let client: pg.Client | undefined;
   let root: Db;
-  let lead: { id: string; email: string | null; phone: string | null };
+  let lead: typeof schema.leads.$inferSelect;
   const opp = () => ({ id: lead.id, ghlOpportunityId: "opp-1" });
+
+  /** Signs in an admin, the one who presses Retry. */
+  const signInAdmin = async (db: Db) => {
+    await db.execute(
+      sql`insert into auth.users (id, email, aud, role) values (${ADMIN.id}, ${ADMIN.email}, 'authenticated', 'authenticated')`,
+    );
+    await db
+      .insert(schema.profiles)
+      .values({ ...ADMIN, firstName: "W", lastName: "A" });
+    resetFakes();
+    signIn({ sub: ADMIN.id, email: ADMIN.email });
+  };
 
   const rows = (db: Db) =>
     db
@@ -160,6 +191,7 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
     vi.stubGlobal("fetch", fetchMock);
     fetchMock.mockClear();
     ghl.stage = TEST_IDS.stages["Discovery Call Booked"];
+    ghl.fields = {};
     ghl.stuck = false;
     ghl.queue = [];
   });
@@ -214,23 +246,21 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
       const w3 = await writeQualification(opp(), "not_qualified", "event-1");
       const w4 = await writeMarkSpam(lead, "event-9");
 
-      const contact = {
-        locationId: "loc-test",
-        email: "lead@example.com",
-        phone: "+15550100",
-      };
+      // The lead's own contact, by id: never matched on email or phone.
+      const contact = `/contacts/${lead.ghlContactId}`;
       expect(calls()).toEqual([
         {
-          method: "POST",
-          path: "/contacts/upsert",
+          method: "PUT",
+          path: contact,
           body: {
-            ...contact,
             customFields: [
               { id: "cf-validation_status", value: "Suspect" },
               { id: "cf-validation_summary", value: "Brief." },
             ],
           },
         },
+        // The read-back after every contact write.
+        { method: "GET", path: contact, body: undefined },
         {
           method: "PUT",
           path: "/opportunities/opp-1",
@@ -245,13 +275,13 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
         // The read-back after the stage write (check 9).
         { method: "GET", path: "/opportunities/opp-1", body: undefined },
         {
-          method: "POST",
-          path: "/contacts/upsert",
+          method: "PUT",
+          path: contact,
           body: {
-            ...contact,
             customFields: [{ id: "cf-validation_status", value: "Spam" }],
           },
         },
+        { method: "GET", path: contact, body: undefined },
       ]);
       for (const row of [w1, w3, w4]) {
         expect(row).toMatchObject({
@@ -310,7 +340,8 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
       await vi.waitFor(() => expect(vi.getTimerCount()).toBe(1));
       await vi.advanceTimersByTimeAsync(2000);
       expect(await run).toMatchObject({ result: "succeeded", attempts: 1 });
-      expect(fetchMock).toHaveBeenCalledTimes(2);
+      // The 429, the PUT again, and the read-back.
+      expect(fetchMock).toHaveBeenCalledTimes(3);
     }));
 
   test("unreachable GHL stays failed; Retry succeeds once GHL answers (check 8)", () =>
@@ -323,16 +354,7 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
         lastError: "fetch failed",
       });
 
-      // The admin who presses Retry.
-      await db.execute(
-        sql`insert into auth.users (id, email, aud, role) values (${ADMIN.id}, ${ADMIN.email}, 'authenticated', 'authenticated')`,
-      );
-      await db
-        .insert(schema.profiles)
-        .values({ ...ADMIN, firstName: "W", lastName: "A" });
-      resetFakes();
-      signIn({ sub: ADMIN.id, email: ADMIN.email });
-
+      await signInAdmin(db);
       const retried = await retryWrite(failed.id);
       expect(retried).toMatchObject({
         id: failed.id,
@@ -343,16 +365,53 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
       expect(ghl.stage).toBe("s-qual");
     }));
 
+  test("Retry refuses a write that is not failed, and sends nothing", () =>
+    inRollback(async (db) => {
+      const succeeded = await writeQualification(opp(), "qualified", "event-1");
+      vi.stubEnv("GHL_WRITES_ENABLED", "false");
+      const skipped = await writeMarkSpam(lead, "event-9");
+      vi.stubEnv("GHL_WRITES_ENABLED", "true");
+      expect([succeeded.result, skipped.result]).toEqual([
+        "succeeded",
+        "skipped",
+      ]);
+      await signInAdmin(db);
+      fetchMock.mockClear();
+
+      for (const row of [succeeded, skipped]) {
+        const refused = await retryWrite(row.id).catch((e: unknown) => e);
+        expect(refused).toBeInstanceOf(AccessError);
+        expect((refused as AccessError).code).toBe("conflict");
+      }
+      expect(fetchMock).not.toHaveBeenCalled();
+    }));
+
+  test("Retry refuses a failed write that a newer one for the same lead and write type replaced", () =>
+    inRollback(async (db) => {
+      ghl.queue = [new TypeError("fetch failed")];
+      const old = await writeQualification(opp(), "qualified", "event-1");
+      expect(old.result).toBe("failed");
+      const newer = await writeQualification(opp(), "not_qualified", "event-2");
+      expect(newer.result).toBe("succeeded");
+      // One transaction stamps both rows with the same now(); in the app they are apart.
+      await db
+        .update(schema.ghlSyncLog)
+        .set({ createdAt: new Date(old.createdAt.getTime() + 1000) })
+        .where(eq(schema.ghlSyncLog.id, newer.id));
+      await signInAdmin(db);
+      fetchMock.mockClear();
+
+      const refused = await retryWrite(old.id).catch((e: unknown) => e);
+      expect(refused).toBeInstanceOf(AccessError);
+      expect((refused as AccessError).code).toBe("conflict");
+      // GHL keeps the newer decision: nothing moved it back, no second email.
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(ghl.stage).toBe("s-lost");
+    }));
+
   test("listSyncLog: newest first, filtered, paged by cursor", () =>
     inRollback(async (db) => {
-      await db.execute(
-        sql`insert into auth.users (id, email, aud, role) values (${ADMIN.id}, ${ADMIN.email}, 'authenticated', 'authenticated')`,
-      );
-      await db
-        .insert(schema.profiles)
-        .values({ ...ADMIN, firstName: "W", lastName: "A" });
-      resetFakes();
-      signIn({ sub: ADMIN.id, email: ADMIN.email });
+      await signInAdmin(db);
       // Far in the future, so they come before any row already in the table.
       const at = (n: number) => new Date(Date.UTC(2999, 0, 1, 0, 0, n));
       await db.insert(schema.ghlSyncLog).values(
@@ -395,20 +454,27 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
       );
     }));
 
-  test("an upsert that created a new contact is failed, not succeeded", () =>
+  test("a contact write the read-back contradicts is failed, never succeeded", () =>
     inRollback(async () => {
-      ghl.queue = [Response.json({ new: true, contact: { id: "other" } })];
+      ghl.stuck = true; // GHL answers 200 and leaves the fields as they were
       const row = await writeMarkSpam(lead, "event-9");
       expect(row).toMatchObject({ result: "failed" });
-      expect(row.lastError).toMatch(/new contact/);
+      expect(row.lastError).toMatch(
+        /Read-back: contact .* field cf-validation_status is undefined, not "Spam"/,
+      );
     }));
 
   test("no recorded response or error holds the token (check 11)", () =>
     inRollback(async (db) => {
       ghl.queue = [
         new Response(`bad token ${TOKEN}`, { status: 401 }),
-        Response.json({ new: false, echo: `Bearer ${TOKEN}` }),
+        Response.json({ succeded: true, echo: `Bearer ${TOKEN}` }),
       ];
+      // The queued answer stands in for the PUT, so the read-back finds these.
+      ghl.fields = {
+        "cf-validation_status": "Valid",
+        "cf-validation_summary": "ok",
+      };
       const failed = await writeMarkSpam(lead, "event-9");
       expect(failed.result).toBe("failed");
       await writeValidationVerdict(lead, "valid", "ok", "run-2");
