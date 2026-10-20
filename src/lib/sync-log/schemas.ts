@@ -22,6 +22,30 @@ export type ListSyncLogQuery = z.infer<typeof listSyncLogQuerySchema>;
 /** The path of POST /api/admin/sync-log/[id]/retry. */
 export const syncLogIdSchema = z.uuid();
 
+/**
+ * How long a write may stay pending before it counts as stopped: longer than
+ * the slowest write the runner can make (two GHL requests, each up to five
+ * 15s attempts with four 60s 429 waits between them, about 10.5 minutes).
+ * ponytail: a time guess, not proof the send stopped; a write still running
+ * past it can be sent twice (harmless for set-to-a-value writes, see runWrite).
+ * Record a heartbeat on the row if that ever matters.
+ */
+export const STALE_PENDING_MS = 11 * 60_000;
+
+/**
+ * Whether Retry may re-send a write: it failed, or it has been pending past
+ * STALE_PENDING_MS (the process stopped after its decision committed). A fresh
+ * pending write may still be in flight. The server also refuses a write that
+ * a newer one replaced.
+ */
+export const canRetry = (
+  entry: { result: SyncLogEntry["result"]; updatedAt: Date | string },
+  now = Date.now(),
+) =>
+  entry.result === "failed" ||
+  (entry.result === "pending" &&
+    now - new Date(entry.updatedAt).getTime() > STALE_PENDING_MS);
+
 /** Retry takes no options: the body is `{}`. */
 export const retryInputSchema = z.strictObject({});
 

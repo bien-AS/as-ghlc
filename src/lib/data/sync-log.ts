@@ -4,6 +4,7 @@ import { db } from "@/db/client";
 import { ghlSyncLog } from "@/db/schema";
 import { runWrite, type WritePlan } from "@/lib/services/ghl/runner";
 import {
+  canRetry,
   type ListSyncLogQuery,
   SYNC_LOG_PAGE_SIZE,
   type SyncLogEntry,
@@ -54,8 +55,9 @@ export async function listSyncLog(
 
 /**
  * "Retry": re-runs the logged request through the same runner. Refused
- * ("conflict") unless the write failed and is still the latest of its type for
- * its lead: re-sending an older decision would move GHL back over the newer one
+ * ("conflict") unless the write failed, or has been pending past
+ * STALE_PENDING_MS (`canRetry`), and is still the latest of its type for its
+ * lead: re-sending an older decision would move GHL back over the newer one
  * and can fire its email again (W3).
  *
  * ponytail: a decision logged between this check and the send is not seen;
@@ -67,7 +69,7 @@ export async function retryWrite(id: string): Promise<SyncLogEntry> {
     where: eq(ghlSyncLog.id, id),
   });
   if (!row) throw new AccessError("not_found");
-  if (row.result !== "failed") throw new AccessError("conflict");
+  if (!canRetry(row)) throw new AccessError("conflict");
   const newer = await db.query.ghlSyncLog.findFirst({
     columns: { id: true },
     where: and(
