@@ -42,7 +42,11 @@ import {
 import { ApiError } from "@/lib/api/client";
 import { isLive } from "@/lib/flags";
 import type { SyncLogFilters } from "@/lib/queries/sync-log";
-import type { SyncLogEntry, WebhookEventEntry } from "@/lib/sync-log/schemas";
+import {
+  canRetry,
+  type SyncLogEntry,
+  type WebhookEventEntry,
+} from "@/lib/sync-log/schemas";
 import { cn } from "@/lib/utils";
 
 import { DASHBOARD_HREF, leadHref } from "../../navigation";
@@ -389,7 +393,7 @@ function WritesTab({
           >
             Payload
           </Button>
-          {row.result === "failed" && <RetryButton entry={row} />}
+          {canRetry(row) && <RetryButton entry={row} />}
         </div>
       ),
     },
@@ -479,7 +483,10 @@ function ResultCell({ entry }: { entry: SyncLogEntry }) {
   );
 }
 
-/** "Retry" on a failed write: names the write it will cause before it happens (spec 06). */
+/**
+ * "Retry" on a failed write, or one stuck pending: names the write it will
+ * cause before it happens (spec 06).
+ */
 function RetryButton({ entry }: { entry: SyncLogEntry }) {
   const retry = useRetryWrite();
   const write = WRITES[entry.writeType];
@@ -549,7 +556,11 @@ function RetryButton({ entry }: { entry: SyncLogEntry }) {
         </dd>
       </dl>
       <p className="text-meta text-pretty text-ink-3">
-        {`This change may already have reached GHL: a failed write can be a timeout after GHL made the change. Check the contact in GHL first. ${write.twice ?? ""}`.trim()}
+        {`${
+          entry.result === "pending"
+            ? "This write never finished: the app stopped after recording the decision, so it may not have been sent, or it may have reached GHL."
+            : "This change may already have reached GHL: a failed write can be a timeout after GHL made the change."
+        } Check the contact in GHL first. ${write.twice ?? ""}`.trim()}
       </p>
     </ConfirmDialog>
   );

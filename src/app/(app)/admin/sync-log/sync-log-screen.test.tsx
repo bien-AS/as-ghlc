@@ -308,6 +308,41 @@ test("a retry the server refuses says why: replaced by a newer write, or no long
   ).toBeDefined();
 });
 
+test("a pending write offers Retry only once it is stale, saying it may not have been sent", async () => {
+  // NOW is 12:00. One write has been pending for a minute (it may still be in flight), one for two hours.
+  const FRESH = write({
+    id: "00000000-0000-4000-8000-000000000004",
+    idempotencyKey: `w1_verdict:${LEAD}:valid:fresh`,
+    result: "pending",
+    attempts: 0,
+    createdAt: "2026-10-07T11:59:00.000Z",
+    updatedAt: "2026-10-07T11:59:00.000Z",
+  });
+  const STALE = write({
+    id: "00000000-0000-4000-8000-000000000005",
+    idempotencyKey: `w1_verdict:${LEAD}:valid:stale`,
+    result: "pending",
+    attempts: 0,
+    createdAt: "2026-10-07T10:00:00.000Z",
+    updatedAt: "2026-10-07T10:00:00.000Z",
+  });
+  store.writes.push(FRESH, STALE);
+  await open();
+
+  expect(
+    rowWith(FRESH.idempotencyKey).queryByRole("button", { name: /^Retry/ }),
+  ).toBeNull();
+  fireEvent.click(
+    rowWith(STALE.idempotencyKey).getByRole("button", { name: /^Retry/ }),
+  );
+  const dialog = within(await screen.findByRole("alertdialog"));
+  expect(dialog.getByText(/may not have been sent/).textContent).toMatch(
+    /Check the contact in GHL first/,
+  );
+  fireEvent.click(dialog.getByRole("button", { name: "Retry write" }));
+  await waitFor(() => expect(retryWrite).toHaveBeenCalledWith(STALE.id));
+});
+
 test("Cancel on the retry dialog sends nothing", async () => {
   await open();
   fireEvent.click(
