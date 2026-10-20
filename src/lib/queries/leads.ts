@@ -2,10 +2,12 @@ import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 
 import { apiFetch } from "@/lib/api/client";
 import type {
+  Dashboard,
   LeadDetail,
   LeadFilters,
   LeadPage,
   PipelineSummary,
+  StatusDef,
 } from "@/lib/leads/schemas";
 
 /*
@@ -26,6 +28,7 @@ export const leadKeys = {
   /** Every list, whatever its filters: what a write invalidates. */
   lists: ["leads", "list"],
   summaries: ["pipeline-summary"],
+  dashboards: ["dashboard"],
 } as const;
 
 /** A paged list of leads. The page size is the API's default. */
@@ -45,6 +48,20 @@ export const leadOptions = (leadId: string) =>
     queryKey: ["leads", "detail", leadId],
     queryFn: () =>
       apiFetch<LeadDetail>(`/api/leads/${encodeURIComponent(leadId)}`),
+  });
+
+/** The dashboard's tiles, "needs you now" and activity. The week starts in the viewer's time zone. */
+export const dashboardOptions = (tz: string) =>
+  queryOptions({
+    queryKey: [...leadKeys.dashboards, tz],
+    queryFn: () => apiFetch<Dashboard>(`/api/dashboard?${query({ tz })}`),
+  });
+
+/** GHL's Lead Status picklist (status_defs), in its order. */
+export const statusDefsOptions = () =>
+  queryOptions({
+    queryKey: ["status-defs"],
+    queryFn: () => apiFetch<StatusDef[]>("/api/status-defs"),
   });
 
 /** Counts depend on the viewer's day, so the time zone is part of the key. */

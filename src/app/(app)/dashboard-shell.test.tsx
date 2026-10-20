@@ -42,6 +42,10 @@ vi.mock(
   "@/db/client",
   async () => (await import("@/test/server-fakes")).dbModule,
 );
+vi.mock("@/lib/data/leads", async (original) => ({
+  ...(await original<typeof import("@/lib/data/leads")>()),
+  ...(await import("@/test/lead-stand-ins")).leadsModule,
+}));
 vi.mock(
   "@/lib/supabase/client",
   async () => (await import("@/test/render")).supabaseClientModule,
@@ -517,31 +521,37 @@ test("the nav table is the registry's matrix: its entries, in order, at the regi
 
 // --- phase flags (spec 01, section 3) ----------------------------------------------
 
-test("in production no link to a mockup is rendered: the sidebar is the Dashboard and the sync log, with no search, bell or Settings", async () => {
+test("in production no link to a mockup is rendered: the sidebar is the live screens, with the lead search but no bell or Settings", async () => {
   vi.stubEnv("NODE_ENV", "production");
   try {
-    // The sync log reads real rows, so it is live in production too.
+    // The leads and the sync log read real rows, so they are live in production too.
     expect(navItemsFor("admin").map((item) => item.href)).toEqual([
       "/dashboard",
+      "/leads",
       "/admin/sync-log",
     ]);
-    expect(navItemsFor("rep").map((item) => item.href)).toEqual(["/dashboard"]);
+    expect(navItemsFor("rep").map((item) => item.href)).toEqual([
+      "/dashboard",
+      "/leads",
+    ]);
     open("/leads/lead-09");
     await screen.findByText("Ada Lovelace");
     expect(navLinks().map((link) => link.getAttribute("href"))).toEqual([
       "/dashboard",
+      "/leads",
       "/admin/sync-log",
     ]);
-    expect(screen.queryByRole("search")).toBeNull();
+    // The lead search opens the lead list, which is live.
+    expect(screen.getByRole("search")).toBeDefined();
     expect(
       within(screen.getByRole("banner")).queryByRole("link", {
         name: /^Notifications/,
       }),
     ).toBeNull();
-    // The crumb names Leads, but does not link to it.
+    // The crumb links back to the lead list.
     const crumbs = screen.getByRole("navigation", { name: "breadcrumb" });
     expect(crumbs.textContent).toBe("LeadsLead");
-    expect(crumbs.querySelector("a[href]")).toBeNull();
+    expect(crumbs.querySelector('a[href="/leads"]')?.textContent).toBe("Leads");
 
     fireEvent.click(screen.getByRole("button", { name: /Account/ }));
     const menu = await screen.findByRole("menu");

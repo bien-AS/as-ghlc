@@ -3,7 +3,6 @@ import type {
   LeadDetail,
   PipelineTab,
   Stage,
-  Status,
   Verdict,
 } from "@/lib/leads/schemas";
 
@@ -39,18 +38,13 @@ export const tabLabel = (tab: PipelineTab): string =>
       ? STAGE_LABEL[tab as Stage]
       : EXIT_LABEL[tab as Exit];
 
-/** Question 8 (assumed): the status lines, each with its tone. One list. */
-export const STATUS_META: Record<Status, { label: string; tone: Tone }> = {
-  awaiting_verdict: { label: "Awaiting verdict", tone: "warn" },
-  flagged_suspect: { label: "Flagged suspect", tone: "crit" },
-  drip_chasing: { label: "Drip chasing the booking", tone: "warn" },
-  deck_ready: { label: "Deck ready", tone: "ok" },
-  needs_decision: { label: "Needs a decision", tone: "warn" },
-  qualified: { label: "Qualified", tone: "ok" },
-  proposal_ready: { label: "Proposal ready", tone: "ok" },
-  not_a_fit: { label: "Not a fit", tone: "crit" },
-  removed: { label: "Removed from pipeline", tone: "crit" },
-};
+/** A lead's Lead Status chip: its value and tone from status_defs, or none synced yet. */
+export const statusMeta = (
+  status: LeadDetail["status"],
+): { label: string; tone: Tone } =>
+  status
+    ? { label: status.value, tone: status.tone }
+    : { label: "No status yet", tone: "neutral" };
 
 /** Spec 03: ok for valid, warn for awaiting, crit for suspect and spam. */
 export const VERDICT_META: Record<Verdict, { label: string; tone: Tone }> = {
@@ -117,7 +111,6 @@ export type NextStep = {
   hint: string;
   canReview: boolean;
   canQualify: boolean;
-  canMarkLost: boolean;
   canMarkSpam: boolean;
 };
 
@@ -136,7 +129,6 @@ export function nextStep(lead: ActionInput): NextStep {
       hint: `This lead left the pipeline: ${EXIT_LABEL[lead.exit]}.`,
       canReview: false,
       canQualify: false,
-      canMarkLost: false,
       canMarkSpam: false,
     };
   }
@@ -144,7 +136,6 @@ export function nextStep(lead: ActionInput): NextStep {
   const standing = {
     canReview: false,
     canQualify: false,
-    canMarkLost: true,
     canMarkSpam: lead.stage !== "won",
   };
   const step = (
@@ -167,6 +158,8 @@ export function nextStep(lead: ActionInput): NextStep {
   }
 
   switch (lead.stage) {
+    case null:
+      return step(null, "Waiting for this lead's stage to sync.");
     case "new":
       return step(
         null,

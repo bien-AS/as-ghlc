@@ -41,11 +41,14 @@ const PROPOSAL_STAGES: readonly Stage[] = [
   "won",
 ];
 
-type Standing = { stage: Stage; exit: Exit | null };
+/** A lead that left the pipeline, or has no stage synced yet, has no stage here. */
+type Standing = { stage: Stage | null; exit: Exit | null };
 
 /** Whether a lead is at a point where it can have a proposal at all. */
-export const canHaveProposal = (lead: Standing) =>
-  !lead.exit && PROPOSAL_STAGES.includes(lead.stage);
+export const canHaveProposal = <T extends Standing>(
+  lead: T,
+): lead is T & { stage: Stage } =>
+  !lead.exit && lead.stage !== null && PROPOSAL_STAGES.includes(lead.stage);
 
 /** Why a lead cannot have a proposal yet, in a sentence for the rep. */
 export const proposalBlockedReason = (lead: Standing) =>

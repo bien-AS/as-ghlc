@@ -19,10 +19,12 @@ import {
 import * as schema from "@/db/schema";
 import { listSyncLog, retryWrite } from "@/lib/data/sync-log";
 import { AccessError } from "@/lib/data/users";
+import { STALE_PENDING_MS } from "@/lib/sync-log/schemas";
 import { TEST_IDS } from "@/test/ghl-ids";
 import { resetFakes, signIn } from "@/test/server-fakes";
 
 import {
+  qualificationWrite,
   writeDeckLink,
   writeMarkSpam,
   writeQualification,
@@ -407,6 +409,55 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
       // GHL keeps the newer decision: nothing moved it back, no second email.
       expect(fetchMock).not.toHaveBeenCalled();
       expect(ghl.stage).toBe("s-lost");
+    }));
+
+  test("Retry refuses a fresh pending write, retries a stale one, and a newer write still blocks a stale one", () =>
+    inRollback(async (db) => {
+      await signInAdmin(db);
+      // As a decision leaves it when the process stops after its commit.
+      const pending = async (decisionId: string, createdAt: Date) => {
+        const { plan, ...write } = qualificationWrite(
+          opp(),
+          "qualified",
+          decisionId,
+        );
+        const [row] = await db
+          .insert(schema.ghlSyncLog)
+          .values({ ...write, payload: plan, createdAt })
+          .returning();
+        return row;
+      };
+      const age = (id: string, ms: number) =>
+        db
+          .update(schema.ghlSyncLog)
+          .set({ updatedAt: new Date(Date.now() - ms) })
+          .where(eq(schema.ghlSyncLog.id, id));
+      const refused = async (id: string) => {
+        const error = await retryWrite(id).catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(AccessError);
+        expect((error as AccessError).code).toBe("conflict");
+      };
+
+      // Fresh: it may still be in flight.
+      const crashed = await pending("event-1", new Date());
+      await refused(crashed.id);
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      // Stale: retried through the runner, on the same row.
+      await age(crashed.id, STALE_PENDING_MS + 60_000);
+      expect(await retryWrite(crashed.id)).toMatchObject({
+        id: crashed.id,
+        result: "succeeded",
+        attempts: 1,
+      });
+      expect(ghl.stage).toBe("s-qual");
+
+      // Stale, but a newer write of the same type for the lead replaced it.
+      const older = await pending("event-2", new Date(Date.now() - 3_600_000));
+      await age(older.id, STALE_PENDING_MS + 60_000);
+      fetchMock.mockClear();
+      await refused(older.id);
+      expect(fetchMock).not.toHaveBeenCalled();
     }));
 
   test("listSyncLog: newest first, filtered, paged by cursor", () =>

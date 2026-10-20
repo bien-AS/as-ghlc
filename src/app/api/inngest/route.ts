@@ -8,6 +8,8 @@ import { functions } from "@/lib/inngest/functions";
 // every call with INNGEST_SIGNING_KEY, and the guard below keeps signing switched on.
 
 export const runtime = "nodejs";
+// One step per request: the research brief step (site fetch plus a model call capped at 120 s) needs minutes.
+export const maxDuration = 300;
 
 // At module scope, so a deployment carrying INNGEST_DEV fails at build time instead of
 // serving functions unsigned.

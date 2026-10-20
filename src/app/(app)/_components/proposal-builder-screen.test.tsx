@@ -8,25 +8,24 @@ import {
 import { usePathname } from "next/navigation";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
-import { getInvoice } from "@/lib/data/invoices";
-import { getLead, markLost } from "@/lib/data/leads";
-import {
-  getProposal,
-  listProposalLeads,
-  sendProposal,
-} from "@/lib/data/proposals";
+import { getLead } from "@/lib/data/leads";
+import { getProposal } from "@/lib/data/proposals";
 import {
   api,
   FORBIDDEN,
-  leadIdOf,
   renderScreen,
   startDashboard,
   stopDashboard,
   viewAs,
 } from "@/test/dashboard";
+import {
+  moveForProposals,
+  PROPOSAL_LEADS,
+  resetStandIns,
+  standIns,
+} from "@/test/mockup-stand-ins";
 import { resetNavigation } from "@/test/navigation";
 
-import { LeadScreen } from "./lead-screen";
 import { ProposalBuilderScreen } from "./proposal-builder-screen";
 
 /** The page: it hands the screen the lead id from the address, as the route does. */
@@ -55,23 +54,35 @@ vi.mock(
   "@/lib/navigate",
   async () => (await import("@/test/render")).navigateModule,
 );
+// Leads live in Postgres; the proposal module reaches them only through these.
+vi.mock("@/lib/data/leads", async (original) => ({
+  ...(await original<typeof import("@/lib/data/leads")>()),
+  ...(await import("@/test/mockup-stand-ins")).mockupLeadsModule,
+}));
 
 const BUILDER = "/proposals";
+// Stand-ins moved along the pipeline: a real lead has no proposal until
+// proposals are read from their table (spec 12).
+const { sent, lost, qualified, draft, won, early } = PROPOSAL_LEADS;
+const nameOf = (leadId: string) => `Stand-in ${leadId.split("-").at(-1)}`;
 
-beforeEach(() => startDashboard(BUILDER));
+beforeEach(() => {
+  startDashboard(BUILDER);
+  resetStandIns();
+  moveForProposals();
+});
 afterEach(() => {
   cleanup();
   stopDashboard();
 });
 
-/** Opens the builder on the sample lead with this name, and waits for it. */
-async function open(name: string) {
-  const leadId = await leadIdOf(name);
+/** Opens the builder on a stand-in, and waits for it. */
+async function open(leadId: string) {
   resetNavigation(`${BUILDER}/${leadId}`);
   renderScreen(<Page />);
   await screen.findByRole("heading", {
     level: 1,
-    name: `Proposal for ${name}`,
+    name: `Proposal for ${nameOf(leadId)}`,
   });
   return leadId;
 }
@@ -121,23 +132,20 @@ test("with no lead in the address, the picker lists each lead with its stage and
   const rows = within(
     await screen.findByRole("region", { name: "Leads" }),
   ).getAllByRole("link");
-  expect(rows).toHaveLength((await listProposalLeads()).length);
-
-  const kwame = rows.find((row) => row.textContent?.includes("Kwame Asante"));
-  expect(kwame?.textContent).toBe(
-    "Kwame AsanteAsante SolarQualifiedProposal: Draft",
+  expect(rows.map((row) => row.textContent)).toEqual([
+    "Stand-in 3Company 3QualifiedProposal: Not started",
+    "Stand-in 1Company 1Proposal SentProposal: Sent",
+    "Stand-in 4Company 4QualifiedProposal: Draft",
+    "Stand-in 5Company 5Lead WonProposal: Signed",
+  ]);
+  expect(rows[2].getAttribute("href")).toBe(`${BUILDER}/${draft}`);
+  // Left the pipeline, or not qualified yet: not offered.
+  expect(rows.some((row) => row.textContent?.includes(nameOf(lost)))).toBe(
+    false,
   );
-  expect(kwame?.getAttribute("href")).toBe(
-    `${BUILDER}/${await leadIdOf("Kwame Asante")}`,
+  expect(rows.some((row) => row.textContent?.includes(nameOf(early)))).toBe(
+    false,
   );
-  const text = rows.map((row) => row.textContent);
-  expect(text).toContain(
-    "Beatrix OlanderOlander ChiropracticQualifiedProposal: Not started",
-  );
-  expect(text).toContain(
-    "Jonas WhitlockWhitlock ElectricalLead WonProposal: Signed",
-  );
-  expect(text.some((row) => row?.includes("Sofia Lindgren"))).toBe(false);
   expect(document.body.textContent).not.toMatch(FORBIDDEN);
 });
 
@@ -147,12 +155,9 @@ test("a rep sees only their own leads in the picker", async () => {
   const rows = within(
     await screen.findByRole("region", { name: "Leads" }),
   ).getAllByRole("link");
-  expect(rows.map((row) => row.textContent?.split("Qualified")[0])).toContain(
-    "Liesel HartmannHartmann Kitchens",
-  );
-  expect(rows.some((row) => row.textContent?.includes("Kwame Asante"))).toBe(
-    false,
-  );
+  expect(rows.map((row) => row.getAttribute("href"))).toEqual([
+    `${BUILDER}/${sent}`,
+  ]);
 });
 
 test("the picker shows a skeleton while loading, an error with Try again, and an empty state when no lead is ready", async () => {
@@ -166,9 +171,9 @@ test("the picker shows a skeleton while loading, an error with Try again, and an
   fireEvent.click(button("Try again"));
   await screen.findByRole("region", { name: "Leads" });
 
-  // Every lead that could have a proposal leaves the pipeline.
+  // Real leads today: all New, so none is ready.
   cleanup();
-  for (const lead of await listProposalLeads()) await markLost(lead.id, {});
+  resetStandIns();
   renderScreen(<Page />);
   await screen.findByText("No lead is ready for a proposal");
   expect(
@@ -180,35 +185,30 @@ test("the picker shows a skeleton while loading, an error with Try again, and an
 
 // --- not started ----------------------------------------------------------------
 
-test("a qualified lead with no proposal shows its details and one main action, Generate proposal, which starts a draft", async () => {
-  const leadId = await open("Beatrix Olander");
+test("a qualified lead with no proposal shows its details and one main action, Generate proposal, refused until proposals have their own table", async () => {
+  await open(qualified);
   expect(chips()).toEqual(["Proposal: Not started", "Stage: Qualified"]);
-  expect(panel("Client").getByText("Olander Chiropractic")).toBeDefined();
+  expect(panel("Client").getByText("Company 3")).toBeDefined();
   expect(
-    screen.getByRole("link", { name: "Beatrix Olander" }).getAttribute("href"),
-  ).toBe(`/leads/${leadId}`);
+    screen.getByRole("link", { name: "Stand-in 3" }).getAttribute("href"),
+  ).toBe(`/leads/${qualified}`);
   expect(hint()).toContain("Sample data:");
   expect(button("Generate proposal").className).toContain("bg-primary");
   expect(screen.queryByRole("textbox")).toBeNull();
 
+  // The lead's record cannot take a draft yet, so nothing is started.
   fireEvent.click(button("Generate proposal"));
-  await screen.findByLabelText("Name");
-  expect(chips()[0]).toBe("Proposal: Draft");
-  expect(field("Name").value).toBe("Beatrix Olander");
-  expect(field("Company").value).toBe("Olander Chiropractic");
-  expect(field("Email").value).toMatch(/^beatrix@.+\.example$/);
-  expect(field("Service, line 1").value).toBe("Local SEO");
-  expect(field("Price (USD), line 1").value).toBe("1500");
-  expect(panel("Services").getByText("$7,900")).toBeDefined();
-  await screen.findByText("Draft ready");
-
-  expect((await getProposal(leadId)).proposal?.status).toBe("draft");
-  expect((await getLead(leadId)).proposal).toEqual({ status: "draft" });
+  await screen.findByText(/This proposal had changed elsewhere/);
+  expect(writes()).toEqual([`POST /api/proposals/${qualified}/generate`]);
+  expect(chips()[0]).toBe("Proposal: Not started");
+  expect(screen.queryByRole("textbox")).toBeNull();
+  expect((await getProposal(qualified)).proposal).toBeNull();
+  expect((await getLead(qualified)).proposal).toBeNull();
   expect(document.body.textContent).not.toMatch(FORBIDDEN);
 });
 
 test("a lead that cannot have a proposal yet says why and links back to the lead", async () => {
-  const early = await open("Sofia Lindgren");
+  await open(early);
   expect(
     screen.getByText("This lead cannot have a proposal yet"),
   ).toBeDefined();
@@ -221,7 +221,8 @@ test("a lead that cannot have a proposal yet says why and links back to the lead
   noButton("Generate proposal");
 
   cleanup();
-  await open("Cordelia Vance");
+  standIns.patch.set(early, { exit: "lost" });
+  await open(early);
   expect(
     screen.getByText(/This lead left the pipeline: Lead Lost\./),
   ).toBeDefined();
@@ -231,16 +232,16 @@ test("a lead that cannot have a proposal yet says why and links back to the lead
 // --- the draft ------------------------------------------------------------------
 
 test("a draft is edited in place: client details, services from the catalogue or custom, prices, a running total and a live preview", async () => {
-  const leadId = await open("Kwame Asante");
-  expect(field("Name").value).toBe("Kwame Asante");
-  expect(field("Email").value).toBe("kwame@asantesolar.example");
+  await open(draft);
+  expect(field("Name").value).toBe("Stand-in 4");
+  expect(field("Email").value).toBe(`${draft}@client.example`);
   expect(previewed()).toEqual([
     "Service | Price",
     "Paid search managementSearch ad campaigns set up and managed. Ad spend is separate. | $1,200",
     "Analytics and reportingCall and form tracking with a monthly report. | $400",
     "Total | $1,600",
   ]);
-  expect(panel("Preview").getByText("Proposal for Asante Solar")).toBeDefined();
+  expect(panel("Preview").getByText("Proposal for Company 4")).toBeDefined();
   // Saved, and sendable: the hint says what is next.
   expect(hint()).toBe("Saved. Review it, then send it to the lead.");
   expect(button("Save draft").disabled).toBe(true);
@@ -276,26 +277,26 @@ test("a draft is edited in place: client details, services from the catalogue or
   expect(field("Service, line 2").value).toBe("Reputation management");
   expect(panel("Services").getByText("$3,050.50")).toBeDefined();
 
-  type("Company", "  Asante Solar Ltd ");
+  type("Company", "  Company 4 Ltd ");
   type("A note to the lead", "As we discussed.");
   expect(panel("Preview").getByText("As we discussed.")).toBeDefined();
   expect(
-    panel("Preview").getByText("Proposal for Asante Solar Ltd"),
+    panel("Preview").getByText("Proposal for Company 4 Ltd"),
   ).toBeDefined();
 
   fireEvent.click(button("Save draft"));
   await screen.findByText("Draft saved");
   // What was stored is what the form now shows, trimmed.
-  expect(field("Company").value).toBe("Asante Solar Ltd");
+  expect(field("Company").value).toBe("Company 4 Ltd");
   expect(button("Save draft").disabled).toBe(true);
   expect(button("Review and send").disabled).toBe(false);
 
-  const stored = (await getProposal(leadId)).proposal;
+  const stored = (await getProposal(draft)).proposal;
   expect(stored).toMatchObject({
     status: "draft",
     total: 3050.5,
     context: "As we discussed.",
-    client: { company: "Asante Solar Ltd" },
+    client: { company: "Company 4 Ltd" },
     lineItems: [
       { service: "Paid search management", price: 1350.5 },
       { service: "Reputation management", price: 800 },
@@ -307,14 +308,14 @@ test("a draft is edited in place: client details, services from the catalogue or
     ],
   });
   // Saving a draft does not move the lead.
-  expect((await getLead(leadId)).stage).toBe("qualified");
+  expect((await getLead(draft)).stage).toBe("qualified");
   expect(document.body.textContent).not.toMatch(FORBIDDEN);
 });
 
 test("fields that are wrong say so beside themselves, nothing is saved, and correcting one withdraws its error", async () => {
-  await open("Kwame Asante");
+  await open(draft);
   type("Name", "  ");
-  type("Email", "kwame-at-asante");
+  type("Email", "stand-in-at-client");
   type("Service, line 2", "");
   type("Price (USD), line 1", "about a thousand");
 
@@ -335,7 +336,7 @@ test("fields that are wrong say so beside themselves, nothing is saved, and corr
   expect(document.activeElement).toBe(field("Name"));
   expect(writes()).toEqual([]);
 
-  type("Name", "Kwame Asante");
+  type("Name", "Stand-in 4");
   expect(screen.queryByText("Enter the client's name.")).toBeNull();
   expect(field("Name").getAttribute("aria-invalid")).toBeNull();
   expect(screen.getByText("Enter a price in dollars.")).toBeDefined();
@@ -346,7 +347,7 @@ test("fields that are wrong say so beside themselves, nothing is saved, and corr
 });
 
 test("a draft with no priced service, or no email, cannot be sent, and the hint says what is missing", async () => {
-  await open("Kwame Asante");
+  await open(draft);
   fireEvent.click(button("Remove Paid search management"));
   fireEvent.click(button("Remove Analytics and reporting"));
   expect(
@@ -367,149 +368,110 @@ test("a draft with no priced service, or no email, cannot be sent, and the hint 
   expect(button("Review and send").disabled).toBe(true);
 });
 
-// --- review, send, viewed, signed -----------------------------------------------------
+// --- review and send ----------------------------------------------------------------
 
-test("review and send names the recipient, the line count and the total; then the lead views and signs, reaches Lead Won, and the invoice draft is on Lead detail", async () => {
-  const leadId = await open("Kwame Asante");
+test("review and send names the recipient, the line count and the total; sending is refused until proposals have their own table, and the draft stays", async () => {
+  await open(draft);
 
   // Review: Cancel changes nothing.
   fireEvent.click(button("Review and send"));
   const review = within(
     screen.getByRole("alertdialog", {
-      name: "Send this proposal to Kwame Asante?",
+      name: "Send this proposal to Stand-in 4?",
     }),
   );
   expect(review.getByText(/It goes to/).textContent?.replace(/\s+/g, " ")).toBe(
-    "It goes to kwame@asantesolar.example with 2 services, $1,600 in total. Once sent it cannot be edited, and the lead moves to Proposal Sent. Sample data: nothing is sent.",
+    `It goes to ${draft}@client.example with 2 services, $1,600 in total. Once sent it cannot be edited, and the lead moves to Proposal Sent. Sample data: nothing is sent.`,
   );
   fireEvent.click(review.getByRole("button", { name: "Cancel" }));
   await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
   expect(writes()).toEqual([]);
-  expect((await getProposal(leadId)).proposal?.status).toBe("draft");
 
-  // Confirm: sent, and read-only from here on.
+  // Confirm: the lead's record cannot move to Proposal Sent yet.
   fireEvent.click(button("Review and send"));
   fireEvent.click(
     within(screen.getByRole("alertdialog")).getByRole("button", {
       name: "Send proposal",
     }),
   );
+  await screen.findByText(/This proposal had changed elsewhere/);
+  expect(writes()).toEqual([`POST /api/proposals/${draft}/send`]);
   await waitFor(() =>
-    expect(chips()).toEqual(["Proposal: Sent", "Stage: Proposal Sent"]),
+    expect(chips()).toEqual(["Proposal: Draft", "Stage: Qualified"]),
   );
-  await screen.findByText("Proposal sent: Kwame Asante");
-  expect(screen.queryByRole("textbox")).toBeNull();
-  noButton("Save draft");
-  noButton("Review and send");
+  expect((await getProposal(draft)).proposal?.status).toBe("draft");
+  expect((await getLead(draft)).stage).toBe("qualified");
+});
+
+test("a sent proposal is read-only and waits for the lead; once the data is real nothing can be simulated", async () => {
+  await open(sent);
+  await viewerKnown();
+  expect(chips()).toEqual(["Proposal: Sent", "Stage: Proposal Sent"]);
   expect(
     panel("Status").getByText(/Waiting for the lead to view and sign it\./),
   ).toBeDefined();
   expect(panel("Status").getByText(/^Sent to/).textContent).toContain(
-    "kwame@asantesolar.example",
+    `${sent}@client.example`,
   );
-  expect(previewed().at(-1)).toBe("Total | $1,600");
-  expect((await getLead(leadId)).stage).toBe("proposal_sent");
-
-  // What stands in for the proposal service reporting back.
-  const simulate = panel("Simulate what the lead does");
-  expect(
-    simulate.getByText(
-      "Sample data: this stands in for the proposal service reporting back.",
-    ),
-  ).toBeDefined();
-  fireEvent.click(simulate.getByRole("button", { name: "Lead viewed it" }));
-  await waitFor(() => expect(chips()[0]).toBe("Proposal: Viewed"));
-  expect(
-    panel("Status").getByText(/The lead has opened the proposal\./),
-  ).toBeDefined();
+  expect(screen.queryByRole("textbox")).toBeNull();
+  noButton("Save draft");
+  noButton("Review and send");
+  // The viewer is not on sample data, so the simulator is not offered.
+  expect(screen.queryByRole("heading", { name: /^Simulate/ })).toBeNull();
   noButton("Lead viewed it");
+  noButton("Lead signed it");
+});
 
-  fireEvent.click(button("Lead signed it"));
-  await waitFor(() =>
-    expect(chips()).toEqual(["Proposal: Signed", "Stage: Lead Won"]),
-  );
+test("a signed proposal shows the lead as Lead Won with its invoice draft on Lead detail", async () => {
+  await open(won);
+  expect(chips()).toEqual(["Proposal: Signed", "Stage: Lead Won"]);
   expect(panel("Status").getByText(/is now Lead Won/).textContent).toContain(
-    "Kwame Asante is now Lead Won",
+    "Stand-in 5 is now Lead Won",
   );
   expect(
     screen
       .getByRole("link", { name: "Open invoice draft" })
       .getAttribute("href"),
-  ).toBe(`/leads/${leadId}#invoice`);
-  expect(screen.queryByRole("heading", { name: /^Simulate/ })).toBeNull();
-  noButton("Lead signed it");
+  ).toBe(`/leads/${won}#invoice`);
+  expect(screen.queryByRole("textbox")).toBeNull();
   expect(document.body.textContent).not.toMatch(FORBIDDEN);
-
-  expect(await getLead(leadId)).toMatchObject({
-    stage: "won",
-    proposal: { status: "signed" },
-    invoice: { status: "draft" },
-  });
-  const snapshot = (await getProposal(leadId)).proposal?.snapshot;
-  expect((await getInvoice(leadId))?.lines).toEqual(
-    snapshot?.map((item) => ({
-      description: item.service,
-      amount: item.price,
-    })),
-  );
-
-  // Lead detail now shows the won lead and its invoice draft.
-  cleanup();
-  renderScreen(<LeadScreen leadId={leadId} />);
-  await screen.findByRole("heading", { level: 1, name: "Kwame Asante" });
-  expect(
-    screen
-      .getByRole("link", { name: "Check invoice draft" })
-      .getAttribute("href"),
-  ).toBe(`/leads/${leadId}#invoice`);
-  const invoice = panel("Invoice");
-  await invoice.findByText("Draft");
-  expect(
-    within(invoice.getByRole("list", { name: "Invoice lines" }))
-      .getAllByRole("listitem")
-      .map((line) => line.textContent),
-  ).toEqual(["Paid search management$1,200", "Analytics and reporting$400"]);
-  expect(invoice.getByText("$1,600")).toBeDefined();
-  expect(panel("Activity").getByText("Invoice drafted")).toBeDefined();
 });
 
 test("while a write is in progress its button shows it, the others cannot be pressed, and a second press does nothing", async () => {
-  await open("Anneliese Brandt");
-  const release = api.hold("POST", /\/simulate$/);
+  await open(draft);
+  type("A note to the lead", "One more thought.");
+  const release = api.hold("PUT", /^\/api\/proposals\//);
 
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Lead signed it" }),
-  );
+  fireEvent.click(button("Save draft"));
   await waitFor(() =>
-    expect(button(/Lead signed it$/).getAttribute("aria-busy")).toBe("true"),
+    expect(button(/Save draft$/).getAttribute("aria-busy")).toBe("true"),
   );
-  expect(button("Lead viewed it").disabled).toBe(true);
-  fireEvent.click(button(/Lead signed it$/));
+  expect(button("Review and send").disabled).toBe(true);
+  fireEvent.click(button(/Save draft$/));
 
   release();
-  await waitFor(() => expect(chips()[0]).toBe("Proposal: Signed"));
+  await screen.findByText("Draft saved");
   expect(writes()).toHaveLength(1);
 });
 
-test("a proposal that changed elsewhere refuses the save, says so, and shows the proposal as it now is", async () => {
-  const leadId = await open("Kwame Asante");
-  // Someone else sends it while this page is open.
-  await sendProposal(leadId);
+test("a lead that changed elsewhere refuses the save, says so, and shows the proposal as it now is", async () => {
+  await open(draft);
+  // Someone else marks the lead lost while this page is open.
+  standIns.patch.set(draft, { ...standIns.patch.get(draft), exit: "lost" });
 
   type("A note to the lead", "One more thought.");
   fireEvent.click(button("Save draft"));
 
   await screen.findByText(/This proposal had changed elsewhere/);
-  await waitFor(() => expect(chips()[0]).toBe("Proposal: Sent"));
-  expect(screen.queryByRole("textbox")).toBeNull();
+  await waitFor(() => expect(screen.queryByRole("textbox")).toBeNull());
   noButton("Save draft");
-  expect((await getProposal(leadId)).proposal?.context).not.toBe(
+  expect((await getProposal(draft)).proposal?.context).not.toBe(
     "One more thought.",
   );
 });
 
 test("when a save fails nothing is lost, a message says so and Try again repeats it", async () => {
-  const leadId = await open("Kwame Asante");
+  await open(draft);
   api.fail("PUT", /^\/api\/proposals\//);
 
   type("A note to the lead", "Kept while it failed.");
@@ -518,7 +480,7 @@ test("when a save fails nothing is lost, a message says so and Try again repeats
     "That did not go through. The proposal is unchanged.",
   );
   expect(field("A note to the lead").value).toBe("Kept while it failed.");
-  expect((await getProposal(leadId)).proposal?.context).not.toBe(
+  expect((await getProposal(draft)).proposal?.context).not.toBe(
     "Kept while it failed.",
   );
 
@@ -526,13 +488,13 @@ test("when a save fails nothing is lost, a message says so and Try again repeats
   fireEvent.click(button("Try again"));
   await screen.findByText("Draft saved");
   expect(screen.queryByText(/did not go through/)).toBeNull();
-  expect((await getProposal(leadId)).proposal?.context).toBe(
+  expect((await getProposal(draft)).proposal?.context).toBe(
     "Kept while it failed.",
   );
 });
 
 test("a lost proposal, and a proposal whose lead left the pipeline, are read-only and offer nothing to simulate", async () => {
-  await open("Seraphina Duarte");
+  await open(lost);
   expect(chips()[0]).toBe("Proposal: Lost");
   expect(
     panel("Status").getByText(/This lead left the pipeline: Lead Lost\./),
@@ -544,9 +506,8 @@ test("a lost proposal, and a proposal whose lead left the pipeline, are read-onl
   expect(previewed().length).toBeGreaterThan(2);
 
   cleanup();
-  const leadId = await leadIdOf("Viktor Novak");
-  await markLost(leadId, {});
-  await open("Viktor Novak");
+  standIns.patch.set(draft, { ...standIns.patch.get(draft), exit: "lost" });
+  await open(draft);
   await viewerKnown();
   expect(chips()[0]).toBe("Proposal: Draft");
   expect(screen.queryByRole("textbox")).toBeNull();
@@ -571,17 +532,15 @@ test("an unknown lead, and another rep's lead for a rep, show not found", async 
   expect(fetch).not.toHaveBeenCalled();
 
   cleanup();
-  const kwame = await leadIdOf("Kwame Asante");
   viewAs("rep");
-  resetNavigation(`${BUILDER}/${kwame}`);
+  resetNavigation(`${BUILDER}/${draft}`);
   renderScreen(<Page />);
   await screen.findByText("This lead does not exist");
 });
 
 test("loading shows a skeleton; a failed load shows the error state with Try again", async () => {
-  const leadId = await leadIdOf("Kwame Asante");
-  api.fail("GET", /^\/api\/proposals\/lead-/);
-  resetNavigation(`${BUILDER}/${leadId}`);
+  api.fail("GET", /^\/api\/proposals\/stand-in-/);
+  resetNavigation(`${BUILDER}/${draft}`);
   renderScreen(<Page />);
 
   expect(
@@ -594,6 +553,6 @@ test("loading shows a skeleton; a failed load shows the error state with Try aga
   fireEvent.click(button("Try again"));
   await screen.findByRole("heading", {
     level: 1,
-    name: "Proposal for Kwame Asante",
+    name: "Proposal for Stand-in 4",
   });
 });

@@ -2,7 +2,7 @@
  * Drives the "Sample data" label and the sample-only proposal simulator. False once the
  * data-access function bodies query the database (ADR-0006).
  */
-export const SAMPLE_DATA = true;
+export const SAMPLE_DATA = false;
 
 // ponytail: one in-memory copy per server instance, on globalThis so Route
 // Handlers and Server Components (separate bundles) share it. Not durable and

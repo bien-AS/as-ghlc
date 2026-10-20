@@ -86,7 +86,7 @@ export const proposalViewSchema = z.object({
   lead: z.object({
     id: z.string(),
     name: z.string(),
-    stage: stageSchema,
+    stage: stageSchema.nullable(),
     exit: exitSchema.nullable(),
   }),
   /** The lead's own details, which a new proposal starts from. */

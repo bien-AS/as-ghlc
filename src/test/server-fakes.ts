@@ -3,7 +3,6 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import { vi } from "vitest";
 
 import type { CurrentUser } from "@/lib/auth/schemas";
-import { SAMPLE_REPS } from "@/lib/data/fixtures/leads";
 import type { Role } from "@/lib/roles";
 
 /*
@@ -57,9 +56,9 @@ export function signIn(claims: Record<string, unknown> = {}) {
   };
 }
 
-/** The rep the role tests sign in as: the first sample rep, who owns sample leads. */
+/** The rep the role tests sign in as. */
 export const SAMPLE_REP = {
-  id: SAMPLE_REPS[0].id,
+  id: "00000000-0000-4000-8000-0000000000a1",
   email: "maya@authoritysolutions.com",
   firstName: "Maya",
   lastName: "Okafor",

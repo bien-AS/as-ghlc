@@ -1,67 +1,109 @@
 "use client";
 
-import { SearchIcon, SlidersHorizontalIcon } from "lucide-react";
+import {
+  type Column,
+  DataTable,
+  useDebouncedValue,
+} from "@vantage/design-system";
+import { ArchiveIcon, ShieldQuestionIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useId, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { ListRow, ListRowName } from "@/components/ui/list-row";
 import { LocalTime } from "@/components/ui/local-time";
 import {
   NativeSelect,
   NativeSelectOption,
 } from "@/components/ui/native-select";
 import { PageHeader } from "@/components/ui/page-header";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Spinner } from "@/components/ui/spinner";
 import { EmptyState, ErrorState } from "@/components/ui/state-panel";
-import { StatusLine } from "@/components/ui/status-line";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useLeads, usePipelineSummary } from "@/hooks/use-leads";
+import { SyncIndicator, WritePreview } from "@/components/ui/sync-seam";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "@/components/ui/toast";
+import {
+  useArchiveLead,
+  useLeads,
+  usePipelineSummary,
+  useStatusDefs,
+} from "@/hooks/use-leads";
 import { rememberPipelineSearch } from "@/hooks/use-pipeline-href";
 import { useTimeZone } from "@/hooks/use-time-zone";
+import { useCan } from "@/hooks/use-viewer";
+import { isLive } from "@/lib/flags";
 import {
+  ACTION_LABEL,
   BOOKING_KIND_LABEL,
   EXIT_LABEL,
+  nextStep,
   STAGE_LABEL,
-  STATUS_META,
-  tabLabel,
+  statusMeta,
   VERDICT_META,
 } from "@/lib/leads/rules";
 import {
   EXITS,
   type LeadListItem,
-  type Need,
   type PipelineSummary,
-  type PipelineTab,
   parseLeadFilters,
   STAGES,
+  UNASSIGNED,
   VERDICTS,
 } from "@/lib/leads/schemas";
-import { cn } from "@/lib/utils";
 
 import { leadHref, REVIEW_QUEUE_HREF } from "../navigation";
 
-const NEED_LABEL: Record<Need, string> = {
-  suspects: "Suspects to review",
-  calls_today: "Calls today",
-  proposals: "Proposals to send",
-  invoices: "Invoice drafts",
-};
+const SYNC_LOG_HREF = "/admin/sync-log";
+const DAY = 86_400_000;
 
-/** The column template shared by the heading row and every lead row, from the `nav` breakpoint up. */
-const COLUMNS =
-  "nav:grid nav:grid-cols-[minmax(0,1.4fr)_minmax(0,1.5fr)_8.5rem_minmax(0,1.1fr)_minmax(0,0.9fr)] nav:items-center nav:gap-4";
+/** Days since GHL's last activity on the lead; null when it never synced (not measured, never 0). */
+export const ageInDays = (lead: Pick<LeadListItem, "lastActivityAt">) =>
+  lead.lastActivityAt === null
+    ? null
+    : Math.max(
+        0,
+        Math.floor(
+          (Date.now() - new Date(lead.lastActivityAt).getTime()) / DAY,
+        ),
+      );
 
-const SEARCH_DELAY = 300;
+const ageLabel = (days: number | null) =>
+  days === null
+    ? "Not measured"
+    : days === 0
+      ? "Today"
+      : `${days} ${days === 1 ? "day" : "days"}`;
+
+/** The address filters: the bar's, and `q`, the search (the navbar's lead search lands here too). */
+const FILTER_KEYS = [
+  "tab",
+  "verdict",
+  "group",
+  "owner",
+  "archived",
+  "q",
+] as const;
+
+/** The orders the API sorts by, as "sort:dir". The first is the API's default. */
+const SORTS = [
+  ["recent:desc", "Recently updated"],
+  ["age:asc", "Age, youngest first"],
+  ["age:desc", "Age, oldest first"],
+  ["next_booking:asc", "Next booking, soonest first"],
+  ["next_booking:desc", "Next booking, latest first"],
+] as const;
 
 /**
- * The Pipeline (spec 05): what needs the rep, the stages with their counts and
- * the lead list. The page address holds every filter; controls read from it
- * and write to it, so a view can be reloaded, shared and returned to.
+ * The lead list (spec 07, registry `lead-list`). The address holds the
+ * search, the filters (stage, verdict, Lead Status group, rep for admins,
+ * archived) and the order, so a view can be reloaded and shared, and the
+ * server searches and sorts every lead, not just the loaded pages: a change
+ * starts again from page 1. Density and columns are the kit's DataTable's own.
+ * A rep's list is only their leads: the server scopes it, and the rep column
+ * and filter are left out.
  */
 export function PipelineScreen() {
   const router = useRouter();
@@ -73,348 +115,288 @@ export function PipelineScreen() {
   );
   const leads = useLeads(filters);
   const summary = usePipelineSummary();
+  const groups = [
+    ...new Set((useStatusDefs().data ?? []).map((status) => status.group)),
+  ];
+  const isAdmin = useCan("see_all_leads");
 
   const search = searchParams.toString();
   useEffect(() => rememberPipelineSearch(search), [search]);
 
   /** Writes filters to the address. An empty value removes the filter. */
-  const setFilters = (
-    changes: Record<string, string | undefined>,
-    { replace = false } = {},
-  ) => {
+  const setFilters = (changes: Record<string, string | undefined>) => {
     const next = new URLSearchParams(searchParams);
     for (const [key, value] of Object.entries(changes)) {
       if (value) next.set(key, value);
       else next.delete(key);
     }
     const query = next.toString();
-    const href = query ? `${pathname}?${query}` : pathname;
-    if (replace) router.replace(href, { scroll: false });
-    else router.push(href, { scroll: false });
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
   };
-
-  const filtered = Boolean(
-    filters.q || filters.verdict || filters.owner || filters.needs,
-  );
+  const filtered =
+    filters.tab !== "open" ||
+    Boolean(filters.verdict || filters.group || filters.owner || filters.q) ||
+    filters.archived === "true";
   const clearFilters = () =>
-    setFilters({
-      q: undefined,
-      verdict: undefined,
-      owner: undefined,
-      needs: undefined,
-    });
+    setFilters(Object.fromEntries(FILTER_KEYS.map((key) => [key, undefined])));
+
+  const suspects = summary.data?.needs.suspects ?? 0;
 
   return (
     <>
-      <PageHeader title="Pipeline" />
-
-      <NeedsStrip
-        summary={summary.data}
-        selected={filters.needs}
-        onSelect={(need) =>
-          // A "needs you" view is taken across every open stage.
-          setFilters({
-            needs: filters.needs === need ? undefined : need,
-            tab: undefined,
-          })
+      <PageHeader
+        title="Leads"
+        description={
+          isAdmin
+            ? "Every lead, with its verdict, stage and last write to the CRM."
+            : "Your leads, with their verdict, stage and last write to the CRM."
         }
       />
 
-      {summary.isError && (
-        <p role="alert" className="flex flex-wrap items-center gap-2">
-          The counts could not be loaded.
-          <Button
-            size="sm"
-            loading={summary.isFetching}
-            onClick={() => summary.refetch()}
-          >
-            Try again
-          </Button>
-        </p>
+      {suspects > 0 && isLive("suspect-review-queue") && (
+        <Link
+          href={REVIEW_QUEUE_HREF}
+          className="flex items-center gap-2 self-start rounded-md bg-amber-soft px-3 py-2 text-small font-semibold text-amber-ink transition-[scale] duration-150 ease-out outline-none focus-visible:shadow-focus active:scale-[0.98]"
+        >
+          <ShieldQuestionIcon aria-hidden="true" className="size-4" />
+          {suspects} {suspects === 1 ? "suspect is" : "suspects are"} waiting
+          for review
+        </Link>
       )}
 
-      <Tabs
-        value={filters.tab}
-        onValueChange={(tab) =>
-          setFilters({ tab: tab === "open" ? undefined : String(tab) })
-        }
-        className="gap-4"
-      >
-        <StageTabs summary={summary.data} />
+      <Filters
+        filters={filters}
+        summary={summary.data}
+        groups={groups}
+        isAdmin={isAdmin}
+        onChange={setFilters}
+      />
 
-        <TabsContent value={filters.tab} className="flex flex-col gap-3">
-          <Filters
-            q={filters.q ?? ""}
-            verdict={filters.verdict ?? ""}
-            owner={filters.owner ?? ""}
-            owners={summary.data?.owners ?? []}
-            onSearch={(q) => setFilters({ q }, { replace: true })}
-            onChange={setFilters}
-          />
-          <LeadList
-            leads={leads}
-            tab={filters.tab}
-            filtered={filtered}
-            describeFilters={() =>
-              [
-                filters.q && `“${filters.q}”`,
-                filters.verdict &&
-                  `verdict ${VERDICT_META[filters.verdict].label}`,
-                filters.owner &&
-                  `rep ${summary.data?.owners.find((owner) => owner.id === filters.owner)?.name ?? "selected"}`,
-                filters.needs && NEED_LABEL[filters.needs].toLowerCase(),
-              ]
-                .filter(Boolean)
-                .join(", ")
-            }
-            pipelineEmpty={
-              summary.data !== undefined &&
-              summary.data.open +
-                EXITS.reduce(
-                  (sum, exit) => sum + summary.data.exits[exit],
-                  0,
-                ) ===
-                0
-            }
-            onClear={clearFilters}
-          />
-        </TabsContent>
-      </Tabs>
+      <LeadTable
+        leads={leads}
+        isAdmin={isAdmin}
+        filtered={filtered}
+        archived={filters.archived === "true"}
+        onClear={clearFilters}
+        onOpen={(lead) => router.push(leadHref(lead.id))}
+      />
     </>
   );
 }
 
-function NeedsStrip({
-  summary,
-  selected,
-  onSelect,
-}: {
-  summary: PipelineSummary | undefined;
-  selected: Need | undefined;
-  onSelect: (need: Need) => void;
-}) {
-  const tile =
-    "flex min-h-14 flex-col items-start justify-center gap-0.5 rounded-control border border-border bg-card px-3 py-2 text-left outline-none transition-[background-color,border-color,scale] duration-150 ease-out hover:bg-secondary focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.98] aria-disabled:pointer-events-none aria-disabled:opacity-40 aria-pressed:border-foreground aria-pressed:bg-secondary disabled:pointer-events-none disabled:opacity-40";
-
-  return (
-    <section aria-labelledby="needs-you" className="flex flex-col gap-2">
-      <h2 id="needs-you" className="label-caps">
-        Needs you
-      </h2>
-      <div className="grid grid-cols-2 gap-2 wide:grid-cols-4">
-        {(Object.keys(NEED_LABEL) as Need[]).map((need) => {
-          const count = summary?.needs[need];
-          const body = (
-            <>
-              <span className="font-mono text-xl leading-none font-bold tabular-nums">
-                {count ?? (
-                  // No number rather than a zero when the counts are unavailable.
-                  <>
-                    <span aria-hidden="true">–</span>
-                    <span className="sr-only">unavailable</span>
-                  </>
-                )}
-              </span>
-              <span className="text-muted-foreground">{NEED_LABEL[need]}</span>
-            </>
-          );
-          // Suspects open their own screen instead of filtering the list.
-          return need === "suspects" && count ? (
-            <Link key={need} href={REVIEW_QUEUE_HREF} className={tile}>
-              {body}
-            </Link>
-          ) : (
-            <button
-              key={need}
-              type="button"
-              // Zero is shown as zero and its button is inactive.
-              disabled={!count}
-              aria-pressed={need === "suspects" ? undefined : selected === need}
-              onClick={() => onSelect(need)}
-              className={tile}
-            >
-              {body}
-            </button>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function StageTabs({ summary }: { summary: PipelineSummary | undefined }) {
-  const tab = (value: PipelineTab, count: number | undefined) => (
-    <TabsTrigger key={value} value={value} className="flex-none px-2">
-      {tabLabel(value)}
-      {count !== undefined && (
-        <span className="font-normal text-muted-foreground tabular-nums">
-          {count}
-        </span>
-      )}
-    </TabsTrigger>
-  );
-  return (
-    // Scrolls sideways on narrow screens; the page itself never does.
-    <div className="-mx-4 overflow-x-auto px-4 pb-1.5 nav:-mx-6 nav:px-6">
-      <TabsList variant="line" aria-label="Stages and exits" className="h-8">
-        {tab("open", summary?.open)}
-        {STAGES.map((stage) => tab(stage, summary?.stages[stage]))}
-        {/* The three exits, set apart from the stages. */}
-        <span aria-hidden="true" className="mx-2 h-4 w-px shrink-0 bg-border" />
-        {EXITS.map((exit) => tab(exit, summary?.exits[exit]))}
-      </TabsList>
-    </div>
-  );
-}
-
 function Filters({
-  q,
-  verdict,
-  owner,
-  owners,
-  onSearch,
+  filters,
+  summary,
+  groups,
+  isAdmin,
   onChange,
 }: {
-  q: string;
-  verdict: string;
-  owner: string;
-  owners: PipelineSummary["owners"];
-  onSearch: (q: string) => void;
+  filters: ReturnType<typeof parseLeadFilters>;
+  summary: PipelineSummary | undefined;
+  groups: string[];
+  isAdmin: boolean;
   onChange: (changes: Record<string, string | undefined>) => void;
 }) {
-  // What is being typed. The address stays the source of truth: when it
-  // changes from outside (Back, Clear filters, the navbar search), the field
-  // follows it.
-  const [draft, setDraft] = useState(q);
-  const [seen, setSeen] = useState(q);
-  if (q !== seen) {
-    setSeen(q);
-    setDraft(q);
-  }
-  // Below the `nav` breakpoint the two selects sit behind this control.
-  const [open, setOpen] = useState(false);
-
-  const latest = useRef(onSearch);
-  latest.current = onSearch;
-  useEffect(() => {
-    const text = draft.trim();
-    if (text === q) return;
-    const timer = setTimeout(() => latest.current(text), SEARCH_DELAY);
-    return () => clearTimeout(timer);
-  }, [draft, q]);
-
-  const active = Number(Boolean(verdict)) + Number(Boolean(owner));
+  const ids = {
+    search: useId(),
+    stage: useId(),
+    verdict: useId(),
+    group: useId(),
+    owner: useId(),
+    archived: useId(),
+    sort: useId(),
+  };
+  const count = (n: number | undefined) => (n === undefined ? "" : ` (${n})`);
+  // Two to a row on a phone, so the list starts on the first screen.
+  const field = "min-w-0 nav:w-[200px]";
+  const sort = `${filters.sort ?? "recent"}:${filters.dir ?? "desc"}`;
 
   return (
-    <div className="flex flex-col gap-2 nav:flex-row nav:items-center">
-      <div className="flex flex-1 items-center gap-2">
-        <div className="relative flex-1 nav:max-w-xs">
-          <SearchIcon
-            aria-hidden="true"
-            className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-          />
-          <Input
-            type="search"
-            aria-label="Search by name, company or email"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder="Name, company or email"
-            autoComplete="off"
-            className="pl-8"
-          />
-        </div>
-        <Button
-          aria-expanded={open}
-          aria-controls="pipeline-filters"
-          onClick={() => setOpen(!open)}
-          className="nav:hidden"
-        >
-          <SlidersHorizontalIcon aria-hidden="true" data-icon="inline-start" />
-          Filters{active > 0 && ` (${active})`}
-        </Button>
-      </div>
-      <div
-        id="pipeline-filters"
-        className={cn("gap-2 nav:flex", open ? "flex" : "hidden")}
-      >
+    <search
+      aria-label="Filter leads"
+      className="grid grid-cols-2 items-end gap-3 nav:flex nav:flex-wrap"
+    >
+      <Field className="col-span-2 min-w-0 nav:w-[240px]">
+        <FieldLabel htmlFor={ids.search}>Search</FieldLabel>
+        <SearchBox
+          id={ids.search}
+          q={filters.q ?? ""}
+          onSearch={(q) => onChange({ q })}
+        />
+      </Field>
+      <Field className={field}>
+        <FieldLabel htmlFor={ids.stage}>Stage</FieldLabel>
         <NativeSelect
-          aria-label="Verdict"
-          value={verdict}
-          onChange={(event) => onChange({ verdict: event.target.value })}
-          className="flex-1 nav:flex-none"
+          id={ids.stage}
+          value={filters.tab}
+          onChange={(event) =>
+            onChange({
+              tab:
+                event.target.value === "open" ? undefined : event.target.value,
+            })
+          }
+          className="w-full"
         >
-          <NativeSelectOption value="">Any verdict</NativeSelectOption>
-          {VERDICTS.map((value) => (
-            <NativeSelectOption key={value} value={value}>
-              {value === "awaiting"
-                ? "Awaiting verdict"
-                : VERDICT_META[value].label}
+          <NativeSelectOption value="open">
+            All open{count(summary?.open)}
+          </NativeSelectOption>
+          {STAGES.map((stage) => (
+            <NativeSelectOption key={stage} value={stage}>
+              {STAGE_LABEL[stage]}
+              {count(summary?.stages[stage])}
+            </NativeSelectOption>
+          ))}
+          {EXITS.map((exit) => (
+            <NativeSelectOption key={exit} value={exit}>
+              Left: {EXIT_LABEL[exit]}
+              {count(summary?.exits[exit])}
             </NativeSelectOption>
           ))}
         </NativeSelect>
-        {/* Spec 12: the rep filter is for a role that sees more than one
-            rep's leads. A rep is sent only their own, so it is left out. */}
-        {owners.length > 1 && (
+      </Field>
+      <Field className={field}>
+        <FieldLabel htmlFor={ids.verdict}>Verdict</FieldLabel>
+        <NativeSelect
+          id={ids.verdict}
+          value={filters.verdict ?? ""}
+          onChange={(event) => onChange({ verdict: event.target.value })}
+          className="w-full"
+        >
+          <NativeSelectOption value="">Any verdict</NativeSelectOption>
+          {VERDICTS.map((verdict) => (
+            <NativeSelectOption key={verdict} value={verdict}>
+              {VERDICT_META[verdict].label}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </Field>
+      <Field className={field}>
+        <FieldLabel htmlFor={ids.group}>Lead Status</FieldLabel>
+        <NativeSelect
+          id={ids.group}
+          value={filters.group ?? ""}
+          onChange={(event) => onChange({ group: event.target.value })}
+          className="w-full"
+        >
+          <NativeSelectOption value="">Any Lead Status</NativeSelectOption>
+          {groups.map((group) => (
+            <NativeSelectOption key={group} value={group}>
+              {group}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </Field>
+      {/* The rep filter is the admins' (spec 07): a rep's list is already only theirs. */}
+      {isAdmin && (
+        <Field className={field}>
+          <FieldLabel htmlFor={ids.owner}>Rep</FieldLabel>
           <NativeSelect
-            aria-label="Rep"
-            value={owner}
+            id={ids.owner}
+            value={filters.owner ?? ""}
             onChange={(event) => onChange({ owner: event.target.value })}
-            className="flex-1 nav:flex-none"
+            className="w-full"
           >
             <NativeSelectOption value="">Any rep</NativeSelectOption>
-            {owners.map(({ id, name }) => (
+            <NativeSelectOption value={UNASSIGNED}>
+              Unassigned
+            </NativeSelectOption>
+            {(summary?.owners ?? []).map(({ id, name }) => (
               <NativeSelectOption key={id} value={id}>
                 {name}
               </NativeSelectOption>
             ))}
           </NativeSelect>
-        )}
-      </div>
-    </div>
+        </Field>
+      )}
+      <Field className={field}>
+        <FieldLabel htmlFor={ids.archived}>Showing</FieldLabel>
+        <NativeSelect
+          id={ids.archived}
+          value={filters.archived ?? ""}
+          onChange={(event) => onChange({ archived: event.target.value })}
+          className="w-full"
+        >
+          <NativeSelectOption value="">Active leads</NativeSelectOption>
+          <NativeSelectOption value="true">Archived leads</NativeSelectOption>
+        </NativeSelect>
+      </Field>
+      <Field className={field}>
+        <FieldLabel htmlFor={ids.sort}>Sort by</FieldLabel>
+        <NativeSelect
+          id={ids.sort}
+          value={sort}
+          onChange={(event) => {
+            const [value, dir] = event.target.value.split(":");
+            const fallback = event.target.value === SORTS[0][0];
+            onChange({
+              sort: fallback ? undefined : value,
+              dir: fallback ? undefined : dir,
+            });
+          }}
+          className="w-full"
+        >
+          {SORTS.map(([value, label]) => (
+            <NativeSelectOption key={value} value={value}>
+              {label}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </Field>
+    </search>
   );
 }
 
-function LeadList({
+/**
+ * The search box: what is typed goes in the address as `q` once typing
+ * pauses, and the server searches every lead's name, company and email.
+ */
+function SearchBox({
+  id,
+  q,
+  onSearch,
+}: {
+  id: string;
+  q: string;
+  onSearch: (q: string | undefined) => void;
+}) {
+  const [text, setText] = useState(q);
+  const typed = useDebouncedValue(text.trim(), 300);
+  const search = useEffectEvent((value: string) => {
+    if (value !== q) onSearch(value || undefined);
+  });
+  useEffect(() => search(typed), [typed]);
+  // `q` changed elsewhere (the navbar's search, Clear filters): show it.
+  const show = useEffectEvent((value: string) => {
+    if (value !== typed) setText(value);
+  });
+  useEffect(() => show(q), [q]);
+
+  return (
+    <Input
+      id={id}
+      type="search"
+      value={text}
+      placeholder="Name, company or email"
+      onChange={(event) => setText(event.target.value)}
+    />
+  );
+}
+
+function LeadTable({
   leads,
-  tab,
+  isAdmin,
   filtered,
-  describeFilters,
-  pipelineEmpty,
+  archived,
   onClear,
+  onOpen,
 }: {
   leads: ReturnType<typeof useLeads>;
-  tab: PipelineTab;
+  isAdmin: boolean;
   filtered: boolean;
-  describeFilters: () => string;
-  pipelineEmpty: boolean;
+  archived: boolean;
   onClear: () => void;
+  onOpen: (lead: LeadListItem) => void;
 }) {
-  const { fetchNextPage, hasNextPage, isFetchingNextPage } = leads;
-
-  // Reaching the end of the list asks for the next page. The button below
-  // does the same for keyboards and for browsers without the observer.
-  const end = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const element = end.current;
-    if (
-      !element ||
-      !hasNextPage ||
-      typeof IntersectionObserver === "undefined"
-    ) {
-      return;
-    }
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry?.isIntersecting && !isFetchingNextPage) void fetchNextPage();
-      },
-      { rootMargin: "200px" },
-    );
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
-
-  if (leads.isPending) return <LeadListSkeleton />;
-
   if (leads.isError && !leads.data) {
     return (
       <ErrorState
@@ -426,195 +408,275 @@ function LeadList({
     );
   }
 
-  const items = leads.data.pages.flatMap((page) => page.items);
-  const total = leads.data.pages[0]?.total ?? 0;
-
-  if (items.length === 0) {
-    if (filtered) {
-      return (
-        <EmptyState
-          variant="filtered"
-          title="No leads match"
-          body={`Nothing in ${tabLabel(tab)} matches ${describeFilters()}.`}
-          action={<Button onClick={onClear}>Clear filters</Button>}
-        />
-      );
-    }
+  const rows = leads.data?.pages.flatMap((page) => page.items) ?? [];
+  if (leads.data && rows.length === 0) {
     // Copy: the registry's lead-list states.empty.
-    return pipelineEmpty ? (
+    return filtered ? (
+      <EmptyState
+        variant="filtered"
+        title="No leads match these filters"
+        body="Other leads are hidden by the search or by the stage, verdict, status, rep or archive filter."
+        action={<Button onClick={onClear}>Clear filters</Button>}
+      />
+    ) : (
       <EmptyState
         variant="empty"
         title="No leads yet"
         body="New form fills land here automatically."
       />
-    ) : (
-      // A tab is a stage, not a filter: nothing is hiding leads here.
-      <EmptyState
-        variant="empty"
-        title={`No leads in ${tabLabel(tab)}`}
-        body="Leads appear here when they reach this stage."
-      />
     );
   }
 
-  return (
-    <div className="flex flex-col gap-2">
-      <p
-        aria-live="polite"
-        className="flex min-h-7 flex-wrap items-center gap-x-3 text-muted-foreground"
-      >
-        {total} {total === 1 ? "lead" : "leads"}
-        {filtered && " match"}
-        {filtered && (
-          <Button variant="link" size="sm" onClick={onClear} className="px-0">
-            Clear filters
-          </Button>
-        )}
-      </p>
+  const syncHref = isAdmin && isLive("sync-log") ? SYNC_LOG_HREF : undefined;
+  const columns: Column<LeadListItem>[] = [
+    {
+      id: "lead",
+      header: "Lead",
+      locked: true,
+      cell: (lead) => (
+        <span className="flex min-w-0 flex-col">
+          <Link
+            href={leadHref(lead.id)}
+            onClick={(event) => event.stopPropagation()}
+            className="truncate rounded-sm font-semibold text-ink underline-offset-4 outline-none hover:underline focus-visible:shadow-focus"
+          >
+            {lead.name}
+          </Link>
+          <span className="truncate text-meta text-ink-3">
+            {lead.company ?? "No company given"}
+          </span>
+        </span>
+      ),
+    },
+    {
+      id: "verdict",
+      header: "Verdict",
+      cell: (lead) => (
+        <Badge variant={VERDICT_META[lead.verdict].tone}>
+          {VERDICT_META[lead.verdict].label}
+        </Badge>
+      ),
+    },
+    {
+      id: "stage",
+      header: "Stage",
+      cell: (lead) => (
+        <span className={lead.exit || !lead.stage ? "text-ink-3" : undefined}>
+          {stageText(lead) ?? "Not synced yet"}
+        </span>
+      ),
+    },
+    {
+      id: "status",
+      header: "Lead Status",
+      cell: (lead) => {
+        const status = statusMeta(lead.status);
+        // A long status wraps inside its cell rather than running into the next one.
+        return (
+          <Badge
+            variant={status.tone}
+            className="h-auto max-w-full text-left whitespace-normal"
+          >
+            {status.label}
+          </Badge>
+        );
+      },
+    },
+    ...(isAdmin
+      ? [
+          {
+            id: "rep",
+            header: "Rep",
+            cell: (lead) =>
+              lead.owner?.name ?? (
+                <span className="text-ink-3">Unassigned</span>
+              ),
+          } satisfies Column<LeadListItem>,
+        ]
+      : []),
+    {
+      id: "age",
+      header: "Age",
+      title: "Days since the lead's last activity",
+      numeric: true,
+      cell: (lead) => {
+        const days = ageInDays(lead);
+        return (
+          <span className={days === null ? "text-ink-3" : undefined}>
+            {ageLabel(days)}
+          </span>
+        );
+      },
+    },
+    {
+      id: "booking",
+      header: "Next booking",
+      cell: (lead) =>
+        lead.nextBooking ? (
+          <span className="flex flex-col">
+            <LocalTime value={lead.nextBooking.time} className="tabular-nums" />
+            <span className="text-meta text-ink-3">
+              {BOOKING_KIND_LABEL[lead.nextBooking.kind]}
+            </span>
+          </span>
+        ) : (
+          <span className="text-ink-3">None booked</span>
+        ),
+    },
+    {
+      id: "next",
+      header: "Next step",
+      cell: (lead) => {
+        const step = nextStepOf(lead);
+        return (
+          <span
+            title={step.hint}
+            className={step.action ? "font-semibold" : "text-ink-3"}
+          >
+            {step.label}
+          </span>
+        );
+      },
+    },
+    {
+      id: "sync",
+      header: "CRM",
+      title: "The lead's last write to the CRM",
+      locked: true,
+      cell: (lead) => <SyncIndicator entry={lead.lastSync} href={syncHref} />,
+    },
+    ...(archived
+      ? []
+      : [
+          {
+            id: "actions",
+            header: "Actions",
+            locked: true,
+            cell: (lead) => <ArchiveButton lead={lead} />,
+          } satisfies Column<LeadListItem>,
+        ]),
+  ];
 
+  return (
+    <div className="flex flex-col gap-3">
       <div
         // The rows on screen stay, dimmed, until the new ones arrive.
-        aria-busy={leads.isPlaceholderData}
-        className={cn(
-          "overflow-hidden rounded-panel bg-card ring-1 ring-border transition-opacity duration-150",
-          leads.isPlaceholderData && "opacity-60",
-        )}
+        aria-busy={leads.isPlaceholderData || undefined}
+        // ponytail: the kit's DataTable searches and sorts only the rows it
+        // holds, with no controlled mode, so no column has a `value` (no
+        // header sorting) and its search box is hidden: the bar above
+        // searches and sorts on the server. Use the kit's own once it can be
+        // controlled.
+        className="transition-opacity duration-150 ease-out aria-busy:opacity-60 [&_div:has(>input[type=search])]:hidden"
       >
-        <div
-          aria-hidden="true"
-          className={cn(
-            "hidden border-b border-border px-4 py-2 label-caps",
-            COLUMNS,
-          )}
-        >
-          <span>Lead</span>
-          <span>Status</span>
-          <span>Verdict</span>
-          <span>Next call</span>
-          <span>Owner</span>
+        <DataTable
+          caption={archived ? "Archived leads" : "Leads"}
+          rows={rows}
+          columns={columns}
+          rowId={(lead) => lead.id}
+          loading={leads.isPending}
+          searchPlaceholder="Search the loaded leads"
+          densityKey="lead-list"
+          onRowClick={onOpen}
+          emptyTitle="No leads yet"
+          emptyBody="New form fills land here automatically."
+        />
+      </div>
+      {leads.hasNextPage && (
+        <div className="flex justify-center">
+          <Button
+            loading={leads.isFetchingNextPage}
+            onClick={() => leads.fetchNextPage()}
+          >
+            Show more leads
+          </Button>
         </div>
-        <ul className="divide-y divide-border">
-          {items.map((lead) => (
-            <li
-              key={lead.id}
-              className="[contain-intrinsic-size:auto_3.75rem] [content-visibility:auto]"
-            >
-              <LeadRow lead={lead} showStage={tab === "open"} />
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <div ref={end} className="flex min-h-9 items-center justify-center">
-        {leads.isFetchNextPageError ? (
-          <p role="alert" className="flex flex-wrap items-center gap-2">
-            More leads could not be loaded.
-            <Button size="sm" onClick={() => fetchNextPage()}>
-              Try again
-            </Button>
-          </p>
-        ) : isFetchingNextPage ? (
-          <p className="flex items-center gap-2 text-muted-foreground">
-            <Spinner /> Loading more leads
-          </p>
-        ) : hasNextPage ? (
-          <Button onClick={() => fetchNextPage()}>Show more leads</Button>
-        ) : (
-          <p className="text-muted-foreground">
-            All {total} {total === 1 ? "lead" : "leads"} shown
-          </p>
-        )}
-      </div>
+      )}
     </div>
   );
 }
 
-function LeadRow({
-  lead,
-  showStage,
-}: {
-  lead: LeadListItem;
-  showStage: boolean;
-}) {
-  const status = STATUS_META[lead.status];
-  const verdict = VERDICT_META[lead.verdict];
-  return (
-    <ListRow
-      href={leadHref(lead.id)}
-      className={cn("flex flex-col gap-1.5", COLUMNS)}
-    >
-      <span className="min-w-0">
-        <ListRowName removed={Boolean(lead.exit)}>{lead.name}</ListRowName>
-        <span
-          title={lead.company ?? undefined}
-          className="block truncate text-muted-foreground"
-        >
-          {lead.company ?? "No company given"}
-        </span>
-      </span>
+const stageText = (lead: LeadListItem) =>
+  lead.exit
+    ? `Left: ${EXIT_LABEL[lead.exit]}`
+    : lead.stage
+      ? STAGE_LABEL[lead.stage]
+      : null;
 
-      <span className="min-w-0">
-        <StatusLine tone={status.tone}>{status.label}</StatusLine>
-        {lead.exit ? (
-          <span className="block truncate text-muted-foreground">
-            Left the pipeline: {EXIT_LABEL[lead.exit]}
-          </span>
-        ) : (
-          showStage && (
-            <span className="block truncate text-muted-foreground">
-              {STAGE_LABEL[lead.stage]}
-            </span>
-          )
-        )}
-      </span>
-
-      {/* Below `nav`, the verdict and the next call share the last line. */}
-      <span className="contents max-nav:flex max-nav:flex-wrap max-nav:items-center max-nav:gap-x-3 max-nav:gap-y-1">
-        <span>
-          <Badge variant={verdict.tone}>{verdict.label}</Badge>
-        </span>
-        <span className="min-w-0 nav:block">
-          {lead.nextBooking ? (
-            <>
-              <LocalTime value={lead.nextBooking.time} className="nav:block" />
-              <span className="text-muted-foreground max-nav:before:content-['_·_'] nav:block nav:truncate">
-                {BOOKING_KIND_LABEL[lead.nextBooking.kind]}
-              </span>
-            </>
-          ) : (
-            <span className="text-muted-foreground">No call booked</span>
-          )}
-        </span>
-      </span>
-
-      <span
-        title={lead.owner.name}
-        className="hidden truncate text-muted-foreground nav:block"
-      >
-        {lead.owner.name}
-      </span>
-    </ListRow>
-  );
+/** The row's next step: the same rule, on the same fields, as lead detail. */
+function nextStepOf(lead: LeadListItem) {
+  const step = nextStep(lead);
+  return {
+    action: step.main,
+    label: step.main ? ACTION_LABEL[step.main] : "Nothing to do",
+    hint: step.hint,
+  };
 }
 
-function LeadListSkeleton() {
+/** Archive: a soft delete in the app only (spec 07). It writes nothing to the CRM. */
+function ArchiveButton({ lead }: { lead: LeadListItem }) {
+  const archive = useArchiveLead();
+  const [reason, setReason] = useState("");
+  const reasonId = useId();
+
   return (
-    <output
-      aria-label="Loading leads"
-      className="mt-9 divide-y divide-border overflow-hidden rounded-panel bg-card ring-1 ring-border"
-    >
-      {["a", "b", "c", "d", "e", "f", "g", "h"].map((row) => (
-        <div key={row} className={cn("flex flex-col gap-2 px-4 py-3", COLUMNS)}>
-          <span className="flex flex-col gap-1.5">
-            <Skeleton className="h-4 w-36" />
-            <Skeleton className="h-3.5 w-28" />
-          </span>
-          <Skeleton className="h-4 w-40" />
-          <Skeleton className="h-5 w-16 rounded-full" />
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className="hidden h-4 w-24 nav:block" />
-        </div>
-      ))}
-    </output>
+    // The dialog renders in a portal, but its clicks still bubble here: stop
+    // them before they reach the row, which would open the lead.
+    // biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: only stops propagation
+    <div onClick={(event) => event.stopPropagation()}>
+      <ConfirmDialog
+        tone="neutral"
+        trigger={
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            loading={archive.isPending}
+            aria-label={`Archive ${lead.name}`}
+            title="Archive"
+          >
+            <ArchiveIcon aria-hidden="true" />
+          </Button>
+        }
+        title={`Archive ${lead.name}?`}
+        description="The lead leaves this list and stays in the app, under Showing: Archived leads."
+        confirmLabel="Archive lead"
+        onConfirm={() =>
+          archive.mutate(
+            {
+              leadId: lead.id,
+              input: reason.trim() ? { reason: reason.trim() } : {},
+            },
+            {
+              onSuccess: () =>
+                toast.add({
+                  title: `Archived ${lead.name}`,
+                  description: "Nothing was written to the CRM.",
+                  type: "success",
+                }),
+              onError: () =>
+                toast.add({
+                  title: "The lead was not archived",
+                  description: "Nothing changed. Try again.",
+                  type: "error",
+                }),
+            },
+          )
+        }
+      >
+        <Field>
+          <FieldLabel htmlFor={reasonId}>Reason (optional)</FieldLabel>
+          <Textarea
+            id={reasonId}
+            value={reason}
+            maxLength={500}
+            onChange={(event) => setReason(event.target.value)}
+          />
+        </Field>
+        <WritePreview>
+          Nothing in the CRM. Archiving happens in this app only, so the lead
+          stays as it is in the CRM.
+        </WritePreview>
+      </ConfirmDialog>
+    </div>
   );
 }

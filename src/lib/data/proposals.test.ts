@@ -9,14 +9,12 @@ import {
 import { POST as postSend } from "@/app/api/proposals/[leadId]/send/route";
 import { POST as postSimulate } from "@/app/api/proposals/[leadId]/simulate/route";
 import { GET as getProposalLeads } from "@/app/api/proposals/route";
-import { SERVICE_CATALOGUE } from "@/lib/data/fixtures/proposals";
-import { createInvoiceDraft, getInvoice } from "@/lib/data/invoices";
 import {
-  getLead,
-  listVisibleLeads,
-  markLost,
-  resetSampleLeads,
-} from "@/lib/data/leads";
+  SERVICE_CATALOGUE,
+  suggestLineItems,
+} from "@/lib/data/fixtures/proposals";
+import { createInvoiceDraft, getInvoice } from "@/lib/data/invoices";
+import { getLead, listVisibleLeads } from "@/lib/data/leads";
 import { createNotification } from "@/lib/data/notifications";
 import {
   generateProposal,
@@ -26,6 +24,7 @@ import {
   sendProposal,
   simulateProposalEvent,
 } from "@/lib/data/proposals";
+import { resetSampleData } from "@/lib/data/sample";
 import { AccessError } from "@/lib/data/users";
 import { invoiceResponseSchema, invoiceSchema } from "@/lib/invoices/schemas";
 import {
@@ -35,6 +34,11 @@ import {
   proposalViewSchema,
 } from "@/lib/proposals/schemas";
 import { toAppStatus } from "@/lib/services/proposal-service";
+import {
+  moveForProposals,
+  PROPOSAL_LEADS,
+  resetStandIns,
+} from "@/test/mockup-stand-ins";
 import {
   fake,
   resetFakes,
@@ -51,6 +55,11 @@ vi.mock(
   "@/db/client",
   async () => (await import("@/test/server-fakes")).dbModule,
 );
+// Leads live in Postgres; this module reaches them only through these.
+vi.mock("@/lib/data/leads", async (original) => ({
+  ...(await original<typeof import("@/lib/data/leads")>()),
+  ...(await import("@/test/mockup-stand-ins")).mockupLeadsModule,
+}));
 // The real function still runs; the test only watches what it is asked to raise.
 vi.mock("@/lib/data/notifications", async (original) => {
   const actual = await original<typeof import("@/lib/data/notifications")>();
@@ -77,10 +86,23 @@ const ada = {
   lastName: "Lovelace",
 };
 
+// Stand-ins moved along the pipeline (src/test/mockup-stand-ins.ts): a real
+// lead has no proposal until proposals are read from their table (spec 12).
+const {
+  sent: ANNELIESE,
+  lost: SERAPHINA,
+  qualified: BEATRIX,
+  draft: KWAME,
+  won: JONAS,
+  early: SOFIA,
+} = PROPOSAL_LEADS;
+
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"], now: new Date(NOW) });
   resetFakes();
-  resetSampleLeads();
+  resetSampleData();
+  resetStandIns();
+  moveForProposals();
   signIn();
   fake.users.set(ada.id, ada);
   sample.on = true;
@@ -89,13 +111,6 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 const refusedWith = (code: AccessError["code"]) => new AccessError(code);
-
-/** The id of the sample lead with this name. */
-async function idOf(name: string) {
-  const lead = (await listVisibleLeads()).find((item) => item.name === name);
-  if (!lead) throw new Error(`no sample lead called ${name}`);
-  return lead.id;
-}
 
 const DRAFT: ProposalDraftInput = {
   client: {
@@ -159,10 +174,8 @@ const view = async (response: Response) =>
   proposalViewSchema.parse(await response.json());
 
 test("signed out, every route answers 401; without a profile, 403 profile_required; nothing is changed", async () => {
-  const id = await idOf("Beatrix Olander");
-
   fake.claims = null;
-  for (const [name, call] of everyRoute(id)) {
+  for (const [name, call] of everyRoute(BEATRIX)) {
     const response = await call();
     expect(response.status, name).toBe(401);
     expect((await response.json()).error.code, name).toBe("unauthenticated");
@@ -170,14 +183,14 @@ test("signed out, every route answers 401; without a profile, 403 profile_requir
 
   signIn();
   fake.users.clear();
-  for (const [name, call] of everyRoute(id)) {
+  for (const [name, call] of everyRoute(BEATRIX)) {
     const response = await call();
     expect(response.status, name).toBe(403);
     expect((await response.json()).error.code, name).toBe("profile_required");
   }
 
   fake.users.set(ada.id, ada);
-  expect((await getProposal(id)).proposal).toBeNull();
+  expect((await getProposal(BEATRIX)).proposal).toBeNull();
 });
 
 test("a lead that does not exist answers 404 on every route that names one", async () => {
@@ -189,8 +202,7 @@ test("a lead that does not exist answers 404 on every route that names one", asy
 });
 
 test("a body that is not the contract is refused with 400 and the fields at fault, and nothing is saved", async () => {
-  const id = await idOf("Kwame Asante");
-  const before = await getProposal(id);
+  const before = await getProposal(KWAME);
 
   const bad: [unknown, string][] = [
     [
@@ -218,25 +230,42 @@ test("a body that is not the contract is refused with 400 and the fields at faul
     [{ client: DRAFT.client, lineItems: [] }, "context"],
   ];
   for (const [body, field] of bad) {
-    const response = await api.put(id, body);
+    const response = await api.put(KWAME, body);
     expect(response.status, JSON.stringify(body)).toBe(400);
     const { error } = await response.json();
     expect(error.code).toBe("invalid_input");
     expect(error.fields[field]).toBeDefined();
   }
   // An unknown field, a body that is not JSON, and a field no route takes.
-  expect((await api.put(id, { ...DRAFT, status: "signed" })).status).toBe(400);
-  expect((await api.put(id, "not json")).status).toBe(400);
-  expect((await api.send(id, { to: "someone@else.example" })).status).toBe(400);
-  expect((await api.generate(id, { services: [] })).status).toBe(400);
+  expect((await api.put(KWAME, { ...DRAFT, status: "signed" })).status).toBe(
+    400,
+  );
+  expect((await api.put(KWAME, "not json")).status).toBe(400);
+  expect((await api.send(KWAME, { to: "someone@else.example" })).status).toBe(
+    400,
+  );
+  expect((await api.generate(KWAME, { services: [] })).status).toBe(400);
   for (const body of [{}, { event: "lost" }, { event: "signed", extra: 1 }]) {
-    expect((await api.simulate(id, body)).status).toBe(400);
+    expect((await api.simulate(KWAME, body)).status).toBe(400);
   }
 
-  expect(await getProposal(id)).toEqual(before);
+  expect(await getProposal(KWAME)).toEqual(before);
 });
 
 // --- reading ----------------------------------------------------------------------
+
+test("with real leads, all New and without a proposal, the picker is empty and none can be started", async () => {
+  resetStandIns();
+  expect(proposalLeadsSchema.parse(await (await api.leads()).json())).toEqual(
+    [],
+  );
+  expect(await view(await api.get(BEATRIX))).toMatchObject({
+    canStart: false,
+    proposal: null,
+  });
+  expect((await api.generate(BEATRIX)).status).toBe(409);
+  expect(await (await api.invoice(BEATRIX)).json()).toBeNull();
+});
 
 test("the picker lists the leads from Qualified onwards that are still in the pipeline, with where each proposal stands", async () => {
   const response = await api.leads();
@@ -245,21 +274,20 @@ test("the picker lists the leads from Qualified onwards that are still in the pi
 
   const stages = new Set(leads.map((lead) => lead.stage));
   expect([...stages].sort()).toEqual(
-    ["proposal_sent", "qualified", "review_booked", "won"].sort(),
+    ["proposal_sent", "qualified", "won"].sort(),
   );
   const status = Object.fromEntries(
-    leads.map((lead) => [lead.name, lead.proposalStatus]),
+    leads.map((lead) => [lead.id, lead.proposalStatus]),
   );
-  expect(status).toMatchObject({
-    "Beatrix Olander": null,
-    "Kwame Asante": "draft",
-    "Anneliese Brandt": "sent",
-    "Thaddeus Okonkwo": "viewed",
-    "Jonas Whitlock": "signed",
+  expect(status).toEqual({
+    [BEATRIX]: null,
+    [KWAME]: "draft",
+    [ANNELIESE]: "sent",
+    [JONAS]: "signed",
   });
   // Left the pipeline, or not yet qualified: not offered.
-  expect(status).not.toHaveProperty("Seraphina Duarte");
-  expect(status).not.toHaveProperty("Sofia Lindgren");
+  expect(status).not.toHaveProperty(SERAPHINA);
+  expect(status).not.toHaveProperty(SOFIA);
   // The ones with nothing started come first.
   expect(leads[0].proposalStatus).toBeNull();
 });
@@ -296,17 +324,17 @@ test("every sample proposal and invoice parses against its schema, and neither s
     expect(invoice?.status ?? null).toBe(lead.invoice?.status ?? null);
     if (invoice) invoices += 1;
   }
-  expect(proposals).toBeGreaterThanOrEqual(9);
-  expect(invoices).toBe(3);
+  expect(proposals).toBe(4);
+  expect(invoices).toBe(1);
 });
 
 test("a proposal starts from the lead's own details, and its suggested services follow the form answers and the budget", async () => {
   // Asked for paid search, with $2,000 to $4,000 a month.
-  const kwame = await getProposal(await idOf("Kwame Asante"));
+  const kwame = await getProposal(KWAME);
   expect(kwame.client).toEqual({
-    name: "Kwame Asante",
-    company: "Asante Solar",
-    email: "kwame@asantesolar.example",
+    name: "Stand-in 4",
+    company: "Company 4",
+    email: `${KWAME}@client.example`,
   });
   expect(kwame.proposal?.lineItems.map((item) => item.service)).toEqual([
     "Paid search management",
@@ -315,9 +343,12 @@ test("a proposal starts from the lead's own details, and its suggested services 
   expect(kwame.proposal?.total).toBeLessThanOrEqual(4000);
   expect(kwame.canStart).toBe(false);
 
-  // Asked for local SEO and a new website.
-  const beatrix = await generateProposal(await idOf("Beatrix Olander"));
-  expect(beatrix.proposal?.lineItems.map((item) => item.service)).toEqual([
+  // Asked for local SEO and a new website: what Generate would suggest.
+  const beatrix = await getProposal(BEATRIX);
+  expect(beatrix.canStart).toBe(true);
+  expect(
+    suggestLineItems(await getLead(BEATRIX)).map((item) => item.service),
+  ).toEqual([
     "Local SEO",
     "Website design and build",
     "Analytics and reporting",
@@ -325,13 +356,12 @@ test("a proposal starts from the lead's own details, and its suggested services 
 });
 
 test("a lead's invoice is null until it has one; a won sample lead's draft has one line per line of its signed proposal", async () => {
-  expect(await getInvoice(await idOf("Kwame Asante"))).toBeNull();
+  expect(await getInvoice(KWAME)).toBeNull();
 
-  const jonas = await idOf("Jonas Whitlock");
-  const { proposal } = await getProposal(jonas);
-  const invoice = invoiceSchema.parse(await getInvoice(jonas));
+  const { proposal } = await getProposal(JONAS);
+  const invoice = invoiceSchema.parse(await getInvoice(JONAS));
   expect(invoice).toMatchObject({
-    leadId: jonas,
+    leadId: JONAS,
     proposalId: proposal?.id,
     status: "draft",
     total: proposal?.total,
@@ -343,178 +373,105 @@ test("a lead's invoice is null until it has one; a won sample lead's draft has o
     })),
   );
   // The same invoice on a second read.
-  expect(await getInvoice(jonas)).toEqual(invoice);
+  expect(await getInvoice(JONAS)).toEqual(invoice);
 
   // Nothing signed, nothing to invoice; and never a second draft.
-  await expect(createInvoiceDraft(await idOf("Kwame Asante"))).rejects.toEqual(
+  await expect(createInvoiceDraft(KWAME)).rejects.toEqual(
     refusedWith("conflict"),
   );
-  await expect(createInvoiceDraft(jonas)).rejects.toEqual(
+  await expect(createInvoiceDraft(JONAS)).rejects.toEqual(
     refusedWith("conflict"),
   );
 });
 
 // --- the path from draft to signed ----------------------------------------------------
 
-test("generate, edit, send, viewed, signed: the lead moves to Proposal Sent and then Lead Won, and the invoice draft is the snapshot", async () => {
-  const id = await idOf("Beatrix Olander");
-  const start = await view(await api.get(id));
-  expect(start).toMatchObject({ canStart: true, proposal: null });
+test("until proposals have their own table, generate and send are refused and the lead does not move; a draft can still be edited", async () => {
+  expect(await view(await api.get(BEATRIX))).toMatchObject({
+    canStart: true,
+    proposal: null,
+  });
 
-  // Generate: a draft; the lead says so.
-  const generated = await view(await api.generate(id));
-  expect(generated.proposal).toMatchObject({ status: "draft", snapshot: null });
-  expect(generated.canStart).toBe(false);
-  expect((await getLead(id)).proposal).toEqual({ status: "draft" });
-  expect((await api.generate(id)).status).toBe(409);
+  // Generate: the lead's record cannot say "draft" yet, so nothing is stored.
+  const generated = await api.generate(BEATRIX);
+  expect(generated.status).toBe(409);
+  expect((await generated.json()).error.code).toBe("conflict");
+  await expect(generateProposal(BEATRIX)).rejects.toEqual(
+    refusedWith("conflict"),
+  );
+  expect((await getProposal(BEATRIX)).proposal).toBeNull();
 
   // Edit: what was saved is what a later read returns, trimmed.
   const saved = await view(
-    await api.put(id, {
+    await api.put(KWAME, {
       ...DRAFT,
       context: `  ${DRAFT.context}  `,
       client: { ...DRAFT.client, name: " Beatrix Olander " },
     }),
   );
   expect(saved.proposal).toMatchObject({ ...DRAFT, total: 2349.5 });
-  expect((await getProposal(id)).proposal).toEqual(saved.proposal);
-  expect((await getLead(id)).stage).toBe("qualified");
+  expect((await getProposal(KWAME)).proposal).toEqual(saved.proposal);
 
-  // Send: the snapshot is taken and the lead moves on.
-  const sent = await view(await api.send(id));
-  expect(sent.proposal).toMatchObject({
-    status: "sent",
-    sentAt: NOW,
-    snapshot: DRAFT.lineItems,
-  });
-  expect(sent.lead.stage).toBe("proposal_sent");
-  const afterSend = await getLead(id);
-  expect(afterSend).toMatchObject({
-    stage: "proposal_sent",
-    proposal: { status: "sent" },
-  });
-  expect(afterSend.activities[0].type).toBe("Proposal sent");
-
-  // Sent: no more edits, no second send.
-  const refused = await api.put(id, { ...DRAFT, context: "Changed my mind." });
-  expect(refused.status).toBe(409);
-  expect((await refused.json()).error.code).toBe("conflict");
-  expect((await api.send(id)).status).toBe(409);
-  expect((await getProposal(id)).proposal?.context).toBe(DRAFT.context);
-  expect(await getInvoice(id)).toBeNull();
-
-  // Viewed: the status changes, the stage does not; it is viewed only once.
-  const viewed = await view(await api.simulate(id, { event: "viewed" }));
-  expect(viewed.proposal?.status).toBe("viewed");
-  expect((await getLead(id)).stage).toBe("proposal_sent");
-  expect((await api.simulate(id, { event: "viewed" })).status).toBe(409);
-  expect((await api.put(id)).status).toBe(409);
+  // Send: refused before anything changes.
+  expect((await api.send(KWAME)).status).toBe(409);
+  expect((await getProposal(KWAME)).proposal).toEqual(saved.proposal);
+  expect((await getLead(KWAME)).stage).toBe("qualified");
+  expect(await getInvoice(KWAME)).toBeNull();
   expect(createNotification).not.toHaveBeenCalled();
-
-  // Signed: Lead Won, an invoice draft from the snapshot, two notifications.
-  const signed = await view(await api.simulate(id, { event: "signed" }));
-  expect(signed.proposal?.status).toBe("signed");
-  expect(signed.lead.stage).toBe("won");
-  const won = await getLead(id);
-  expect(won).toMatchObject({
-    stage: "won",
-    proposal: { status: "signed" },
-    invoice: { status: "draft" },
-  });
-  expect(won.activities.slice(0, 2).map((activity) => activity.type)).toEqual([
-    "Invoice drafted",
-    "Proposal signed",
-  ]);
-
-  const invoice = invoiceSchema.parse(await (await api.invoice(id)).json());
-  expect(invoice).toMatchObject({
-    leadId: id,
-    proposalId: signed.proposal?.id,
-    status: "draft",
-    total: 2349.5,
-    createdAt: NOW,
-  });
-  expect(invoice.lines).toEqual([
-    { description: "Local SEO", amount: 1450 },
-    { description: "Photography day", amount: 899.5 },
-  ]);
-
-  expect(vi.mocked(createNotification).mock.calls).toEqual([
-    [{ leadId: id, type: "proposal_signed" }],
-    [{ leadId: id, type: "invoice_draft_ready" }],
-  ]);
-
-  // Signed is final.
-  for (const event of ["viewed", "signed"]) {
-    expect((await api.simulate(id, { event })).status).toBe(409);
-  }
-  expect((await api.put(id)).status).toBe(409);
 });
 
-test("a sent proposal can be signed without being viewed first", async () => {
-  const id = await idOf("Anneliese Brandt");
-  const signed = await simulateProposalEvent(id, "signed");
-  expect(signed.proposal?.status).toBe("signed");
-  expect((await getLead(id)).stage).toBe("won");
-  expect((await getInvoice(id))?.lines).toEqual(
-    signed.proposal?.snapshot?.map((item) => ({
-      description: item.service,
-      amount: item.price,
-    })),
-  );
+test("a sent proposal cannot be marked viewed or signed while the lead's record cannot follow", async () => {
+  for (const event of ["viewed", "signed"] as const) {
+    await expect(simulateProposalEvent(ANNELIESE, event)).rejects.toEqual(
+      refusedWith("conflict"),
+    );
+  }
+  expect((await getProposal(ANNELIESE)).proposal?.status).toBe("sent");
+  expect((await getLead(ANNELIESE)).stage).toBe("proposal_sent");
+  expect(await getInvoice(ANNELIESE)).toBeNull();
+  expect(createNotification).not.toHaveBeenCalled();
 });
 
 test("a draft cannot be sent without a priced service or without the client's email, and cannot be simulated", async () => {
-  const id = await idOf("Kwame Asante");
-  await expect(simulateProposalEvent(id, "viewed")).rejects.toEqual(
+  await expect(simulateProposalEvent(KWAME, "viewed")).rejects.toEqual(
     refusedWith("conflict"),
   );
 
-  await saveProposalDraft(id, { ...DRAFT, lineItems: [] });
-  await expect(sendProposal(id)).rejects.toEqual(refusedWith("conflict"));
-  await saveProposalDraft(id, {
+  await saveProposalDraft(KWAME, { ...DRAFT, lineItems: [] });
+  await expect(sendProposal(KWAME)).rejects.toEqual(refusedWith("conflict"));
+  await saveProposalDraft(KWAME, {
     ...DRAFT,
     lineItems: [{ service: "Audit", description: "", price: 0 }],
   });
-  await expect(sendProposal(id)).rejects.toEqual(refusedWith("conflict"));
-  await saveProposalDraft(id, {
+  await expect(sendProposal(KWAME)).rejects.toEqual(refusedWith("conflict"));
+  await saveProposalDraft(KWAME, {
     ...DRAFT,
     client: { ...DRAFT.client, email: "" },
   });
-  await expect(sendProposal(id)).rejects.toEqual(refusedWith("conflict"));
-  expect((await getLead(id)).stage).toBe("qualified");
-
-  await saveProposalDraft(id, DRAFT);
-  expect((await sendProposal(id)).proposal?.status).toBe("sent");
+  await expect(sendProposal(KWAME)).rejects.toEqual(refusedWith("conflict"));
+  expect((await getLead(KWAME)).stage).toBe("qualified");
+  expect((await getProposal(KWAME)).proposal?.status).toBe("draft");
 });
 
 test("a lead that is not Qualified yet, or has left the pipeline, takes no proposal and no change to one", async () => {
-  const early = await idOf("Sofia Lindgren");
-  expect(await getProposal(early)).toMatchObject({
+  expect(await getProposal(SOFIA)).toMatchObject({
     canStart: false,
     proposal: null,
   });
-  expect((await api.generate(early)).status).toBe(409);
-  expect((await api.put(early)).status).toBe(409);
-  expect((await api.send(early)).status).toBe(409);
+  expect((await api.generate(SOFIA)).status).toBe(409);
+  expect((await api.put(SOFIA)).status).toBe(409);
+  expect((await api.send(SOFIA)).status).toBe(409);
 
-  // Lost with a proposal: still readable, as it was.
-  const lost = await idOf("Seraphina Duarte");
-  const seen = await getProposal(lost);
-  expect(seen).toMatchObject({
+  // Lost with a proposal: still readable, as it was, and nothing more happens to it.
+  expect(await getProposal(SERAPHINA)).toMatchObject({
     canStart: false,
     lead: { exit: "lost" },
     proposal: { status: "lost" },
   });
-  expect((await api.put(lost)).status).toBe(409);
-
-  // Marked lost while its proposal was out: nothing more can happen to it.
-  const sent = await idOf("Anneliese Brandt");
-  await markLost(sent, {});
   for (const call of [api.put, api.send, api.simulate]) {
-    expect((await call(sent)).status).toBe(409);
+    expect((await call(SERAPHINA)).status).toBe(409);
   }
-  expect((await getProposal(sent)).proposal?.status).toBe("sent");
+  expect((await getProposal(SERAPHINA)).proposal?.status).toBe("lost");
 });
 
 // --- roles ------------------------------------------------------------------------
@@ -523,57 +480,49 @@ test("a rep reaches only their own leads' proposals and invoices; another rep's 
   const all = await listProposalLeads();
   const leads = await listVisibleLeads();
   const ownerOf = (id: string) =>
-    leads.find((lead) => lead.id === id)?.owner.id;
-  const jonas = await idOf("Jonas Whitlock");
-  const kwame = await idOf("Kwame Asante");
-  const anneliese = await idOf("Anneliese Brandt");
-  const ingrid = await idOf("Ingrid Aaltonen");
-  expect(ownerOf(anneliese)).toBe(SAMPLE_REP.id);
+    leads.find((lead) => lead.id === id)?.owner?.id;
+  expect(ownerOf(ANNELIESE)).toBe(SAMPLE_REP.id);
 
   viewAs("rep");
   const mine = await listProposalLeads();
-  expect(mine.length).toBeGreaterThan(0);
+  expect(mine.map((lead) => lead.id)).toEqual([ANNELIESE]);
   expect(mine.length).toBeLessThan(all.length);
-  expect(mine.every((lead) => ownerOf(lead.id) === SAMPLE_REP.id)).toBe(true);
 
   for (const [name, call] of [
-    ...everyRoute(kwame).slice(1, 6),
-    ...everyRoute(jonas).slice(6),
+    ...everyRoute(KWAME).slice(1, 6),
+    ...everyRoute(JONAS).slice(6),
   ]) {
     const response = await call();
     expect(response.status, name).toBe(404);
   }
   // A rep cannot act on invoices at all (spec 01), whoever's lead it is.
-  await expect(createInvoiceDraft(jonas)).rejects.toEqual(
+  await expect(createInvoiceDraft(JONAS)).rejects.toEqual(
     refusedWith("forbidden"),
   );
 
-  // Their own: readable, and theirs to act on.
-  expect((await api.get(anneliese)).status).toBe(200);
-  expect((await api.invoice(ingrid)).status).toBe(200);
-  expect((await view(await api.simulate(anneliese))).proposal?.status).toBe(
-    "viewed",
-  );
+  // Their own: readable, and past the guard (refused only as every lead is).
+  expect((await api.get(ANNELIESE)).status).toBe(200);
+  expect((await api.invoice(ANNELIESE)).status).toBe(200);
+  expect((await api.simulate(ANNELIESE)).status).toBe(409);
 
   // Nothing of the other rep's changed.
   viewAs("admin");
-  expect((await getProposal(kwame)).proposal?.status).toBe("draft");
-  expect((await getLead(kwame)).stage).toBe("qualified");
+  expect((await getProposal(KWAME)).proposal?.status).toBe("draft");
+  expect((await getLead(KWAME)).stage).toBe("qualified");
 });
 
 // --- what stands in for the proposal service -------------------------------------------
 
 test("once the data is real, nobody can say a lead viewed or signed a proposal", async () => {
-  const id = await idOf("Anneliese Brandt");
   sample.on = false;
-  const response = await api.simulate(id, { event: "signed" });
+  const response = await api.simulate(ANNELIESE, { event: "signed" });
   expect(response.status).toBe(403);
   expect((await response.json()).error.code).toBe("forbidden");
 
   sample.on = true;
-  expect((await getProposal(id)).proposal?.status).toBe("sent");
-  expect((await getLead(id)).stage).toBe("proposal_sent");
-  expect(await getInvoice(id)).toBeNull();
+  expect((await getProposal(ANNELIESE)).proposal?.status).toBe("sent");
+  expect((await getLead(ANNELIESE)).stage).toBe("proposal_sent");
+  expect(await getInvoice(ANNELIESE)).toBeNull();
 });
 
 test("the proposal service's statuses and events map onto the app's five", () => {

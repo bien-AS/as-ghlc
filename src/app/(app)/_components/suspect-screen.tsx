@@ -21,6 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/state-panel";
 import { toast } from "@/components/ui/toast";
 import { VerdictBox } from "@/components/ui/verdict-box";
+import { WebsiteLink } from "@/components/ui/website-link";
 import {
   useLead,
   useLeads,
@@ -277,15 +278,10 @@ export function SuspectScreen({ leadId }: { leadId?: string }) {
                     <dt>Website</dt>
                     <dd>
                       {data.website ? (
-                        <a
-                          href={data.website}
-                          target="_blank"
-                          rel="noreferrer"
+                        <WebsiteLink
+                          website={data.website}
                           className={linkClass}
-                        >
-                          {data.website.replace(/^https?:\/\//, "")}
-                          <span className="sr-only"> (opens in a new tab)</span>
-                        </a>
+                        />
                       ) : (
                         "Not given"
                       )}

@@ -33,6 +33,11 @@ vi.mock(
   "@/db/client",
   async () => (await import("@/test/server-fakes")).dbModule,
 );
+// Leads live in Postgres (spec 07); the sample CRM's import only counts them, so two stand in.
+vi.mock("@/lib/data/leads", async (original) => ({
+  ...(await original<typeof import("@/lib/data/leads")>()),
+  listVisibleLeads: async () => [{ id: "lead-1" }, { id: "lead-2" }],
+}));
 vi.mock(
   "next/navigation",
   async () => (await import("@/test/navigation")).navigationModule,

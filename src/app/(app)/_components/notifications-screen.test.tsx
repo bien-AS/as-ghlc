@@ -8,7 +8,6 @@ import {
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { updateAccountPreferences } from "@/lib/data/account";
-import { listVisibleLeads, recordProposalStatus } from "@/lib/data/leads";
 import {
   createNotification,
   getUnreadCount,
@@ -44,8 +43,23 @@ vi.mock(
   "@/lib/navigate",
   async () => (await import("@/test/render")).navigateModule,
 );
+// Leads live in Postgres: the sample notifications are derived from the six
+// suspect stand-ins instead, one "suspect to review" each.
+vi.mock("@/lib/data/leads", async (original) => ({
+  ...(await original<typeof import("@/lib/data/leads")>()),
+  ...(await import("@/test/mockup-stand-ins")).mockupLeadsModule,
+}));
 
 beforeEach(() => startDashboard("/notifications"));
+
+const STAND_INS = [1, 2, 3, 4, 5, 6].map((n) => `stand-in-${n}`);
+/** Twelve more, two per stand-in, so the list runs past one page of ten. */
+async function raiseMore() {
+  for (const leadId of STAND_INS) {
+    await createNotification({ leadId, type: "proposal_signed" });
+    await createNotification({ leadId, type: "invoice_draft_ready" });
+  }
+}
 afterEach(() => {
   cleanup();
   stopDashboard();
@@ -71,6 +85,7 @@ test("lists what happened, the lead's company and when, newest first; each row o
   await loaded();
   const all = await everything();
   const firstPage = all.slice(0, 10);
+  expect(firstPage).toHaveLength(6);
 
   expect(screen.getByRole("heading", { name: "Notifications" })).toBeDefined();
   expect(rows().map((row) => row.getAttribute("href"))).toEqual(
@@ -206,6 +221,7 @@ test("if marking read fails, the row returns to unread with a brief message", as
 });
 
 test("a long list loads a page at a time, and more on request", async () => {
+  await raiseMore();
   renderScreen(<NotificationsScreen />);
   await loaded();
   const all = await everything();
@@ -221,6 +237,7 @@ test("a long list loads a page at a time, and more on request", async () => {
 });
 
 test("if more cannot be loaded, the rows stay and Try again loads them", async () => {
+  await raiseMore();
   renderScreen(<NotificationsScreen />);
   await loaded();
   const all = await everything();
@@ -291,7 +308,7 @@ test("if the list cannot be loaded, the error state offers Try again, which load
   api.restore();
   fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
   await loaded();
-  expect(rows()).toHaveLength(10);
+  expect(rows()).toHaveLength(6);
 });
 
 test("returning to the window brings in what was raised meanwhile, at the top, with the count", async () => {
@@ -300,21 +317,15 @@ test("returning to the window brings in what was raised meanwhile, at the top, w
   const { count } = await getUnreadCount();
   await screen.findByText(`${count} unread`);
 
-  const lead = (await listVisibleLeads()).find(
-    (candidate) => candidate.stage === "proposal_sent" && !candidate.exit,
-  );
   vi.setSystemTime(new Date("2026-10-07T12:05:00.000Z"));
-  await recordProposalStatus(lead?.id ?? "", "signed");
-  await createNotification({ leadId: lead?.id ?? "", type: "proposal_signed" });
-  expect(screen.queryByText(`${lead?.name} signed the proposal.`)).toBeNull();
+  await createNotification({ leadId: "stand-in-1", type: "proposal_signed" });
+  expect(screen.queryByText("Stand-in 1 signed the proposal.")).toBeNull();
 
   // What the browser reports when the person comes back to the tab.
   window.dispatchEvent(new Event("visibilitychange"));
 
   await waitFor(() =>
-    expect(rows()[0].textContent).toContain(
-      `${lead?.name} signed the proposal.`,
-    ),
+    expect(rows()[0].textContent).toContain("Stand-in 1 signed the proposal."),
   );
   expect(await screen.findByText(`${count + 1} unread`)).toBeDefined();
 });

@@ -35,7 +35,7 @@ import type {
 const ADMINS_NOTIFIED_FOR_EVERY_LEAD = true;
 
 const isNotified = (profile: Profile, lead: LeadDetail) =>
-  lead.owner.id === profile.id ||
+  lead.owner?.id === profile.id ||
   (ADMINS_NOTIFIED_FOR_EVERY_LEAD && profile.role === "admin");
 
 type Stored = {

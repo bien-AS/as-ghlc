@@ -13,12 +13,12 @@ import { getLead } from "@/lib/data/leads";
 import {
   api,
   FORBIDDEN,
-  leadIdOf,
   renderScreen,
   startDashboard,
   stopDashboard,
   viewAs,
 } from "@/test/dashboard";
+import { resetStandIns, standIns } from "@/test/mockup-stand-ins";
 import { address, resetNavigation, router } from "@/test/navigation";
 
 import { deckHref } from "../navigation";
@@ -45,30 +45,57 @@ vi.mock(
   "@/lib/navigate",
   async () => (await import("@/test/render")).navigateModule,
 );
+// Leads live in Postgres; the deck module reaches them only through these.
+vi.mock("@/lib/data/leads", async (original) => ({
+  ...(await original<typeof import("@/lib/data/leads")>()),
+  ...(await import("@/test/mockup-stand-ins")).mockupLeadsModule,
+}));
 
-beforeEach(() => startDashboard("/decks"));
+/*
+ * A real lead has no deck until decks are read from their table (spec 09), so
+ * the presenter's own sample decks are reached through stand-ins given one:
+ * the sample rep's Stand-in 1 and another rep's Stand-in 3. Stand-in 5 has none.
+ */
+const MAYAS = "stand-in-1";
+const DANIELS = "stand-in-3";
+const NO_DECK = "stand-in-5";
+const nameOf = (leadId: string) => `Stand-in ${leadId.split("-").at(-1)}`;
+const SAMPLE_LINE =
+  "Sample data: this stands in for the booking calendar. Nothing is booked.";
+
+beforeEach(() => {
+  startDashboard("/decks");
+  resetStandIns();
+  for (const id of [MAYAS, DANIELS]) {
+    standIns.patch.set(id, {
+      deck: {
+        templateName: "Discovery",
+        viewUrl: "https://decks.example/view",
+        pdfUrl: "https://decks.example/pdf",
+      },
+      formAnswers: [
+        { question: "What do you want to achieve?", answer: "More bookings" },
+      ],
+    });
+  }
+});
 afterEach(() => {
   cleanup();
   stopDashboard();
 });
 
-/** Maya's lead with a deck, Daniel's lead with a deck, and a lead with none. */
-const MAYAS = "Hannah Kowalczyk";
-const DANIELS = "Reuben Castellanos";
-const NO_DECK = "Imogen Vasquez";
-const SAMPLE_LINE =
-  "Sample data: this stands in for the booking calendar. Nothing is booked.";
-
 /** Opens a lead's deck at an address, as the page would render it. */
-async function open(name: string, extra = "", missing?: DeckScreenMissing) {
-  const leadId = await leadIdOf(name);
+function open(leadId: string, extra = "", missing?: DeckScreenMissing) {
   resetNavigation(`${deckHref(leadId)}${extra}`);
   renderScreen(<Page missing={missing} />);
   return leadId;
 }
-async function present(name: string, extra = "") {
-  const leadId = await open(name, extra);
-  await screen.findByRole("heading", { level: 1, name: `Deck for ${name}` });
+async function present(leadId: string, extra = "") {
+  open(leadId, extra);
+  await screen.findByRole("heading", {
+    level: 1,
+    name: `Deck for ${nameOf(leadId)}`,
+  });
   return leadId;
 }
 const button = (name: string | RegExp) =>
@@ -90,25 +117,25 @@ test("with no lead in the address, lists the leads that have a deck, each a link
   await screen.findByRole("heading", { level: 1, name: "Deck presenter" });
 
   const rows = await screen.findAllByRole("listitem");
-  expect(rows.length).toBeGreaterThan(5);
-  const hannah = screen.getByRole("link", { name: /Hannah Kowalczyk/ });
-  expect(hannah.getAttribute("href")).toBe(deckHref(await leadIdOf(MAYAS)));
-  expect(hannah.textContent).toContain("Kowalczyk Eye Care");
-  expect(hannah.textContent).toContain("Discovery template");
+  expect(rows).toHaveLength(2);
+  const first = screen.getByRole("link", { name: /Stand-in 1/ });
+  expect(first.getAttribute("href")).toBe(deckHref(MAYAS));
+  expect(first.textContent).toContain("Company 1");
+  expect(first.textContent).toContain("Discovery template");
   // A lead with no deck is not offered.
-  expect(screen.queryByRole("link", { name: /Imogen Vasquez/ })).toBeNull();
+  expect(screen.queryByRole("link", { name: /Stand-in 5/ })).toBeNull();
   expect(document.body.textContent).not.toMatch(FORBIDDEN);
 });
 
 test("the picker shows only a rep's own leads' decks", async () => {
   viewAs("rep");
   renderScreen(<Page />);
-  await screen.findByRole("link", { name: /Hannah Kowalczyk/ });
-  expect(screen.queryByRole("link", { name: /Reuben Castellanos/ })).toBeNull();
+  await screen.findByRole("link", { name: /Stand-in 1/ });
+  expect(screen.queryByRole("link", { name: /Stand-in 3/ })).toBeNull();
 });
 
-test("the picker says so when no lead has a deck", async () => {
-  vi.mocked(fetch).mockImplementationOnce(async () => Response.json([]));
+test("with real leads, none of which has a deck yet, the picker says so", async () => {
+  resetStandIns();
   renderScreen(<Page />);
   await screen.findByText("No decks yet");
   screen.getByText(/Decks generate on their own for valid leads/);
@@ -128,30 +155,28 @@ test("the picker shows a skeleton while loading, and an error with Try again", a
   await screen.findByText("The decks could not be loaded");
 
   fireEvent.click(button("Try again"));
-  await screen.findByRole("link", { name: /Hannah Kowalczyk/ });
+  await screen.findByRole("link", { name: /Stand-in 1/ });
 });
 
 // --- slides and the address --------------------------------------------------
 
 test("shows the first slide, and Next and Previous move through the deck in the address", async () => {
-  const leadId = await present(MAYAS);
-  const deck = await getDeck(leadId);
+  await present(MAYAS);
+  const deck = await getDeck(MAYAS);
 
-  expect(slideHeading()).toBe("Kowalczyk Eye Care");
-  expect(slide()?.getAttribute("aria-label")).toBe(
-    "Slide 1 of 7: Kowalczyk Eye Care",
-  );
+  expect(slideHeading()).toBe("Company 1");
+  expect(slide()?.getAttribute("aria-label")).toBe("Slide 1 of 7: Company 1");
   expect(counter()).toBe("1 of 7");
   expect(button("Previous slide").disabled).toBe(true);
   expect(outline().map((link) => link.textContent)).toEqual(
     deck.slides.map((item, index) => `${index + 1}${item.heading}`),
   );
   expect(outline()[0].getAttribute("aria-current")).toBe("true");
-  expect(outline()[2].getAttribute("href")).toBe(`${deckHref(leadId)}?slide=3`);
+  expect(outline()[2].getAttribute("href")).toBe(`${deckHref(MAYAS)}?slide=3`);
 
   fireEvent.click(button("Next slide"));
   await waitFor(() => expect(counter()).toBe("2 of 7"));
-  expect(address()).toBe(`${deckHref(leadId)}?slide=2`);
+  expect(address()).toBe(`${deckHref(MAYAS)}?slide=2`);
   expect(slideHeading()).toBe("What you told us");
   expect(outline()[1].getAttribute("aria-current")).toBe("true");
   // Replaced, not pushed: Back leaves the deck.
@@ -160,19 +185,19 @@ test("shows the first slide, and Next and Previous move through the deck in the 
   fireEvent.click(button("Previous slide"));
   await waitFor(() => expect(counter()).toBe("1 of 7"));
   // The first slide needs no number.
-  expect(address()).toBe(deckHref(leadId));
+  expect(address()).toBe(deckHref(MAYAS));
   expect(document.body.textContent).not.toMatch(FORBIDDEN);
 });
 
 test("the arrow keys move between slides, but not from inside a control that uses them", async () => {
-  const leadId = await present(MAYAS, "?slide=6");
+  await present(MAYAS, "?slide=6");
 
   fireEvent.keyDown(document.body, { key: "ArrowRight" });
   await waitFor(() => expect(counter()).toBe("7 of 7"));
   expect(button("Next slide").disabled).toBe(true);
   // Nothing past the last slide.
   fireEvent.keyDown(document.body, { key: "ArrowRight" });
-  expect(address()).toBe(`${deckHref(leadId)}?slide=7`);
+  expect(address()).toBe(`${deckHref(MAYAS)}?slide=7`);
 
   fireEvent.keyDown(document.body, { key: "ArrowLeft" });
   await waitFor(() => expect(counter()).toBe("6 of 7"));
@@ -180,7 +205,7 @@ test("the arrow keys move between slides, but not from inside a control that use
   // The template select keeps its own arrow keys.
   fireEvent.keyDown(screen.getByLabelText("Template"), { key: "ArrowLeft" });
   fireEvent.keyDown(document.body, { key: "ArrowLeft", ctrlKey: true });
-  expect(address()).toBe(`${deckHref(leadId)}?slide=6`);
+  expect(address()).toBe(`${deckHref(MAYAS)}?slide=6`);
 });
 
 test("a reload or a shared link lands on the slide in the address", async () => {
@@ -201,7 +226,7 @@ test("a slide number past the end is the last slide; a bad one is the first", as
 // --- edit text ---------------------------------------------------------------
 
 test("Edit text turns the slide's heading and text into fields; Save writes them and shows them on the slide", async () => {
-  const leadId = await present(MAYAS, "?slide=3");
+  await present(MAYAS, "?slide=3");
 
   fireEvent.click(button("Edit text"));
   const form = screen.getByRole("form", { name: "Edit this slide's text" });
@@ -215,7 +240,7 @@ test("Edit text turns the slide's heading and text into fields; Save writes them
   expect(button("Next slide").disabled).toBe(true);
   expect(button("Present full screen").disabled).toBe(true);
   fireEvent.keyDown(document.body, { key: "ArrowRight" });
-  expect(address()).toBe(`${deckHref(leadId)}?slide=3`);
+  expect(address()).toBe(`${deckHref(MAYAS)}?slide=3`);
 
   // An empty heading is refused in place, before any request.
   fireEvent.change(heading, { target: { value: "  " } });
@@ -224,10 +249,10 @@ test("Edit text turns the slide's heading and text into fields; Save writes them
   expect(heading.getAttribute("aria-invalid")).toBe("true");
   expect(api.calls().some((call) => call.startsWith("PATCH"))).toBe(false);
 
-  fireEvent.change(heading, { target: { value: "What Hannah wants" } });
+  fireEvent.change(heading, { target: { value: "What they want" } });
   expect(within(form).queryByText("Enter a heading.")).toBeNull();
   fireEvent.change(within(form).getByLabelText("Text"), {
-    target: { value: "In her own words." },
+    target: { value: "In their own words." },
   });
   fireEvent.change(points, {
     target: { value: "More bookings\n\nFewer no-shows" },
@@ -235,20 +260,20 @@ test("Edit text turns the slide's heading and text into fields; Save writes them
   fireEvent.click(button("Save"));
 
   await screen.findByText("Slide saved");
-  expect(slideHeading()).toBe("What Hannah wants");
+  expect(slideHeading()).toBe("What they want");
   const drawn = within(slide() as HTMLElement);
-  drawn.getByText("In her own words.");
+  drawn.getByText("In their own words.");
   expect(
     drawn.getAllByRole("listitem").map((item) => item.textContent),
   ).toEqual(["More bookings", "Fewer no-shows"]);
-  expect(outline()[2].textContent).toBe("3What Hannah wants");
-  expect(api.calls()).toContain(`PATCH /api/decks/${leadId}/slides/goals`);
+  expect(outline()[2].textContent).toBe("3What they want");
+  expect(api.calls()).toContain(`PATCH /api/decks/${MAYAS}/slides/goals`);
   // Stored, not only shown.
-  expect((await getDeck(leadId)).slides[2].heading).toBe("What Hannah wants");
+  expect((await getDeck(MAYAS)).slides[2].heading).toBe("What they want");
 });
 
 test("Cancel leaves the slide as it was; a failed save keeps the text and can be tried again", async () => {
-  const leadId = await present(MAYAS, "?slide=4");
+  await present(MAYAS, "?slide=4");
 
   fireEvent.click(button("Edit text"));
   fireEvent.change(screen.getByLabelText("Heading"), {
@@ -267,7 +292,7 @@ test("Cancel leaves the slide as it was; a failed save keeps the text and can be
   expect(screen.getByLabelText<HTMLInputElement>("Heading").value).toBe(
     "How we will work",
   );
-  expect((await getDeck(leadId)).slides[3].heading).toBe("How we work");
+  expect((await getDeck(MAYAS)).slides[3].heading).toBe("How we work");
 
   fireEvent.click(button("Save"));
   await screen.findByText("Slide saved");
@@ -276,15 +301,8 @@ test("Cancel leaves the slide as it was; a failed save keeps the text and can be
 
 // --- switch template ---------------------------------------------------------
 
-test("switching template redraws the deck, keeps an edit to a shared slide, and the lead follows", async () => {
-  const leadId = await present(MAYAS, "?slide=3");
-  fireEvent.click(button("Edit text"));
-  fireEvent.change(screen.getByLabelText("Heading"), {
-    target: { value: "Shared edit" },
-  });
-  fireEvent.click(button("Save"));
-  await screen.findByText("Slide saved");
-
+test("until decks have their own table, a template change is refused: the screen says so and the deck and lead stay as they were", async () => {
+  await present(MAYAS, "?slide=3");
   const select = screen.getByLabelText<HTMLSelectElement>("Template");
   expect(select.value).toBe("discovery");
   expect(
@@ -295,15 +313,12 @@ test("switching template redraws the deck, keeps an edit to a shared slide, and 
   const before = outline().map((link) => link.textContent);
 
   fireEvent.change(select, { target: { value: "review" } });
-  await screen.findByText("The deck now uses the Review template");
-
-  expect(select.value).toBe("review");
-  expect(outline().map((link) => link.textContent)).not.toEqual(before);
-  expect(outline()[3].textContent).toBe("4The plan we propose");
-  // The same place in the deck, and the rep's edit to the slide both templates share.
+  await screen.findByText(/The template could not be changed/);
+  expect(api.calls()).toContain(`POST /api/decks/${MAYAS}/template`);
+  expect(select.value).toBe("discovery");
+  expect(outline().map((link) => link.textContent)).toEqual(before);
   expect(counter()).toBe("3 of 7");
-  expect(slideHeading()).toBe("Shared edit");
-  expect((await getLead(leadId)).deck?.templateName).toBe("Review");
+  expect((await getLead(MAYAS)).deck?.templateName).toBe("Discovery");
 });
 
 test("a template change that fails says so and leaves the deck as it was", async () => {
@@ -341,14 +356,14 @@ test("the last slide carries the booking calendar stand-in: sample call times th
 });
 
 test("Download PDF is a link to our own route, and the screen says what is sample data", async () => {
-  const leadId = await present(MAYAS);
+  await present(MAYAS);
   const link = screen.getByRole("link", { name: "Download PDF" });
-  expect(link.getAttribute("href")).toBe(`/api/decks/${leadId}/pdf`);
+  expect(link.getAttribute("href")).toBe(`/api/decks/${MAYAS}/pdf`);
   expect(link.hasAttribute("download")).toBe(true);
   screen.getByText(/Sample data: these slides are examples/);
   expect(
     screen.getByRole("link", { name: "Open the lead" }).getAttribute("href"),
-  ).toBe(`/leads/${leadId}`);
+  ).toBe(`/leads/${MAYAS}`);
   // There is no way to generate a deck by hand (spec 13).
   expect(screen.queryByRole("button", { name: /generate/i })).toBeNull();
 });
@@ -432,13 +447,13 @@ test("where full screen is unavailable, presenting covers the window instead, an
 test("shows a skeleton while the deck loads, then an error with Try again", async () => {
   api.fail("GET", /^\/api\/decks\/[^/]+$/, 500, { once: true });
   const release = api.hold("GET", /^\/api\/decks\/[^/]+$/);
-  await open(MAYAS);
+  open(MAYAS);
   screen.getByRole("status", { name: "Loading deck" });
   release();
   await screen.findByText("This deck could not be loaded");
 
   fireEvent.click(button("Try again"));
-  await screen.findByRole("heading", { level: 1, name: `Deck for ${MAYAS}` });
+  await screen.findByRole("heading", { level: 1, name: "Deck for Stand-in 1" });
 });
 
 test("an unknown lead is a state of its own, whether the server or the browser finds out", async () => {
@@ -456,28 +471,25 @@ test("an unknown lead is a state of its own, whether the server or the browser f
   );
 });
 
-test("a lead with no deck yet says decks generate on their own, and offers no way to generate one", async () => {
-  const leadId = await open(NO_DECK);
-  await screen.findByText(`${NO_DECK} has no deck yet`);
+test("a lead with no deck yet, as every real lead is today, says decks generate on their own, and offers no way to generate one", async () => {
+  open(NO_DECK);
+  await screen.findByText("Stand-in 5 has no deck yet");
   screen.getByText(/Decks generate on their own for valid leads/);
   expect(screen.queryAllByRole("button")).toHaveLength(0);
   expect(
     screen.getByRole("link", { name: "Open the lead" }).getAttribute("href"),
-  ).toBe(`/leads/${leadId}`);
+  ).toBe(`/leads/${NO_DECK}`);
   cleanup();
 
   // The same when the server already knows.
-  await open(NO_DECK, "", "deck");
-  await screen.findByText(`${NO_DECK} has no deck yet`);
+  open(NO_DECK, "", "deck");
+  await screen.findByText("Stand-in 5 has no deck yet");
 });
 
 test("another rep's deck does not exist for a rep", async () => {
-  // `leadIdOf` asks as the signed-in role, so the id is found as an admin first.
-  viewAs("admin");
-  const leadId = await leadIdOf(DANIELS);
   viewAs("rep");
-  resetNavigation(deckHref(leadId));
+  resetNavigation(deckHref(DANIELS));
   renderScreen(<Page />);
   await screen.findByText("This lead does not exist");
-  expect(screen.queryByText(/Castellanos/)).toBeNull();
+  expect(screen.queryByText(/Stand-in 3/)).toBeNull();
 });

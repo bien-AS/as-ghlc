@@ -3,36 +3,16 @@ import { expect, test } from "vitest";
 import {
   effectiveVerdict,
   nextStep,
-  STATUS_META,
+  statusMeta,
   VERDICT_META,
 } from "@/lib/leads/rules";
-import {
-  type Booking,
-  type LeadDetail,
-  STATUSES,
-  VERDICTS,
-} from "@/lib/leads/schemas";
+import { type Booking, type LeadDetail, VERDICTS } from "@/lib/leads/schemas";
 
-const TONES = ["neutral", "brand", "ok", "warn", "crit"];
-
-test("every status in the list has a label and a tone, as spec 05 gives them", () => {
-  for (const status of STATUSES) {
-    expect(STATUS_META[status].label).not.toBe("");
-    expect(TONES).toContain(STATUS_META[status].tone);
-  }
+test("a Lead Status chip is the status's own value and tone (status_defs); none synced yet is neutral", () => {
   expect(
-    Object.fromEntries(STATUSES.map((s) => [s, STATUS_META[s].tone])),
-  ).toEqual({
-    awaiting_verdict: "warn",
-    flagged_suspect: "crit",
-    drip_chasing: "warn",
-    deck_ready: "ok",
-    needs_decision: "warn",
-    qualified: "ok",
-    proposal_ready: "ok",
-    not_a_fit: "crit",
-    removed: "crit",
-  });
+    statusMeta({ value: "Lost - Spam", group: "Lost", tone: "crit" }),
+  ).toEqual({ label: "Lost - Spam", tone: "crit" });
+  expect(statusMeta(null)).toEqual({ label: "No status yet", tone: "neutral" });
 });
 
 test("every verdict has its word and tone: ok for valid, warn for awaiting, crit for suspect and spam", () => {
@@ -156,8 +136,7 @@ test.each(table)("%s", (_name, lead, main, secondary, hint) => {
   expect(step.main).toBe(main);
   expect(step.secondary).toBe(secondary);
   expect(step.hint).toBe(hint);
-  // The two standing actions: lost while in the pipeline, spam until won.
-  expect(step.canMarkLost).toBe(true);
+  // The standing action: spam until won.
   expect(step.canMarkSpam).toBe(lead.stage !== "won");
   expect(step.canReview).toBe(main === "review");
   expect(step.canQualify).toBe(main === "qualify");
@@ -170,8 +149,8 @@ test.each([
 ] as const)(
   "a lead that left through %s offers no action and says which exit",
   (exit, label) => {
-    // Whatever stage it left from, and whatever the verdict was.
-    for (const stage of ["new", "discovery_booked", "won"] as const) {
+    // Whatever stage it left from (none, for Lead Lost and Nurturing), and whatever the verdict was.
+    for (const stage of [null, "new", "discovery_booked", "won"] as const) {
       const step = nextStep({
         stage,
         exit,
@@ -183,13 +162,23 @@ test.each([
         secondary: null,
         canReview: false,
         canQualify: false,
-        canMarkLost: false,
         canMarkSpam: false,
       });
       expect(step.hint).toContain(label);
     }
   },
 );
+
+test("a lead whose stage has not synced yet waits, with spam the one action", () => {
+  expect(
+    nextStep({ stage: null, exit: null, verdict: "valid", bookings: [] }),
+  ).toMatchObject({
+    main: null,
+    hint: "Waiting for this lead's stage to sync.",
+    canQualify: false,
+    canMarkSpam: true,
+  });
+});
 
 test("a suspect with a call already booked is reviewed before anything else", () => {
   const step = nextStep({

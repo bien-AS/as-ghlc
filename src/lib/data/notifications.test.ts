@@ -4,17 +4,14 @@ import { POST as postRead } from "@/app/api/notifications/[notificationId]/read/
 import { GET as getList } from "@/app/api/notifications/route";
 import { GET as getCount } from "@/app/api/notifications/unread-count/route";
 import { updateAccountPreferences } from "@/lib/data/account";
-import {
-  listVisibleLeads,
-  recordProposalStatus,
-  resetSampleLeads,
-} from "@/lib/data/leads";
+import { listVisibleLeads } from "@/lib/data/leads";
 import {
   createNotification,
   getUnreadCount,
   listNotifications,
   markNotificationRead,
 } from "@/lib/data/notifications";
+import { resetSampleData } from "@/lib/data/sample";
 import { notificationText } from "@/lib/notifications/rules";
 import {
   NOTIFICATION_TYPES,
@@ -39,6 +36,16 @@ vi.mock(
   "@/db/client",
   async () => (await import("@/test/server-fakes")).dbModule,
 );
+/*
+ * Leads live in Postgres; this module reaches them only through
+ * `listVisibleLeads`. The six stand-ins are suspects, so each raises
+ * "suspect to review"; a real lead raises no proposal or invoice notification
+ * until those are read from their tables (specs 12 and 13).
+ */
+vi.mock("@/lib/data/leads", async (original) => ({
+  ...(await original<typeof import("@/lib/data/leads")>()),
+  ...(await import("@/test/mockup-stand-ins")).mockupLeadsModule,
+}));
 
 const ORIGIN = "http://localhost:3000";
 const NOW = new Date("2026-10-07T12:00:00.000Z");
@@ -55,7 +62,7 @@ const BRANDS =
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"], now: NOW });
   resetFakes();
-  resetSampleLeads();
+  resetSampleData();
   signIn();
   fake.users.set(ada.id, ada);
 });
@@ -77,11 +84,11 @@ const read = (notificationId: string) =>
 
 // --- what is in the list -------------------------------------------------------
 
-test("every sample notification matches the contract, is one of the three types, and is listed newest first", async () => {
+test("every sample notification matches the contract and is listed newest first; real leads raise only suspects to review", async () => {
   const page = await listNotifications({ limit: 100 });
   expect(notificationPageSchema.parse(page)).toEqual(page);
   expect(page.nextCursor).toBeNull();
-  expect(page.items.length).toBeGreaterThan(5);
+  expect(page.items).toHaveLength(6);
   expect(new Set(page.items.map((item) => item.id)).size).toBe(
     page.items.length,
   );
@@ -90,9 +97,10 @@ test("every sample notification matches the contract, is one of the three types,
   expect(times).toEqual([...times].sort().reverse());
   // Nothing is dated in the future: the times are the leads' own activities.
   expect(times.every((time) => time <= NOW.toISOString())).toBe(true);
-  for (const type of NOTIFICATION_TYPES) {
-    expect(page.items.some((item) => item.type === type)).toBe(true);
-  }
+  // No lead has a proposal or an invoice yet.
+  expect(new Set(page.items.map((item) => item.type))).toEqual(
+    new Set(["suspect_to_review"]),
+  );
 });
 
 test("the notifications follow from the leads: a suspect awaiting review, a signed proposal on a won lead, an invoice draft", async () => {
@@ -160,20 +168,14 @@ test("the list is paged with an opaque cursor: every notification appears once, 
 test("a notification raised between two pages does not repeat or skip what the user is reading", async () => {
   const all = await everything();
   const first = await listNotifications({ limit: 4 });
-  const lead = (await listVisibleLeads()).find(
-    (candidate) => candidate.stage === "proposal_sent" && !candidate.exit,
-  );
-  await recordProposalStatus(lead?.id ?? "", "signed");
-  await createNotification({
-    leadId: lead?.id ?? "",
-    type: "proposal_signed",
-  });
+  await createNotification({ leadId: "stand-in-1", type: "proposal_signed" });
 
   const second = await listNotifications({
     cursor: first.nextCursor ?? undefined,
     limit: 4,
   });
   expect(second.items).toEqual(all.slice(4, 8));
+  expect(second.items).toHaveLength(2);
 });
 
 // --- unread and mark read --------------------------------------------------------
@@ -188,7 +190,7 @@ test("a fixed share starts unread, and the unread count is the number of unread 
   });
 
   // The same share after starting again: nothing about it is random.
-  resetSampleLeads();
+  resetSampleData();
   expect((await everything()).map((item) => item.read)).toEqual(
     all.map((item) => item.read),
   );
@@ -242,7 +244,7 @@ test("a rep sees notifications only for the leads they own; an admin sees every 
 test("the sample is the same whichever role reads it first", async () => {
   const adminFirst = await everything();
 
-  resetSampleLeads();
+  resetSampleData();
   viewAs("rep");
   await everything();
   viewAs("admin");
@@ -254,7 +256,7 @@ test("for a rep, another rep's notification is not found: it cannot be marked re
   const theirs = (await everything()).find(
     (item) =>
       !item.read &&
-      leads.find((lead) => lead.id === item.lead.id)?.owner.id !==
+      leads.find((lead) => lead.id === item.lead.id)?.owner?.id !==
         SAMPLE_REP.id,
   ) as Notification;
 
@@ -275,20 +277,16 @@ test("for a rep, another rep's notification is not found: it cannot be marked re
 test("a raised notification appears at the top, unread, and raises the count; raising it again changes nothing", async () => {
   const before = await everything();
   const { count } = await getUnreadCount();
-  const lead = (await listVisibleLeads()).find(
-    (candidate) => candidate.stage === "proposal_sent" && !candidate.exit,
-  );
-  const leadId = lead?.id ?? "";
+  const leadId = "stand-in-1";
 
   vi.setSystemTime(new Date(NOW.getTime() + 60_000));
-  await recordProposalStatus(leadId, "signed");
   await createNotification({ leadId, type: "proposal_signed" });
 
   const after = await everything();
   expect(after).toHaveLength(before.length + 1);
   expect(after[0]).toMatchObject({
     type: "proposal_signed",
-    lead: { id: leadId, name: lead?.name },
+    lead: { id: leadId, name: "Stand-in 1" },
     read: false,
     createdAt: "2026-10-07T12:01:00.000Z",
   });
@@ -299,17 +297,15 @@ test("a raised notification appears at the top, unread, and raises the count; ra
 });
 
 test("a notification raised before the list was ever read is not doubled by the sample", async () => {
-  const lead = (await listVisibleLeads()).find(
-    (candidate) => candidate.stage === "proposal_sent" && !candidate.exit,
-  );
-  await recordProposalStatus(lead?.id ?? "", "signed");
+  // The sample would derive the same one from the lead's suspect verdict.
   await createNotification({
-    leadId: lead?.id ?? "",
-    type: "proposal_signed",
+    leadId: "stand-in-1",
+    type: "suspect_to_review",
   });
 
   const mine = (await everything()).filter(
-    (item) => item.lead.id === lead?.id && item.type === "proposal_signed",
+    (item) =>
+      item.lead.id === "stand-in-1" && item.type === "suspect_to_review",
   );
   expect(mine).toHaveLength(1);
 });
@@ -320,7 +316,7 @@ test("a notification cannot be raised for an unknown lead, or by a rep for anoth
   ).rejects.toEqual(refusedWith("not_found"));
 
   const theirs = (await listVisibleLeads()).find(
-    (lead) => lead.owner.id !== SAMPLE_REP.id,
+    (lead) => lead.owner?.id !== SAMPLE_REP.id,
   );
   viewAs("rep");
   await expect(
@@ -340,8 +336,12 @@ test("a type switched off in account preferences is left out of the list and the
     },
   });
 
-  const kept = all.filter((item) => item.type !== "suspect_to_review");
-  expect(kept.length).toBeLessThan(all.length);
+  await createNotification({ leadId: "stand-in-1", type: "proposal_signed" });
+  const kept = (await listNotifications({ limit: 100 })).items.filter(
+    (item) => item.type !== "suspect_to_review",
+  );
+  expect(all.length).toBeGreaterThan(0);
+  expect(kept).toHaveLength(1);
   expect(await everything()).toEqual(kept);
   expect(await getUnreadCount()).toEqual({
     count: kept.filter((item) => !item.read).length,
@@ -390,16 +390,21 @@ test("the routes answer 401 signed out and 403 without a profile, before reading
 });
 
 test("GET /api/notifications returns a page, follows its cursor, and rejects a bad limit or an unknown parameter", async () => {
-  const first = await list();
-  expect(first.status).toBe(200);
+  const all = await list();
+  expect(all.status).toBe(200);
+  expect(notificationPageSchema.parse(await all.json()).items).toEqual(
+    await everything(),
+  );
+
+  const first = await list("?limit=4");
   const page = notificationPageSchema.parse(await first.json());
-  expect(page.items).toEqual((await everything()).slice(0, 10));
+  expect(page.items).toEqual((await everything()).slice(0, 4));
 
   const next = await list(
-    `?cursor=${encodeURIComponent(page.nextCursor ?? "")}`,
+    `?limit=4&cursor=${encodeURIComponent(page.nextCursor ?? "")}`,
   );
   expect(notificationPageSchema.parse(await next.json()).items).toEqual(
-    (await everything()).slice(10, 20),
+    (await everything()).slice(4, 8),
   );
 
   for (const search of ["?limit=0", "?limit=many", "?unread=true"]) {

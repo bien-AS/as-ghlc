@@ -2,9 +2,14 @@ import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
 import type { Metadata } from "next";
 
 import { getPipelineSummary, listLeads } from "@/lib/data/leads";
+import { listStatusDefs } from "@/lib/data/status-defs";
 import { enforceRoute } from "@/lib/data/users";
-import { LEADS_PAGE_SIZE, parseLeadFilters } from "@/lib/leads/schemas";
-import { leadListOptions, pipelineSummaryOptions } from "@/lib/queries/leads";
+import { listLeadsQuerySchema, parseLeadFilters } from "@/lib/leads/schemas";
+import {
+  leadListOptions,
+  pipelineSummaryOptions,
+  statusDefsOptions,
+} from "@/lib/queries/leads";
 import { getQueryClient } from "@/lib/query-client";
 import { getViewerTimeZone } from "@/lib/viewer-time-zone";
 
@@ -26,11 +31,17 @@ export default async function LeadsPage({ searchParams }: PageProps<"/leads">) {
     queryClient.prefetchInfiniteQuery({
       ...leadListOptions(filters),
       queryFn: ({ pageParam }) =>
-        listLeads({ ...filters, cursor: pageParam, limit: LEADS_PAGE_SIZE }),
+        listLeads(
+          listLeadsQuerySchema.parse({ ...filters, cursor: pageParam }),
+        ),
     }),
     queryClient.prefetchQuery({
       ...pipelineSummaryOptions(timeZone),
       queryFn: () => getPipelineSummary({ tz: timeZone }),
+    }),
+    queryClient.prefetchQuery({
+      ...statusDefsOptions(),
+      queryFn: listStatusDefs,
     }),
   ]);
 

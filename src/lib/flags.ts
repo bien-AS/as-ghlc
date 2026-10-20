@@ -11,9 +11,10 @@ const SCREENS: Record<string, "live" | "mockup"> = {
   dashboard: "live",
   // Reads the real ghl_sync_log and webhook_events rows (spec 06).
   "sync-log": "live",
+  // Read the synced leads table (spec 07).
+  "lead-list": "live",
+  "lead-detail": "live",
   // Mockups on sample data until each screen's own session replaces them.
-  "lead-list": "mockup",
-  "lead-detail": "mockup",
   "suspect-review-queue": "mockup",
   "deck-detail": "mockup",
   "proposal-detail": "mockup",

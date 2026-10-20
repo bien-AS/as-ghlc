@@ -244,7 +244,9 @@ function Builder({ leadId, missing }: { leadId: string; missing: boolean }) {
             <Badge variant={status.tone}>Proposal: {status.label}</Badge>
           </li>
           <li>
-            <Badge>Stage: {STAGE_LABEL[lead.stage]}</Badge>
+            <Badge>
+              Stage: {lead.stage ? STAGE_LABEL[lead.stage] : "None"}
+            </Badge>
           </li>
         </ul>
       </PageHeader>
