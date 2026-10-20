@@ -26,8 +26,8 @@ import {
 
 export const GHL_IMPORT_REQUESTED = "ghl/import.requested";
 
-type Actor = "import" | "reconcile";
-type Outcome = "created" | "updated" | "unchanged" | "skipped";
+type Actor = "import" | "reconcile" | "webhook";
+export type Outcome = "created" | "updated" | "unchanged" | "skipped";
 
 /** The reconcile leaves closed leads alone (spec 06). */
 const CLOSED = new Set(["Lead Won", "Lead Lost"]);
@@ -47,14 +47,27 @@ async function profileFor(ghlUserId: string | null): Promise<string | null> {
   return profile?.id ?? null;
 }
 
+/** The booking columns an appointment webhook sets; GHL owns bookings (ADR-0009). */
+export type Booking = Partial<
+  Pick<
+    typeof leads.$inferInsert,
+    | "discoveryBookingAt"
+    | "discoveryBookingStatus"
+    | "reviewBookingAt"
+    | "reviewBookingStatus"
+  >
+>;
+
 /**
- * Brings one lead in step with its opportunity. The lead is found by
- * opportunity, or by contact (a contact can arrive before its opportunity);
- * a soft-deleted lead is never brought back. Unchanged writes nothing.
+ * Brings one lead in step with its opportunity, plus any booking change a
+ * webhook carries. The lead is found by opportunity, or by contact (a contact
+ * can arrive before its opportunity); a soft-deleted lead is never brought
+ * back. Unchanged writes nothing.
  */
 export async function syncOpportunity(
   opportunity: GhlOpportunity,
   actor: Actor,
+  booking: Booking = {},
 ): Promise<Outcome> {
   const existing = await db.query.leads.findFirst({
     where: or(
@@ -67,12 +80,12 @@ export async function syncOpportunity(
     return "skipped";
   }
 
-  const copy = leadFromGhl(
-    opportunity,
-    await getContact(opportunity.contactId),
-  );
+  const copy: LeadCopy & Booking = {
+    ...leadFromGhl(opportunity, await getContact(opportunity.contactId)),
+    ...booking,
+  };
   const changed = existing
-    ? (Object.keys(copy) as (keyof LeadCopy)[]).filter(
+    ? (Object.keys(copy) as (keyof typeof copy)[]).filter(
         (key) => !same(existing[key], copy[key]),
       )
     : [];
@@ -104,7 +117,11 @@ export async function syncOpportunity(
       toStatus: copy.leadStatus,
       actor,
       // Field names only, never values: the timeline is not a copy of the contact.
-      note: existing ? `corrected: ${changed.join(", ")}` : "imported",
+      note: existing
+        ? `corrected: ${changed.join(", ")}`
+        : actor === "webhook"
+          ? "created"
+          : "imported",
     });
   });
   return existing ? "updated" : "created";

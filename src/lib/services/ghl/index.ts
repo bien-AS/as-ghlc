@@ -129,13 +129,11 @@ export async function ghlRequest(
       continue;
     }
     if (!res.ok) {
-      const body = (await res.text()).slice(0, 300);
+      // Redact before cutting: a cut can leave half a token that replaceAll would miss.
+      const body = (await res.text()).replaceAll(token, "[redacted]");
       throw new GhlError(
         res.status,
-        `GHL ${res.status} on ${method} ${path}: ${body}`.replaceAll(
-          token,
-          "[redacted]",
-        ),
+        `GHL ${res.status} on ${method} ${path}: ${body.slice(0, 300)}`,
       );
     }
     return res.json();
@@ -217,6 +215,23 @@ export const getOpportunity = async (id: string) =>
       z.object({ opportunity: opportunitySchema }),
     )
   ).opportunity;
+
+/** The contact's opportunity in the configured pipeline, or null (a contact can arrive before its opportunity). */
+export async function findContactOpportunity(
+  contactId: string,
+): Promise<GhlOpportunity | null> {
+  const cfg = ghlConfig();
+  const query = new URLSearchParams({
+    location_id: cfg.locationId,
+    pipeline_id: cfg.pipelineId,
+    contact_id: contactId,
+  });
+  const { opportunities } = await get(
+    `/opportunities/search?${query}`,
+    z.object({ opportunities: z.array(opportunitySchema) }),
+  );
+  return opportunities[0] ?? null;
+}
 
 export const getContact = async (id: string) =>
   (
