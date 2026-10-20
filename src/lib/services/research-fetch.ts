@@ -42,7 +42,15 @@ for (const [net, prefix] of [
   blocked.addSubnet(net, prefix, "ipv4");
 }
 for (const [net, prefix] of [
-  ["::", 127],
+  // Unspecified, loopback and IPv4-compatible (::a.b.c.d). This and the next
+  // four carry an IPv4 address BlockList does not unwrap: SIIT, NAT64, 6to4.
+  ["::", 96],
+  ["::ffff:0:0:0", 96],
+  ["64:ff9b::", 96],
+  ["64:ff9b:1::", 48],
+  ["2002::", 16],
+  // Deprecated site-local.
+  ["fec0::", 10],
   ["fc00::", 7],
   ["fe80::", 10],
   ["ff00::", 8],

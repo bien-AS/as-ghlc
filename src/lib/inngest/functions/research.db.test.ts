@@ -1,6 +1,8 @@
 // @vitest-environment node
 import "dotenv/config";
 
+import { randomUUID } from "node:crypto";
+
 import { desc, eq, sql, TransactionRollbackError } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { NonRetriableError } from "inngest";
@@ -19,7 +21,7 @@ import { estimateResearchCost, getLatestResearch } from "@/lib/data/research";
 
 import type { Completion } from "@/lib/services/llm";
 
-import { researchHandler } from "./research";
+import { markRunFailed, researchHandler } from "./research";
 
 /*
  * The research job against the real database, with the website fetch and the
@@ -71,8 +73,8 @@ const step = {
       throw error;
     }),
 };
-const run = (leadId: string) =>
-  researchHandler({ event: { data: { leadId } }, step });
+const run = (leadId: string, runId = randomUUID()) =>
+  researchHandler({ event: { data: { leadId } }, step, runId });
 
 const BRIEF = {
   summary: "Acme sells roofing in Austin; angle: no reviews on the site.",
@@ -270,4 +272,96 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
       expect(row.briefMd).toMatch(/No website/);
       expect((await getLatestResearch(leadId)).brief?.facts.claims).toEqual([]);
     }, null));
+
+  test("a run whose own 'failed' step dies is marked failed by onFailure, and a newer run is left alone", () =>
+    inRollback(async (db, leadId) => {
+      const lost = randomUUID();
+      // Only "start" reaches the database: the brief and the failed step both die, as on a hard timeout.
+      const dyingStep = {
+        run: <T>(name: string, fn: () => Promise<T>) =>
+          name === "start" ? fn() : Promise.reject(new Error("step lost")),
+      };
+      await expect(
+        researchHandler({
+          event: { data: { leadId } },
+          step: dyingStep,
+          runId: lost,
+        }),
+      ).rejects.toThrow("step lost");
+      const [stuck] = await rows(db, leadId);
+      expect(stuck.status).toBe("generating");
+
+      // The next run has opened its own row by the time onFailure runs.
+      await db
+        .update(schema.leadResearch)
+        .set({ createdAt: sql`now() - interval '1 minute'` })
+        .where(eq(schema.leadResearch.id, stuck.id));
+      await db
+        .insert(schema.leadResearch)
+        .values({ leadId, status: "generating" });
+
+      await markRunFailed(lost, new Error("Function timed out"));
+      const [newer, failed] = await rows(db, leadId);
+      expect(failed).toMatchObject({
+        id: stuck.id,
+        status: "failed",
+        error: "Function timed out",
+      });
+      expect(newer.status).toBe("generating");
+    }));
+
+  test("a run still 'generating' past the stale limit reads as failed, so the page stops waiting", () =>
+    inRollback(async (db, leadId) => {
+      await db.insert(schema.leadResearch).values({
+        leadId,
+        status: "generating",
+        createdAt: sql`now() - interval '1 hour'`,
+      });
+      expect((await getLatestResearch(leadId)).run).toMatchObject({
+        status: "failed",
+        error: expect.stringMatching(/did not finish/),
+      });
+
+      await db
+        .insert(schema.leadResearch)
+        .values({ leadId, status: "generating" });
+      expect((await getLatestResearch(leadId)).run).toMatchObject({
+        status: "generating",
+        error: null,
+      });
+    }));
+
+  test("a claim citing a page that was not fetched is stored as model inference", () =>
+    inRollback(async (db, leadId) => {
+      stubs.fetchSite.mockResolvedValue([
+        { url: "https://acme.example/", text: "Acme Roofing" },
+        { url: "https://acme.example/about/", text: "About Acme" },
+      ]);
+      stubs.complete.mockResolvedValue(
+        completion({
+          text: JSON.stringify({
+            ...BRIEF,
+            claims: [
+              { claim: "Sells roofing", source: "https://ACME.example" },
+              {
+                claim: "Family run",
+                source: "https://acme.example/about#team",
+              },
+              { claim: "Log in here", source: "https://evil.example/login" },
+              { claim: "Lists prices", source: "https://acme.example/pricing" },
+            ],
+          }),
+        }),
+      );
+      await run(leadId);
+      const [row] = await rows(db, leadId);
+      expect(row.facts).toMatchObject({
+        claims: [
+          { claim: "Sells roofing", source: "https://ACME.example" },
+          { claim: "Family run", source: "https://acme.example/about#team" },
+          { claim: "Log in here", source: "model inference" },
+          { claim: "Lists prices", source: "model inference" },
+        ],
+      });
+    }));
 });

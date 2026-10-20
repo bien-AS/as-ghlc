@@ -74,3 +74,31 @@ test("cost is null, never 0, when OpenRouter does not report it", async () => {
   expect(result.promptTokens).toBeNull();
   expect(log).toHaveBeenCalledWith(expect.stringContaining("cost=null"));
 });
+
+test("sends a caller's max_tokens cap and a timeout signal", async () => {
+  const fetchMock = stubOpenRouter();
+
+  await complete({ messages, maxTokens: 500 });
+
+  const init = fetchMock.mock.calls[0][1];
+  expect(JSON.parse(init.body as string).max_tokens).toBe(500);
+  expect(init.signal).toBeInstanceOf(AbortSignal);
+});
+
+test("a timed-out call fails with a message that does not carry the key", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => {
+      throw new DOMException(
+        "The operation was aborted due to timeout",
+        "TimeoutError",
+      );
+    }),
+  );
+
+  const error = await complete({ messages }).catch((e: Error) => e);
+
+  expect(error).toBeInstanceOf(Error);
+  expect((error as Error).message).toMatch(/did not answer within 120s/);
+  expect((error as Error).message).not.toContain("test-key");
+});

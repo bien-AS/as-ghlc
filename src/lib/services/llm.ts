@@ -6,6 +6,8 @@ import { z } from "zod";
  */
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+/** A call that has not answered by then is abandoned, so a hung request cannot hold a job open. */
+const TIMEOUT_MS = 120_000;
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant";
@@ -35,13 +37,15 @@ const responseSchema = z.object({
     .optional(),
 });
 
-/** One chat completion. `model` defaults to OPENROUTER_MODEL. */
+/** One chat completion. `model` defaults to OPENROUTER_MODEL; `maxTokens` caps the answer (and its cost). */
 export async function complete({
   messages,
   model = process.env.OPENROUTER_MODEL,
+  maxTokens,
 }: {
   messages: ChatMessage[];
   model?: string;
+  maxTokens?: number;
 }): Promise<Completion> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
@@ -53,7 +57,16 @@ export async function complete({
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ model, messages }),
+    body: JSON.stringify({ model, messages, max_tokens: maxTokens }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  }).catch((error: unknown) => {
+    // A message of our own, so nothing from the request (its key) can reach a log.
+    if ((error as { name?: unknown } | null)?.name === "TimeoutError") {
+      throw new Error(
+        `OpenRouter did not answer within ${TIMEOUT_MS / 1000}s for model ${model}`,
+      );
+    }
+    throw error;
   });
   if (!res.ok) {
     throw new Error(`OpenRouter ${res.status} for model ${model}`);
