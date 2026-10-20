@@ -301,6 +301,61 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
       expect(await events(db, moved.id)).toHaveLength(2);
     }));
 
+  test("a booked event applied after a later cancel (an Inngest retry) leaves the booking cancelled", () =>
+    inRollback(async (db) => {
+      setOpportunity(1, "New Lead", "New - Contacted");
+      await deliver("contact_created", contactCreated());
+      const record = (
+        type: WebhookType,
+        payload: { webhookId: string },
+        at: string,
+      ) =>
+        recordWebhookEvent({
+          eventId: payload.webhookId,
+          type,
+          verified: true,
+          payload,
+          createdAt: new Date(at),
+        }) as Promise<string>;
+      const booked = await record(
+        "appointment_booked",
+        appointment(1, "wh-late-booked"),
+        "2026-10-20T15:00:00Z",
+      );
+      const cancelled = await record(
+        "appointment_cancelled",
+        appointment(1, "wh-cancel-first"),
+        "2026-10-20T15:05:00Z",
+      );
+      await applyWebhookEvent(cancelled);
+      expect((await lead(db)).discoveryBookingStatus).toBe("cancelled");
+      await applyWebhookEvent(booked);
+      expect((await lead(db)).discoveryBookingStatus).toBe("cancelled");
+
+      // A booking received after the cancel still applies (a rebooking).
+      await applyWebhookEvent(
+        await record(
+          "appointment_booked",
+          appointment(1, "wh-rebooked"),
+          "2026-10-20T15:10:00Z",
+        ),
+      );
+      expect((await lead(db)).discoveryBookingStatus).toBe("booked");
+    }));
+
+  test("a lead first created by stage changed is sent to validation", () =>
+    inRollback(async (db) => {
+      setOpportunity(1, "New Lead", "New - Contacted");
+      const { outcome } = await deliver("stage_changed", stageChanged());
+      expect(outcome).toBe("created");
+      const created = await lead(db);
+      expect(send).toHaveBeenCalledExactlyOnceWith({
+        id: `validation-${created.id}`,
+        name: "lead/validation.requested",
+        data: { leadId: created.id },
+      });
+    }));
+
   test("a contact with no opportunity yet: the job throws for a retry, and the failure is recorded", () =>
     inRollback(async (db) => {
       const id = await recordWebhookEvent({

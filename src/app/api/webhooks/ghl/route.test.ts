@@ -23,15 +23,25 @@ type Row = {
   outcome?: string | null;
 };
 const table = vi.hoisted(() => new Map<string, Row>());
+/** Set to make the next insert or delete fail, as an unreachable database would. */
+const down = vi.hoisted(() => ({ record: false, forget: false }));
 vi.mock("@/lib/inngest/functions/ghl-webhook", async (original) => ({
   ...(await original<typeof import("@/lib/inngest/functions/ghl-webhook")>()),
   recordWebhookEvent: async (event: Omit<Row, "id">) => {
+    if (down.record) {
+      down.record = false;
+      throw new Error("db down");
+    }
     if (table.has(event.eventId)) return null;
     const id = `row-${table.size + 1}`;
     table.set(event.eventId, { id, ...event });
     return id;
   },
   forgetWebhookEvent: async (id: string) => {
+    if (down.forget) {
+      down.forget = false;
+      throw new Error("db down");
+    }
     for (const [key, row] of table) if (row.id === id) table.delete(key);
   },
 }));
@@ -148,6 +158,22 @@ test("Inngest unreachable: 429 so GHL retries, and the retry is not taken for a 
   expect(rows()).toHaveLength(0);
   expect((await post(contactCreated())).status).toBe(200);
   expect(send).toHaveBeenCalledTimes(2);
+});
+
+test("the database unreachable while recording: 429 so GHL retries, nothing sent", async () => {
+  down.record = true;
+  const response = await post(contactCreated());
+  expect(response.status).toBe(429);
+  expect((await response.json()).error.code).toBe("not_recorded");
+  expect(send).not.toHaveBeenCalled();
+  expect((await post(contactCreated())).status).toBe(200);
+  expect(send).toHaveBeenCalledOnce();
+});
+
+test("Inngest and the database both unreachable: still 429, never a 5xx", async () => {
+  send.mockRejectedValueOnce(new Error("down"));
+  down.forget = true;
+  expect((await post(contactCreated())).status).toBe(429);
 });
 
 // The token's half (a GHL error recorded by the job) is in ghl-webhook.test.ts.

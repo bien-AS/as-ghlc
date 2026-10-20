@@ -99,12 +99,18 @@ export async function POST(request: Request) {
     return invalidInput(payload.error);
   }
 
-  const id = await recordWebhookEvent({
-    eventId: payload.data.webhookId,
-    type: type.data,
-    verified: true,
-    payload: json,
-  });
+  // From here on a failure answers 429, never a 5xx: GHL drops an event after a 5xx.
+  let id: string | null;
+  try {
+    id = await recordWebhookEvent({
+      eventId: payload.data.webhookId,
+      type: type.data,
+      verified: true,
+      payload: json,
+    });
+  } catch {
+    return retryLater("not_recorded");
+  }
   if (!id) return Response.json({ received: true, duplicate: true });
 
   try {
@@ -113,7 +119,11 @@ export async function POST(request: Request) {
       data: { webhookEventId: id, contactId: payload.data.contact_id },
     });
   } catch {
-    await forgetWebhookEvent(id);
+    // ponytail: if the delete fails too, GHL's retry is taken for a duplicate and the event
+    // is lost; re-send on a duplicate whose outcome is still null if that ever shows in the log.
+    await forgetWebhookEvent(id).catch(() =>
+      console.error(`GHL webhook event ${id} was not queued nor forgotten`),
+    );
     return retryLater("not_queued");
   }
   return Response.json({ received: true });

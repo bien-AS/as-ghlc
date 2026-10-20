@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, notLike, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/db/client";
@@ -6,7 +6,11 @@ import { leads, webhookEvents } from "@/db/schema";
 import { inngest } from "@/lib/inngest/client";
 import { findContactOpportunity, ghlConfig } from "@/lib/services/ghl";
 
-import { type Booking, syncOpportunity } from "./ghl-sync";
+import {
+  type Booking,
+  LEAD_VALIDATION_REQUESTED,
+  syncOpportunity,
+} from "./ghl-sync";
 
 /*
  * Events in (spec 06; ADR-0009). POST /api/webhooks/ghl verifies and records
@@ -18,8 +22,6 @@ import { type Booking, syncOpportunity } from "./ghl-sync";
  */
 
 export const GHL_WEBHOOK_RECEIVED = "ghl/webhook.received";
-/** Spec 08 consumes it; the id makes a repeat within 24 hours a no-op in Inngest. */
-export const LEAD_VALIDATION_REQUESTED = "lead/validation.requested";
 
 const ghlId = z.string().min(1);
 const contactEvent = z.object({ webhookId: ghlId, contact_id: ghlId });
@@ -92,6 +94,41 @@ function bookingFor(type: WebhookType, payload: unknown): Booking {
 }
 
 /**
+ * Whether a booking event for the same contact and calendar, received after
+ * this one, has already been applied: this one ran late (an Inngest retry) and
+ * would undo it. Ordered by when the app received each event.
+ * ponytail: a GHL redelivery (after our 429) is received late too and still
+ * applies; order by the payload's event time once a real payload shows one
+ * (spec 06 open question 7). Scans payloads unindexed; index if the table grows.
+ */
+async function bookingSuperseded(
+  row: typeof webhookEvents.$inferSelect,
+): Promise<boolean> {
+  const { contact_id, calendar } = appointmentEvent.parse(row.payload);
+  // created_at compared in SQL: a JS Date drops Postgres's microseconds.
+  const receivedAt = db
+    .select({ at: webhookEvents.createdAt })
+    .from(webhookEvents)
+    .where(eq(webhookEvents.id, row.id));
+  const later = await db
+    .select({ id: webhookEvents.id })
+    .from(webhookEvents)
+    .where(
+      and(
+        eq(webhookEvents.provider, "ghl"),
+        inArray(webhookEvents.type, Object.keys(BOOKING_STATUS)),
+        sql`${webhookEvents.payload}->>'contact_id' = ${contact_id}`,
+        sql`${webhookEvents.payload}->'calendar'->>'id' = ${calendar.id}`,
+        gt(webhookEvents.createdAt, receivedAt),
+        isNotNull(webhookEvents.outcome),
+        notLike(webhookEvents.outcome, "failed%"),
+      ),
+    )
+    .limit(1);
+  return later.length > 0;
+}
+
+/**
  * Applies one recorded event and writes its outcome. Throws (so Inngest
  * retries) while the contact has no opportunity in the pipeline yet.
  */
@@ -109,15 +146,19 @@ export async function applyWebhookEvent(id: string): Promise<string> {
       `Contact ${contact_id} has no opportunity in the pipeline yet`,
     );
   }
-  const outcome = await syncOpportunity(
-    opportunity,
-    "webhook",
-    bookingFor(type, row.payload),
-  );
+  const booking =
+    type in BOOKING_STATUS && (await bookingSuperseded(row))
+      ? {}
+      : bookingFor(type, row.payload);
+  const outcome = await syncOpportunity(opportunity, "webhook", booking);
 
-  // Every contact-created event, not only one that created the lead: another
-  // event for the same contact may have been applied first.
-  if (type === "contact_created" && outcome !== "skipped") {
+  // syncOpportunity requests validation for a lead it creates. A contact-created
+  // event also requests it for a lead already there: the import (which does
+  // not validate) or another event may have brought the new contact in first.
+  if (
+    type === "contact_created" &&
+    (outcome === "updated" || outcome === "unchanged")
+  ) {
     const lead = await db.query.leads.findFirst({
       where: eq(leads.ghlContactId, contact_id),
       columns: { id: true },

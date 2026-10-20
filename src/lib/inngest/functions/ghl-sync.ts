@@ -2,12 +2,13 @@ import { eq, or } from "drizzle-orm";
 import type { GetStepTools } from "inngest";
 
 import { db } from "@/db/client";
-import { leadStatusEvents, leads, profiles } from "@/db/schema";
+import { leadStatusEvents, leads, profiles, statusDefs } from "@/db/schema";
 import { inngest } from "@/lib/inngest/client";
 import {
   type GhlCursor,
   type GhlOpportunity,
   getContact,
+  ghlConfig,
   type LeadCopy,
   leadFromGhl,
   searchPipelineOpportunities,
@@ -25,12 +26,21 @@ import {
  */
 
 export const GHL_IMPORT_REQUESTED = "ghl/import.requested";
+/** Spec 08 consumes it; the id makes a repeat within 24 hours a no-op in Inngest. */
+export const LEAD_VALIDATION_REQUESTED = "lead/validation.requested";
+
+/**
+ * assumed: the import (the initial bulk load of leads GHL already holds) does
+ * not send its leads to validation; a lead the app first sees by webhook or
+ * reconcile does. Lee confirms whether imported leads are validated.
+ */
+const VALIDATE_IMPORTED_LEADS = false;
 
 type Actor = "import" | "reconcile" | "webhook";
 export type Outcome = "created" | "updated" | "unchanged" | "skipped";
 
-/** The reconcile leaves closed leads alone (spec 06). */
-const CLOSED = new Set(["Lead Won", "Lead Lost"]);
+/** The reconcile leaves leads closed in GHL alone (spec 06). */
+const CLOSED = ["Lead Won", "Lead Lost"] as const;
 
 const same = (a: unknown, b: unknown) =>
   a instanceof Date && b instanceof Date
@@ -58,6 +68,17 @@ export type Booking = Partial<
   >
 >;
 
+/** Lead Status as GHL holds it, or null (logged) when status_defs does not know it: the column is a foreign key. */
+async function knownStatus(value: string | null): Promise<string | null> {
+  if (value === null) return null;
+  const known = await db.query.statusDefs.findFirst({
+    where: eq(statusDefs.value, value),
+    columns: { value: true },
+  });
+  if (!known) console.warn(`GHL Lead Status "${value}" is not in status_defs`);
+  return known ? value : null;
+}
+
 /**
  * Brings one lead in step with its opportunity, plus any booking change a
  * webhook carries. The lead is found by opportunity, or by contact (a contact
@@ -76,12 +97,26 @@ export async function syncOpportunity(
     ),
   });
   if (existing?.deletedAt) return "skipped";
-  if (actor === "reconcile" && existing?.stage && CLOSED.has(existing.stage)) {
+  // By GHL's stage, not the app's: a lead GHL reopened is corrected, and so is
+  // one GHL closed while the app still holds it open (check 4).
+  const closed = CLOSED.find(
+    (stage) => ghlConfig().stages[stage] === opportunity.pipelineStageId,
+  );
+  if (
+    actor === "reconcile" &&
+    closed &&
+    (!existing || existing.stage === closed)
+  ) {
     return "skipped";
   }
 
+  const ghlCopy = leadFromGhl(
+    opportunity,
+    await getContact(opportunity.contactId),
+  );
   const copy: LeadCopy & Booking = {
-    ...leadFromGhl(opportunity, await getContact(opportunity.contactId)),
+    ...ghlCopy,
+    leadStatus: await knownStatus(ghlCopy.leadStatus),
     ...booking,
   };
   const changed = existing
@@ -123,44 +158,69 @@ export async function syncOpportunity(
           ? "created"
           : "imported",
     });
+    // Inside the transaction, so a failed send rolls the lead back and the retry creates it again.
+    if (!existing && (actor !== "import" || VALIDATE_IMPORTED_LEADS)) {
+      await inngest.send({
+        id: `validation-${lead.id}`,
+        name: LEAD_VALIDATION_REQUESTED,
+        data: { leadId: lead.id },
+      });
+    }
   });
   return existing ? "updated" : "created";
 }
 
-export type SyncCounts = Record<Outcome, number>;
+export type SyncCounts = Record<Outcome | "failed", number>;
 const noCounts = (): SyncCounts => ({
   created: 0,
   updated: 0,
   unchanged: 0,
   skipped: 0,
+  failed: 0,
 });
 
-/** One page of the pipeline. Safe to repeat: a retried page re-reads and changes nothing twice. */
+/**
+ * One page of the pipeline. Safe to repeat: a retried page re-reads and changes
+ * nothing twice. One opportunity that fails (a stage GHL_IDS does not name, a
+ * contact GHL cannot return) is counted and named, and the page goes on.
+ */
 export async function syncPage(actor: Actor, cursor: GhlCursor | null) {
   const { opportunities, next } = await searchPipelineOpportunities(cursor);
   const counts = noCounts();
+  const failedIds: string[] = [];
   // ponytail: one contact read per opportunity, in sequence; batch or parallelise if the pipeline outgrows a night.
   for (const opportunity of opportunities) {
-    counts[await syncOpportunity(opportunity, actor)]++;
+    try {
+      counts[await syncOpportunity(opportunity, actor)]++;
+    } catch (error) {
+      counts.failed++;
+      failedIds.push(opportunity.id);
+      // GhlError messages never hold the token.
+      console.error(
+        `GHL ${actor}: opportunity ${opportunity.id} failed: ${(error as Error).message}`,
+      );
+    }
   }
-  return { next, counts };
+  return { next, counts, failedIds };
 }
 
 /** Every page, one step each, so a failure retries only its page. */
 async function syncPipeline(
   actor: Actor,
   step: GetStepTools<typeof inngest>,
-): Promise<SyncCounts> {
+): Promise<SyncCounts & { failedIds: string[] }> {
   const totals = noCounts();
+  const failedIds: string[] = [];
   let cursor: GhlCursor | null = null;
   for (let page = 0; ; page++) {
     const result = await step.run(`page ${page}`, () =>
       syncPage(actor, cursor),
     );
-    for (const key of Object.keys(totals) as Outcome[]) {
+    for (const key of Object.keys(totals) as (keyof SyncCounts)[]) {
       totals[key] += result.counts[key];
     }
-    if (!result.next) return totals;
+    failedIds.push(...result.failedIds);
+    if (!result.next) return { ...totals, failedIds };
     cursor = result.next;
   }
 }

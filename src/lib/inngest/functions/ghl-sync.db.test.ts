@@ -7,7 +7,12 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 
 import * as schema from "@/db/schema";
-import type { GhlContact, GhlOpportunity } from "@/lib/services/ghl";
+import { inngest } from "@/lib/inngest/client";
+import {
+  type GhlContact,
+  GhlError,
+  type GhlOpportunity,
+} from "@/lib/services/ghl";
 import { TEST_IDS } from "@/test/ghl-ids";
 
 import { syncPage } from "./ghl-sync";
@@ -48,8 +53,14 @@ vi.mock("@/lib/services/ghl", async (original) => ({
     opportunities: ghl.opportunities,
     next: null,
   }),
-  getContact: async (id: string) => ghl.contacts.get(id),
+  getContact: async (id: string) => {
+    const contact = ghl.contacts.get(id);
+    if (!contact) throw new GhlError(404, `GHL 404: contact ${id}`);
+    return contact;
+  },
 }));
+
+const send = vi.spyOn(inngest, "send");
 
 const opportunity = (
   n: number,
@@ -110,6 +121,7 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
             },
           ]),
         );
+        send.mockReset().mockResolvedValue({ ids: ["e-1"] });
         await body(db);
         t.rollback();
       })
@@ -177,6 +189,7 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
         updated: 1,
         unchanged: 1,
         skipped: 0,
+        failed: 0,
       });
 
       const [corrected, untouched] = await testLeads(db);
@@ -202,14 +215,79 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
       expect(await events(db, two.id)).toHaveLength(1);
     }));
 
-  test("reconcile leaves a closed lead alone", () =>
+  test("reconcile follows GHL's stage: a lead GHL reopened is corrected, one GHL closed is left once in step", () =>
     inRollback(async (db) => {
-      ghl.opportunities = [opportunity(1, "Lead Lost", "New - Contacted")];
+      ghl.opportunities = [
+        opportunity(1, "Lead Lost", "New - Contacted"),
+        opportunity(2, "New Lead", "New - Contacted"),
+      ];
       await syncPage("import", null);
-      ghl.opportunities = [opportunity(1, "New Lead", "New - Contacted")];
+
+      // GHL reopened 1 and closed 2 (its webhook missed): both corrected.
+      ghl.opportunities = [
+        opportunity(1, "New Lead", "New - Contacted"),
+        opportunity(2, "Lead Won", "New - Contacted"),
+      ];
       expect((await syncPage("reconcile", null)).counts).toMatchObject({
-        skipped: 1,
+        updated: 2,
       });
-      expect((await testLeads(db))[0].stage).toBe("Lead Lost");
+      expect((await testLeads(db)).map((lead) => lead.stage)).toEqual([
+        "New Lead",
+        "Lead Won",
+      ]);
+
+      // Closed in GHL and in the app: left alone, its contact never read.
+      ghl.contacts.delete("sync-test-contact-2");
+      expect((await syncPage("reconcile", null)).counts).toMatchObject({
+        unchanged: 1,
+        skipped: 1,
+        failed: 0,
+      });
+    }));
+
+  test("a lead created by the reconcile is sent to validation; one created by the import is not", () =>
+    inRollback(async (db) => {
+      ghl.opportunities = [opportunity(1, "New Lead", "New - Contacted")];
+      await syncPage("import", null);
+      expect(send).not.toHaveBeenCalled();
+
+      ghl.opportunities.push(opportunity(2, "New Lead", "New - Contacted"));
+      expect((await syncPage("reconcile", null)).counts).toMatchObject({
+        created: 1,
+      });
+      const [, created] = await testLeads(db);
+      expect(send).toHaveBeenCalledExactlyOnceWith({
+        id: `validation-${created.id}`,
+        name: "lead/validation.requested",
+        data: { leadId: created.id },
+      });
+    }));
+
+  test("one bad opportunity is counted as failed and the rest of the page still syncs", () =>
+    inRollback(async (db) => {
+      ghl.opportunities = [
+        opportunity(1, "New Lead", "New - Contacted"),
+        opportunity(2, "New Lead", "Not A Lead Status"),
+        opportunity(3, "New Lead", ""),
+        { ...opportunity(4, "New Lead", ""), pipelineStageId: "s-unknown" },
+        opportunity(5, "New Lead", "New - Contacted"), // its contact 404s
+      ];
+      ghl.contacts.set("sync-test-contact-3", {
+        id: "sync-test-contact-3",
+        customFields: [],
+      });
+      const result = await syncPage("import", null);
+      expect(result.counts).toMatchObject({ created: 3, failed: 2 });
+      expect(result.failedIds).toEqual(["sync-test-opp-4", "sync-test-opp-5"]);
+      expect(
+        (await testLeads(db)).map(({ ghlOpportunityId, leadStatus }) => [
+          ghlOpportunityId,
+          leadStatus,
+        ]),
+      ).toEqual([
+        ["sync-test-opp-1", "New - Contacted"],
+        ["sync-test-opp-2", null],
+        ["sync-test-opp-3", null],
+      ]);
     }));
 });
