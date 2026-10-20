@@ -7,9 +7,8 @@ import { GET as getLeads } from "@/app/api/leads/route";
 import { GET as getMe } from "@/app/api/me/route";
 import { GET as getSummary } from "@/app/api/pipeline/summary/route";
 import { Toaster } from "@/components/ui/toast";
-import { listLeads } from "@/lib/data/leads";
+import { listVisibleLeads } from "@/lib/data/leads";
 import { resetSampleData } from "@/lib/data/sample";
-import { listLeadsQuerySchema } from "@/lib/leads/schemas";
 import { resetNavigation } from "@/test/navigation";
 import { renderPage } from "@/test/render";
 import { fake, resetFakes, signIn } from "@/test/server-fakes";
@@ -187,16 +186,15 @@ export function renderScreen(ui: React.ReactElement) {
   return renderPage(<Toaster>{ui}</Toaster>);
 }
 
-/** The id of the sample lead with this name, in whichever tab it sits. */
+/**
+ * The id of the lead with this name among those the signed-in role may see,
+ * archived ones aside. Leads come from whatever stands in for the database in
+ * the test file (src/test/lead-store.ts or src/test/lead-stand-ins.ts).
+ */
 export async function leadIdOf(name: string) {
-  for (const tab of ["open", "spam", "nurture", "lost"]) {
-    const page = await listLeads(
-      listLeadsQuerySchema.parse({ q: name, tab, limit: "100" }),
-    );
-    const lead = page.items.find((item) => item.name === name);
-    if (lead) return lead.id;
-  }
-  throw new Error(`no sample lead called ${name}`);
+  const lead = (await listVisibleLeads()).find((item) => item.name === name);
+  if (!lead) throw new Error(`no visible lead called ${name}`);
+  return lead.id;
 }
 
 /** Text that must never reach a rep: a CRM's or a service's brand, or the internal name. */

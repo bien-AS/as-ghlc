@@ -9,7 +9,6 @@ import { DELETE as deleteInvite } from "@/app/api/members/invites/[inviteId]/rou
 import { POST as postInvite } from "@/app/api/members/invites/route";
 import { GET as getMembers } from "@/app/api/members/route";
 import { buildSampleMembers } from "@/lib/data/fixtures/members";
-import { getPipelineSummary } from "@/lib/data/leads";
 import {
   changeMemberRole,
   inviteMember,
@@ -131,12 +130,17 @@ test("every sample person parses against the contract, is invented, and keeps th
   );
 });
 
-test("the sample reps are exactly the reps on the sample leads", async () => {
-  const { owners } = await getPipelineSummary({ tz: "UTC" });
-  const reps = (await listMembers())
-    .filter((member) => member.role === "rep" && member.status === "active")
-    .map((member) => member.name);
-  expect(reps.sort()).toEqual(owners.map((owner) => owner.name).sort());
+// The rep filter on the lead list now reads active profiles (spec 07), not
+// these sample members; that query is proven in src/lib/data/leads.db.test.ts.
+test("the sample reps are active, named once each, and none of them is the viewer", async () => {
+  const reps = (await listMembers()).filter(
+    (member) => member.role === "rep" && member.status === "active",
+  );
+  expect(reps.length).toBeGreaterThan(0);
+  const names = reps.map((member) => member.name);
+  expect(names.every(Boolean)).toBe(true);
+  expect(new Set(names).size).toBe(names.length);
+  expect(reps.some((member) => member.isViewer)).toBe(false);
 });
 
 test("the list starts with the viewer, marked as you with their role, then users, then pending invites", async () => {

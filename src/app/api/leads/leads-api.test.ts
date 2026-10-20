@@ -10,13 +10,18 @@ import { POST as postSpam } from "@/app/api/leads/[leadId]/spam/route";
 import { POST as postStatus } from "@/app/api/leads/[leadId]/status/route";
 import { GET as getLeads } from "@/app/api/leads/route";
 import { GET as getSummary } from "@/app/api/pipeline/summary/route";
+import * as data from "@/lib/data/leads";
 import { resetSampleData } from "@/lib/data/sample";
+import { AccessError } from "@/lib/data/users";
 import {
+  EXITS,
   type LeadDetail,
   type LeadPage,
   leadDetailSchema,
   leadPageSchema,
+  NEEDS,
   pipelineSummarySchema,
+  STAGES,
 } from "@/lib/leads/schemas";
 import { fake, resetFakes, signIn } from "@/test/server-fakes";
 
@@ -28,6 +33,22 @@ vi.mock(
   "@/db/client",
   async () => (await import("@/test/server-fakes")).dbModule,
 );
+// The real functions, each wrapped so a test can stand in for the database.
+vi.mock("@/lib/data/leads", async (original) => {
+  const real = await original<typeof import("@/lib/data/leads")>();
+  return {
+    ...real,
+    listLeads: vi.fn(real.listLeads),
+    getPipelineSummary: vi.fn(real.getPipelineSummary),
+    getLead: vi.fn(real.getLead),
+    reviewSuspect: vi.fn(real.reviewSuspect),
+    setQualification: vi.fn(real.setQualification),
+    markSpam: vi.fn(real.markSpam),
+    changeStatus: vi.fn(real.changeStatus),
+    assignRep: vi.fn(real.assignRep),
+    archiveLead: vi.fn(real.archiveLead),
+  };
+});
 
 const ORIGIN = "http://localhost:3000";
 const ada = {
@@ -44,6 +65,7 @@ beforeEach(() => {
   });
   resetFakes();
   resetSampleData();
+  vi.clearAllMocks();
   signIn();
   fake.users.set(ada.id, ada);
 });
@@ -104,13 +126,6 @@ const everyRoute = (): [string, () => Promise<Response>][] => [
     ],
   ),
 ];
-
-const firstSuspect = async () => {
-  const page = (await (await leads("?needs=suspects")).json()) as LeadPage;
-  return page.items[0].id;
-};
-const detail = async (leadId: string) =>
-  (await (await lead(leadId)).json()) as LeadDetail;
 
 test("signed out, every route answers 401 unauthenticated", async () => {
   fake.claims = null;
@@ -191,39 +206,94 @@ test("signed in with a profile, the same invalid input is a 400 naming the probl
   }
 });
 
-test("GET /api/leads returns a page that parses against the contract, 25 by default", async () => {
+// --- the routes hand the parsed input to the data layer ------------------------
+//
+// Leads are rows in Postgres (spec 07): what listLeads and the writes do with
+// them is proven on a real database (leads.db.test.ts). Here, each route's own
+// part: it passes exactly the parsed input on, answers with what it got back,
+// and turns a refusal into its status.
+
+const LEAD = "00000000-0000-4000-8000-000000000001";
+const DETAIL: LeadDetail = leadDetailSchema.parse({
+  id: LEAD,
+  name: "Imogen Vasquez",
+  company: "Vasquez Dental",
+  email: "imogen@example.com",
+  stage: "discovery_booked",
+  exit: null,
+  status: null,
+  verdict: "valid",
+  owner: null,
+  nextBooking: null,
+  createdAt: "2026-10-01T09:00:00.000Z",
+  lastActivityAt: null,
+  archivedAt: null,
+  lastSync: null,
+  phone: null,
+  website: null,
+  source: null,
+  budget: null,
+  archivedReason: null,
+  formAnswers: [],
+  updatedAt: "2026-10-01T09:00:00.000Z",
+  verdictRecord: null,
+  bookings: [],
+  deck: null,
+  proposal: null,
+  invoice: null,
+  activities: [],
+  syncLog: [],
+});
+
+test("GET /api/leads hands listLeads the parsed query, defaults filled in, and answers with its page", async () => {
+  const page: LeadPage = { items: [DETAIL], nextCursor: "25", total: 26 };
+  vi.mocked(data.listLeads).mockResolvedValueOnce(page);
   const response = await leads();
   expect(response.status).toBe(200);
-  const page = leadPageSchema.parse(await response.json());
-  expect(page.items).toHaveLength(25);
-  expect(page.nextCursor).not.toBeNull();
-  expect(page.total).toBeGreaterThan(25);
-
-  const next = leadPageSchema.parse(
-    await (await leads(`?cursor=${page.nextCursor}`)).json(),
+  expect(leadPageSchema.parse(await response.json())).toEqual(
+    leadPageSchema.parse(page),
   );
-  const ids = [...page.items, ...next.items].map((item) => item.id);
-  expect(new Set(ids).size).toBe(ids.length);
+  expect(data.listLeads).toHaveBeenCalledWith({
+    tab: "open",
+    archived: false,
+    sort: "recent",
+    dir: "desc",
+    tz: "UTC",
+    limit: 25,
+  });
 });
 
-test("GET /api/leads applies search, tab, verdict, owner and needs from the query", async () => {
-  const page = leadPageSchema.parse(
-    await (await leads("?q=lindgren&tab=new&verdict=valid")).json(),
+test("GET /api/leads passes search, stage, verdict, rep, Lead Status group, archived, sort and paging on", async () => {
+  vi.mocked(data.listLeads).mockResolvedValueOnce({
+    items: [],
+    nextCursor: null,
+    total: 0,
+  });
+  await leads(
+    "?q=lindgren&tab=new&verdict=valid&owner=unassigned&group=Qualified&archived=true&sort=age&dir=asc&cursor=25&limit=10",
   );
-  expect(page.items.map((item) => item.name)).toEqual(["Sofia Lindgren"]);
-
-  const queue = leadPageSchema.parse(
-    await (await leads("?needs=suspects&limit=3")).json(),
+  expect(data.listLeads).toHaveBeenCalledWith(
+    expect.objectContaining({
+      q: "lindgren",
+      tab: "new",
+      verdict: "valid",
+      owner: "unassigned",
+      group: "Qualified",
+      archived: true,
+      sort: "age",
+      dir: "asc",
+      cursor: "25",
+      limit: 10,
+    }),
   );
-  expect(queue.items).toHaveLength(3);
-  expect(queue.items.every((item) => item.verdict === "suspect")).toBe(true);
 });
 
-test("GET /api/leads rejects an unknown stage, verdict, category, time zone, limit or parameter, naming the field", async () => {
+test("GET /api/leads rejects an unknown stage, verdict, category, sort, time zone, limit or parameter, naming the field", async () => {
   for (const [search, field] of [
     ["?tab=archived", "tab"],
     ["?verdict=maybe", "verdict"],
     ["?needs=everything", "needs"],
+    ["?sort=oldest", "sort"],
     ["?tz=Mars/Olympus", "tz"],
     ["?limit=0", "limit"],
     ["?limit=5000", "limit"],
@@ -236,125 +306,104 @@ test("GET /api/leads rejects an unknown stage, verdict, category, time zone, lim
     expect(body.error.fields[field], search).toBeDefined();
   }
   expect((await leads("?workspace=another")).status).toBe(400);
+  expect(data.listLeads).not.toHaveBeenCalled();
 });
 
-test("GET /api/pipeline/summary returns counts that parse against the contract", async () => {
+test("GET /api/pipeline/summary passes the viewer's time zone and answers with the counts", async () => {
+  const counts = pipelineSummarySchema.parse({
+    open: 3,
+    stages: Object.fromEntries(STAGES.map((stage) => [stage, 0])),
+    exits: Object.fromEntries(EXITS.map((exit) => [exit, 0])),
+    needs: Object.fromEntries(NEEDS.map((need) => [need, 0])),
+    owners: [],
+  });
+  vi.mocked(data.getPipelineSummary).mockResolvedValueOnce(counts);
   const response = await summary("?tz=America/New_York");
   expect(response.status).toBe(200);
-  const body = pipelineSummarySchema.parse(await response.json());
-  expect(body.open).toBeGreaterThan(0);
+  expect(await response.json()).toEqual(counts);
+  expect(data.getPipelineSummary).toHaveBeenCalledWith({
+    tz: "America/New_York",
+  });
   expect((await summary("?tz=Nowhere")).status).toBe(400);
 });
 
-test("GET /api/leads/{id} returns the lead in detail, and 404 for an unknown id", async () => {
-  const response = await lead("lead-01");
+test("GET /api/leads/{id} answers with the lead, and 404 when the data layer finds none in the viewer's scope", async () => {
+  vi.mocked(data.getLead).mockResolvedValueOnce(DETAIL);
+  const response = await lead(LEAD);
   expect(response.status).toBe(200);
-  expect(leadDetailSchema.parse(await response.json()).id).toBe("lead-01");
+  expect(leadDetailSchema.parse(await response.json()).id).toBe(LEAD);
+  expect(data.getLead).toHaveBeenCalledWith(LEAD);
 
+  vi.mocked(data.getLead).mockRejectedValueOnce(new AccessError("not_found"));
   const missing = await lead("lead-999");
   expect(missing.status).toBe(404);
   expect(await missing.json()).toEqual({ error: { code: "not_found" } });
 });
 
-test("every write answers 404 for an unknown lead", async () => {
+const WRITE_FUNCTION = {
+  review: data.reviewSuspect,
+  qualification: data.setQualification,
+  spam: data.markSpam,
+  status: data.changeStatus,
+  assign: data.assignRep,
+  archive: data.archiveLead,
+} as const;
+
+test("every write passes the lead and its parsed body on once, and answers with the updated lead", async () => {
   for (const route of Object.keys(WRITES) as (keyof typeof WRITES)[]) {
-    const response = await write(route, "lead-999");
-    expect(response.status, route).toBe(404);
-    expect((await response.json()).error.code).toBe("not_found");
+    const run = vi.mocked(WRITE_FUNCTION[route]);
+    run.mockResolvedValueOnce(DETAIL);
+    const response = await write(route, LEAD);
+    expect(response.status, route).toBe(200);
+    expect(leadDetailSchema.parse(await response.json()).id).toBe(LEAD);
+    expect(run, route).toHaveBeenCalledTimes(1);
+    if (route === "spam") expect(run).toHaveBeenCalledWith(LEAD);
+    else expect(run).toHaveBeenCalledWith(LEAD, VALID[route]);
   }
 });
 
-test("review accepts only cleared or spam, returns the updated lead, and a second review is a conflict", async () => {
-  const id = await firstSuspect();
-  const before = await detail(id);
+test("a refusal from the data layer is its status: not found 404, conflict 409, forbidden 403", async () => {
+  for (const [code, status] of [
+    ["not_found", 404],
+    ["conflict", 409],
+    ["forbidden", 403],
+  ] as const) {
+    for (const route of Object.keys(WRITES) as (keyof typeof WRITES)[]) {
+      vi.mocked(WRITE_FUNCTION[route]).mockRejectedValueOnce(
+        new AccessError(code),
+      );
+      const response = await write(route, LEAD);
+      expect(response.status, `${route} ${code}`).toBe(status);
+      expect(await response.json()).toEqual({ error: { code } });
+    }
+  }
+});
 
-  for (const body of [
-    {},
-    { outcome: "maybe" },
-    { outcome: "cleared", reviewedBy: "Someone Else" },
-    "not json",
-    null,
-  ]) {
-    const response = await write("review", id, body);
-    expect(response.status).toBe(400);
+test("a body that is not the contract is refused with 400 and never reaches the data layer", async () => {
+  const refused: [keyof typeof WRITES, unknown][] = [
+    ["review", {}],
+    ["review", { outcome: "maybe" }],
+    ["review", { outcome: "cleared", reviewedBy: "Someone Else" }],
+    ["review", "not json"],
+    ["review", null],
+    ["qualification", { decision: "yes" }],
+    ["qualification", {}],
+    ["spam", { booking: "keep" }],
+    ["status", { status: "" }],
+    ["status", { status: "New - Contacted", note: "hi" }],
+    ["assign", { profileId: "rep-1" }],
+    ["assign", {}],
+    ["archive", { reason: 7 }],
+    ["archive", { reason: "x".repeat(501) }],
+  ];
+  for (const [route, body] of refused) {
+    const response = await write(route, LEAD, body);
+    expect(response.status, `${route} ${JSON.stringify(body)}`).toBe(400);
     expect((await response.json()).error.code).toBe("invalid_input");
   }
-  const named = await write("review", id, { outcome: "maybe" });
+  const named = await write("review", LEAD, { outcome: "maybe" });
   expect((await named.json()).error.fields.outcome).toBeDefined();
-  // Invalid input changed nothing.
-  expect(await detail(id)).toEqual(before);
-
-  const response = await write("review", id, { outcome: "cleared" });
-  expect(response.status).toBe(200);
-  const updated = leadDetailSchema.parse(await response.json());
-  expect(updated.verdict).toBe("valid");
-  expect(updated.verdictRecord?.reviewedBy).toBe("Ada Lovelace");
-
-  const again = await write("review", id, { outcome: "spam" });
-  expect(again.status).toBe(409);
-  expect(await again.json()).toEqual({ error: { code: "conflict" } });
-  expect(await detail(id)).toEqual(updated);
-});
-
-test("qualification validates the decision and refuses a lead whose state does not allow it", async () => {
-  const page = (await (
-    await leads("?tab=discovery_booked&verdict=valid&limit=100")
-  ).json()) as LeadPage;
-  let ready: string | undefined;
-  for (const item of page.items) {
-    const candidate = await detail(item.id);
-    if (candidate.bookings.some((booking) => booking.state === "completed")) {
-      ready = item.id;
-      break;
-    }
-  }
-  if (!ready) throw new Error("no sample lead with a completed call");
-
-  expect(
-    (await write("qualification", ready, { decision: "yes" })).status,
-  ).toBe(400);
-  expect((await write("qualification", ready, {})).status).toBe(400);
-
-  const response = await write("qualification", ready);
-  expect(response.status).toBe(200);
-  expect(leadDetailSchema.parse(await response.json()).stage).toBe("qualified");
-
-  // Already qualified: the same request is now a conflict, and changes nothing.
-  const before = await detail(ready);
-  const again = await write("qualification", ready);
-  expect(again.status).toBe(409);
-  expect(await detail(ready)).toEqual(before);
-});
-
-test("lost takes an optional reason; spam takes nothing; both refuse a lead that has left", async () => {
-  expect((await write("lost", "lead-09", { reason: 7 })).status).toBe(400);
-  expect(
-    (await write("lost", "lead-09", { reason: "x".repeat(501) })).status,
-  ).toBe(400);
-  expect((await write("lost", "lead-09", { exit: "nurture" })).status).toBe(
-    400,
-  );
-  expect((await write("spam", "lead-10", { booking: "keep" })).status).toBe(
-    400,
-  );
-  expect((await detail("lead-09")).exit).toBeNull();
-  expect((await detail("lead-10")).exit).toBeNull();
-
-  const lost = await write("lost", "lead-09");
-  expect(lost.status).toBe(200);
-  const lostLead = leadDetailSchema.parse(await lost.json());
-  expect(lostLead.exit).toBe("lost");
-  expect(lostLead.activities[0].detail).toBe("Reason: Chose another agency");
-
-  const spam = await write("spam", "lead-10");
-  expect(spam.status).toBe(200);
-  expect(leadDetailSchema.parse(await spam.json()).exit).toBe("spam");
-
-  for (const route of ["lost", "spam"] as const) {
-    for (const id of ["lead-09", "lead-10"]) {
-      const response = await write(route, id);
-      expect(response.status).toBe(409);
-      expect((await response.json()).error.code).toBe("conflict");
-    }
+  for (const run of Object.values(WRITE_FUNCTION)) {
+    expect(vi.mocked(run)).not.toHaveBeenCalled();
   }
 });

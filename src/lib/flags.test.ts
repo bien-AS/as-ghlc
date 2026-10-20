@@ -13,9 +13,8 @@ test("every flagged screen is a registry id", () => {
 
 test("a mockup on sample data is live in development and not in production", () => {
   vi.stubEnv("NODE_ENV", "development");
-  expect(isLive("lead-list")).toBe(true);
+  expect(isLive("team-reps")).toBe(true);
   vi.stubEnv("NODE_ENV", "production");
-  expect(isLive("lead-list")).toBe(false);
   expect(isLive("team-reps")).toBe(false);
 });
 
@@ -23,6 +22,8 @@ test("a live screen is live everywhere; an unflagged one nowhere", () => {
   for (const env of ["development", "production"]) {
     vi.stubEnv("NODE_ENV", env);
     expect(isLive("dashboard")).toBe(true);
+    expect(isLive("lead-list")).toBe(true);
+    expect(isLive("lead-detail")).toBe(true);
     expect(isLive("deck-library")).toBe(false);
     expect(isLive("no-such-screen")).toBe(false);
   }

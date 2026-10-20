@@ -4,10 +4,6 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { GET as getViewerRoute } from "@/app/api/viewer/route";
 import {
   getLead,
-  getPipelineSummary,
-  listLeads,
-  listVisibleLeads,
-  markLost,
   recordDeckTemplate,
   recordInvoiceDraft,
   recordProposalStatus,
@@ -20,7 +16,6 @@ import {
   requireProfile,
 } from "@/lib/data/users";
 import { getViewerSummary } from "@/lib/data/viewer";
-import { listLeadsQuerySchema } from "@/lib/leads/schemas";
 import { viewerSchema } from "@/lib/roles";
 import {
   fake,
@@ -58,8 +53,6 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-const everyLead = () =>
-  listLeads(listLeadsQuerySchema.parse({ tab: "open", limit: "100" }));
 const refusedWith = (code: string) => expect.objectContaining({ code });
 
 // --- the guards (spec 01 section 4) --------------------------------------------
@@ -115,48 +108,28 @@ test("the viewer summary carries the profile's own role, admin or rep", async ()
 
 // --- what a role sees of the leads ---------------------------------------------
 
-test("an admin sees every lead; a rep sees only the leads assigned to them, in the list, the counts and the rep filter", async () => {
-  const all = await everyLead();
-  const summary = await getPipelineSummary({ tz: "UTC" });
-  expect(summary.owners.length).toBeGreaterThan(1);
+/*
+ * Leads are rows in Postgres now (spec 07): which rows a role reaches is
+ * proven on a real database by src/test/isolation and leads.db.test.ts. Here,
+ * what is settled before a query: the session decides the scope.
+ */
+
+test("the signed-in rep's scope is the leads assigned to them; the signed-in admin's is every lead", async () => {
+  expect(leadScope(await requireProfile())).toBeUndefined();
 
   viewAs("rep");
-  const mine = await everyLead();
-  expect(mine.total).toBeGreaterThan(0);
-  expect(mine.total).toBeLessThan(all.total);
-  expect(mine.items.every((lead) => lead.owner.id === SAMPLE_REP.id)).toBe(
-    true,
-  );
-
-  const repSummary = await getPipelineSummary({ tz: "UTC" });
-  expect(repSummary.open).toBe(mine.total);
-  expect(repSummary.owners).toEqual([
-    { id: SAMPLE_REP.id, name: "Maya Okafor" },
-  ]);
-  expect(
-    (await listVisibleLeads()).every((lead) => lead.owner.id === SAMPLE_REP.id),
-  ).toBe(true);
+  const scope = leadScope(await requireProfile());
+  expect(scope && new PgDialect().sqlToQuery(scope)).toMatchObject({
+    sql: '"leads"."assigned_to" = $1',
+    params: [SAMPLE_REP.id],
+  });
 });
 
-test("a rep asking for another rep's lead, or changing it, is told it does not exist, and nothing changes", async () => {
-  const other = (await everyLead()).items.find(
-    (lead) => lead.owner.id !== SAMPLE_REP.id,
-  );
-  if (!other) throw new Error("no lead owned by another rep");
-  const own = (await everyLead()).items.find(
-    (lead) => lead.owner.id === SAMPLE_REP.id,
-  );
-  if (!own) throw new Error("no lead owned by the sample rep");
-
-  viewAs("rep");
-  expect((await getLead(own.id)).id).toBe(own.id);
-  await expect(getLead(other.id)).rejects.toEqual(refusedWith("not_found"));
-  await expect(markLost(other.id, {})).rejects.toEqual(
-    refusedWith("not_found"),
-  );
-
-  viewAs("admin");
-  expect((await getLead(other.id)).exit).toBeNull();
+test("an id that names no lead is not found, for either role, before anything is read", async () => {
+  for (const role of ["admin", "rep"] as const) {
+    viewAs(role);
+    await expect(getLead("lead-01")).rejects.toEqual(refusedWith("not_found"));
+  }
 });
 
 // --- the viewer route ---------------------------------------------------------------
@@ -171,63 +144,33 @@ test("GET /api/viewer answers with the role, and 401 when signed out", async () 
 
 // --- what the other blocks record on a lead ----------------------------------------
 
-const leadIn = async (tab: string) => {
-  const page = await listLeads(
-    listLeadsQuerySchema.parse({ tab, limit: "100" }),
+/*
+ * The proposal, invoice and deck mockups recorded their changes on a sample
+ * lead. A real lead has none of those yet, so each recording is refused after
+ * the guard until specs 09, 12 and 13 write their own tables.
+ */
+
+test("recording a proposal status or an invoice draft is guarded, then refused for a lead that is not found", async () => {
+  fake.claims = null;
+  await expect(recordProposalStatus("lead-01", "sent")).rejects.toEqual(
+    refusedWith("unauthenticated"),
   );
-  return page.items[0].id;
-};
-
-test("sending a proposal moves the lead to Proposal Sent; signing moves it to Lead Won; then an invoice draft can be recorded", async () => {
-  const leadId = await leadIn("qualified");
-
-  expect((await recordProposalStatus(leadId, "draft")).stage).toBe("qualified");
-  const sent = await recordProposalStatus(leadId, "sent");
-  expect(sent).toMatchObject({
-    stage: "proposal_sent",
-    proposal: { status: "sent" },
-  });
-  expect(sent.activities[0]).toMatchObject({
-    type: "Proposal sent",
-    actor: { kind: "user", name: "Ada Lovelace" },
-  });
-
-  // Not won yet: there is nothing to invoice.
-  await expect(recordInvoiceDraft(leadId)).rejects.toEqual(
-    refusedWith("conflict"),
+  signIn();
+  await expect(recordProposalStatus("lead-01", "sent")).rejects.toEqual(
+    refusedWith("not_found"),
   );
-
-  const viewed = await recordProposalStatus(leadId, "viewed");
-  expect(viewed.stage).toBe("proposal_sent");
-  expect(viewed.activities[0].actor.kind).toBe("system");
-
-  const signed = await recordProposalStatus(leadId, "signed");
-  expect(signed).toMatchObject({
-    stage: "won",
-    proposal: { status: "signed" },
-  });
-
-  const invoiced = await recordInvoiceDraft(leadId);
-  expect(invoiced.invoice).toEqual({ status: "draft" });
-  expect(invoiced.activities[0].type).toBe("Invoice drafted");
-  expect((await getLead(leadId)).invoice).toEqual({ status: "draft" });
+  await expect(recordInvoiceDraft("lead-01")).rejects.toEqual(
+    refusedWith("not_found"),
+  );
 });
 
-test("a lead that has left the pipeline takes no proposal change, and a deck's template is recorded on the lead", async () => {
-  const gone = await leadIn("lost");
-  await expect(recordProposalStatus(gone, "sent")).rejects.toEqual(
-    refusedWith("conflict"),
+test("recording a deck template is guarded, then refused for a lead that is not found", async () => {
+  fake.users.clear();
+  await expect(recordDeckTemplate("lead-01", "Review")).rejects.toEqual(
+    refusedWith("profile_required"),
   );
-
-  const withDeck = (await listVisibleLeads()).find((lead) => lead.deck);
-  if (!withDeck) throw new Error("no sample lead has a deck");
-  const changed = await recordDeckTemplate(withDeck.id, "Review");
-  expect(changed.deck?.templateName).toBe("Review");
-  expect(changed.activities[0].type).toBe("Deck template changed");
-
-  const withoutDeck = (await listVisibleLeads()).find((lead) => !lead.deck);
-  if (!withoutDeck) throw new Error("every sample lead has a deck");
-  await expect(recordDeckTemplate(withoutDeck.id, "Review")).rejects.toEqual(
+  fake.users.set(ada.id, ada);
+  await expect(recordDeckTemplate("lead-01", "Review")).rejects.toEqual(
     refusedWith("not_found"),
   );
 });

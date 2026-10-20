@@ -2,25 +2,42 @@
 
 import { ArrowLeftIcon } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useId, useState } from "react";
 
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { HintLine } from "@/components/ui/hint-line";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { LinkButton } from "@/components/ui/link-button";
 import { LocalTime } from "@/components/ui/local-time";
+import {
+  NativeSelect,
+  NativeSelectOptGroup,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
 import { PanelSection } from "@/components/ui/panel-section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/state-panel";
+import {
+  SeamList,
+  WritePreview,
+  writeOutcome,
+} from "@/components/ui/sync-seam";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast";
 import { VerdictBox } from "@/components/ui/verdict-box";
-import { useInvoice } from "@/hooks/use-invoices";
-import { useLead, useMarkSpam, useSetQualification } from "@/hooks/use-leads";
+import {
+  useAssignRep,
+  useChangeStatus,
+  useLead,
+  useMarkSpam,
+  usePipelineSummary,
+  useSetQualification,
+} from "@/hooks/use-leads";
 import { usePipelineHref } from "@/hooks/use-pipeline-href";
+import { useCan } from "@/hooks/use-viewer";
 import { ApiError } from "@/lib/api/client";
-import { INVOICE_STATUS_META } from "@/lib/invoices/rules";
+import { isLive } from "@/lib/flags";
 import {
   ACTION_LABEL,
   BOOKING_KIND_LABEL,
@@ -28,59 +45,89 @@ import {
   EXIT_LABEL,
   type LeadAction,
   nextStep,
+  PROPOSAL_LABEL,
   STAGE_LABEL,
   statusMeta,
   VERDICT_META,
 } from "@/lib/leads/rules";
-import {
-  canHaveProposal,
-  formatUsd,
-  proposalStatusMeta,
-} from "@/lib/proposals/rules";
+import type { LeadDetail, SyncEntry } from "@/lib/leads/schemas";
 
-import {
-  deckHref,
-  INVOICE_ANCHOR,
-  invoiceHref,
-  proposalHref,
-  suspectHref,
-} from "../navigation";
+import { deckHref, proposalHref, suspectHref } from "../navigation";
+import { ResearchTab } from "./lead-research";
+import { LEAD_STATUS_OPTIONS } from "./lead-statuses";
 
-/** How many timeline entries show before "Show earlier" (spec 06, "Long content"). */
+const SYNC_LOG_HREF = "/admin/sync-log";
+/** How many timeline entries show before "Show earlier". */
 const TIMELINE_FIRST = 20;
 
-/** The actions that only lead somewhere else. The invoice draft is on this page (spec 15). */
-const DESTINATION: Partial<Record<LeadAction, (leadId: string) => string>> = {
-  review: suspectHref,
-  open_deck: deckHref,
-  start_proposal: proposalHref,
-  finish_proposal: proposalHref,
-  open_proposal: proposalHref,
-  check_invoice: invoiceHref,
+/**
+ * Where a next step leads, and the registry screen that must be live for the
+ * link to be drawn (spec 01, phase flags). Qualify happens here instead.
+ */
+const DESTINATION: Partial<
+  Record<LeadAction, { screen: string; href: (leadId: string) => string }>
+> = {
+  review: { screen: "suspect-review-queue", href: suspectHref },
+  open_deck: { screen: "deck-detail", href: deckHref },
+  start_proposal: { screen: "proposal-detail", href: proposalHref },
+  finish_proposal: { screen: "proposal-detail", href: proposalHref },
+  open_proposal: { screen: "proposal-detail", href: proposalHref },
 };
 
-type Write = "qualify" | "not_qualify" | "spam";
-type Handlers = { onSuccess: () => void; onError: (error: Error) => void };
-const DONE: Record<Write, string> = {
-  qualify: "Marked qualified",
-  not_qualify: "Marked not qualified",
-  spam: "Marked as spam",
+const TABS = [
+  "overview",
+  "research",
+  "decks",
+  "proposals",
+  "meetings",
+  "timeline",
+] as const;
+const TAB_LABEL: Record<(typeof TABS)[number], string> = {
+  overview: "Overview",
+  research: "Research",
+  decks: "Decks",
+  proposals: "Proposals",
+  meetings: "Meetings",
+  timeline: "Timeline",
 };
 
 const Missing = () => (
   <>
-    <span aria-hidden="true">–</span>
+    <span aria-hidden="true">-</span>
     <span className="sr-only">Not given</span>
   </>
 );
 
 const linkClass =
-  "font-semibold wrap-anywhere text-brand-text underline-offset-4 hover:underline";
+  "rounded-sm font-semibold wrap-anywhere text-brand-text underline-offset-4 outline-none hover:underline focus-visible:shadow-focus";
+
+/** The newest write of a type, as the write route returned the lead. */
+const latestWrite = (lead: LeadDetail, type: SyncEntry["writeType"]) =>
+  lead.syncLog.find((entry) => entry.writeType === type);
+
+/** A refused or failed write, in words. */
+function failed(error: Error) {
+  toast.add(
+    error instanceof ApiError && error.status === 409
+      ? {
+          title: "That no longer applies",
+          description:
+            "This lead had changed. You are now looking at the latest version.",
+          type: "error",
+        }
+      : {
+          title: "That did not go through",
+          description: "The lead is unchanged and nothing was sent. Try again.",
+          type: "error",
+        },
+  );
+}
 
 /**
- * Lead detail (spec 06): everything about one lead, and the one thing to do
- * next. Which actions show, and the hint under them, come from `nextStep`,
- * the same rule the server uses to refuse an action the lead does not allow.
+ * Lead detail (spec 07, registry `lead-detail`): the header, six tabs, and a
+ * rail with the next step and the seam (every write to the CRM for this
+ * lead). Each action that writes to the CRM names the write in its modal
+ * before it happens, and says afterwards what became of it.
  */
 export function LeadScreen({
   leadId,
@@ -90,27 +137,20 @@ export function LeadScreen({
   /** The server already knows this lead does not exist. */
   missing?: boolean;
 }) {
-  const pipelineHref = usePipelineHref();
+  const backHref = usePipelineHref();
   const lead = useLead(missing ? undefined : leadId);
-  const qualification = useSetQualification();
-  const spam = useMarkSpam();
-  // The last write, kept so a failed one can be retried as it was.
-  const [last, setLast] = useState<{ write: Write; run: () => void }>();
-  const [failure, setFailure] = useState<"failed" | "changed">();
-  const [showAll, setShowAll] = useState(false);
+  const isAdmin = useCan("see_all_leads");
 
   const back = (
     <Link
-      href={pipelineHref}
-      className="inline-flex items-center gap-1 self-start rounded-md font-semibold text-muted-foreground hover:text-foreground"
+      href={backHref}
+      className="inline-flex items-center gap-1 self-start rounded-md font-semibold text-muted-foreground outline-none hover:text-foreground focus-visible:shadow-focus"
     >
       <ArrowLeftIcon aria-hidden="true" className="size-4" />
-      Pipeline
+      Leads
     </Link>
   );
-  const backButton = (
-    <LinkButton href={pipelineHref}>Back to the Pipeline</LinkButton>
-  );
+  const backButton = <LinkButton href={backHref}>Back to leads</LinkButton>;
 
   const notFound =
     missing || (lead.error instanceof ApiError && lead.error.status === 404);
@@ -138,503 +178,694 @@ export function LeadScreen({
   }
 
   const data = lead.data;
-  const step = nextStep(data);
-  const pending =
-    qualification.isPending || spam.isPending ? last?.write : undefined;
-  const busy = pending !== undefined;
-
-  /** Runs a write and reports how it went. Nothing is assumed before the server answers. */
-  const run = (write: Write, start: (handlers: Handlers) => void) => {
-    const attempt = () => {
-      setFailure(undefined);
-      start({
-        onSuccess: () => {
-          toast.add({ title: `${DONE[write]}: ${data.name}`, type: "success" });
-        },
-        onError: (error) => {
-          // Refused because the lead changed elsewhere: the hook reloads it.
-          setFailure(
-            error instanceof ApiError && error.status === 409
-              ? "changed"
-              : "failed",
-          );
-        },
-      });
-    };
-    setLast({ write, run: attempt });
-    attempt();
-  };
-  const qualify = (decision: "qualified" | "not_qualified") =>
-    run(decision === "qualified" ? "qualify" : "not_qualify", (handlers) =>
-      qualification.mutate({ leadId, input: { decision } }, handlers),
-    );
-
-  const mainButton = () => {
-    if (!step.main) return null;
-    const label = ACTION_LABEL[step.main];
-    const to = DESTINATION[step.main]?.(data.id);
-    if (to) {
-      return (
-        <LinkButton
-          variant="primary"
-          href={to}
-          aria-disabled={busy || undefined}
-        >
-          {label}
-        </LinkButton>
-      );
-    }
-    // The one main action that does something here instead of leading away.
-    return (
-      <Button
-        variant="primary"
-        loading={pending === "qualify"}
-        disabled={busy}
-        onClick={() => qualify("qualified")}
-      >
-        {label}
-      </Button>
-    );
-  };
-
-  const nextCall = data.nextBooking;
-  const activities = showAll
-    ? data.activities
-    : data.activities.slice(0, TIMELINE_FIRST);
-  const record = data.verdictRecord;
-  const verdict = VERDICT_META[data.verdict];
-  const proposal = proposalStatusMeta(data.proposal?.status);
-
   return (
     <>
       {back}
+      <LeadHeader lead={data} />
+      <Actions lead={data} isAdmin={isAdmin} />
 
-      <header className="flex flex-col gap-2">
-        <h1
-          tabIndex={-1}
-          className="text-[24px] leading-tight wrap-break-word outline-none"
+      <div className="grid gap-4 nav:grid-cols-[minmax(0,1fr)_300px] nav:items-start">
+        <aside
+          aria-label="Next step and writes to the CRM"
+          className="flex flex-col gap-4 nav:order-2"
         >
-          {data.exit ? (
-            <>
-              <s className="text-muted-foreground">{data.name}</s>
-              <span className="sr-only"> (left the pipeline)</span>
-            </>
-          ) : (
-            data.name
-          )}
-        </h1>
-        {data.company && (
-          <p className="wrap-break-word text-muted-foreground">
-            {data.company}
-          </p>
-        )}
-        <ul
-          aria-label="Where this lead stands"
-          className="flex flex-wrap gap-2"
-        >
-          <li>
-            {data.exit ? (
-              <Badge variant="crit">Exit: {EXIT_LABEL[data.exit]}</Badge>
-            ) : (
-              data.stage && <Badge>Stage: {STAGE_LABEL[data.stage]}</Badge>
-            )}
-          </li>
-          <li>
-            <Badge variant={statusMeta(data.status).tone}>
-              {statusMeta(data.status).label}
-            </Badge>
-          </li>
-          <li>
-            <Badge variant={verdict.tone}>Verdict: {verdict.label}</Badge>
-          </li>
-          <li>
-            <Badge>Owner: {data.owner?.name ?? "Unassigned"}</Badge>
-          </li>
-          {data.proposal && (
-            <li>
-              <Badge variant={proposal.tone}>Proposal: {proposal.label}</Badge>
-            </li>
-          )}
-        </ul>
-      </header>
-
-      <section aria-label="Actions" className="flex flex-col gap-3">
-        {(step.main || step.canMarkSpam) && (
-          <div className="flex flex-wrap items-center gap-3">
-            {mainButton()}
-            {step.secondary === "not_qualify" && (
-              <ConfirmDialog
-                trigger={
-                  <Button loading={pending === "not_qualify"} disabled={busy}>
-                    {ACTION_LABEL.not_qualify}
-                  </Button>
-                }
-                title={`Mark ${data.name} not qualified?`}
-                description="The lead leaves the pipeline as Lead Lost, with the status Not a fit. This cannot be undone."
-                confirmLabel="Mark not qualified"
-                onConfirm={() => qualify("not_qualified")}
-              />
-            )}
-            {step.secondary === "open_proposal" && (
-              <LinkButton
-                href={proposalHref(data.id)}
-                aria-disabled={busy || undefined}
-              >
-                {ACTION_LABEL.open_proposal}
-              </LinkButton>
-            )}
-            {/* The two standing actions sit apart from the main one. */}
-            <div className="flex flex-wrap gap-3 nav:ml-auto">
-              {step.canMarkSpam && (
-                <ConfirmDialog
-                  trigger={
-                    <Button
-                      variant="danger"
-                      loading={pending === "spam"}
-                      disabled={busy}
-                    >
-                      Mark spam
-                    </Button>
-                  }
-                  title={`Mark ${data.name} as spam?`}
-                  description="The lead leaves the pipeline as Spam and any upcoming call is cancelled. This cannot be undone."
-                  confirmLabel="Mark as spam"
-                  onConfirm={() =>
-                    run("spam", (handlers) =>
-                      spam.mutate({ leadId, input: {} }, handlers),
-                    )
-                  }
-                />
-              )}
-            </div>
-          </div>
-        )}
-
-        {failure && !busy && (
-          <Alert variant="destructive">
-            <AlertDescription className="flex flex-wrap items-center gap-3">
-              {failure === "changed" ? (
-                "This lead had changed, so that action no longer applies. You are now looking at the latest version."
-              ) : (
-                <>
-                  That did not go through. The lead is unchanged.
-                  <Button size="sm" onClick={() => last?.run()}>
-                    Try again
-                  </Button>
-                </>
-              )}
-            </AlertDescription>
-          </Alert>
-        )}
-
-        <HintLine>
-          {step.hint}
-          {data.exit && (
-            <>
-              {" "}
-              It left on <LocalTime
-                value={data.updatedAt}
-                format="date"
-              />. {data.activities[0]?.detail}
-            </>
-          )}
-        </HintLine>
-      </section>
-
-      <div className="grid gap-4 nav:grid-cols-[minmax(0,1fr)_300px] nav:grid-rows-[auto_auto_1fr] nav:[grid-template-areas:'details_aside'_'answers_aside'_'timeline_aside'] wide:grid-cols-[270px_minmax(0,1fr)_300px] wide:grid-rows-[auto_1fr] wide:[grid-template-areas:'details_answers_aside'_'details_timeline_aside']">
-        <PanelSection
-          title="Details"
-          className="nav:self-start nav:[grid-area:details]"
-        >
-          <dl className="grid grid-cols-[96px_minmax(0,1fr)] gap-x-3 gap-y-2 [&_dt]:text-muted-foreground">
-            <dt>Email</dt>
-            <dd>
-              {data.email ? (
-                <a href={`mailto:${data.email}`} className={linkClass}>
-                  {data.email}
-                </a>
-              ) : (
-                <Missing />
-              )}
-            </dd>
-            <dt>Phone</dt>
-            <dd>
-              {data.phone ? (
-                <a href={`tel:${data.phone}`} className={linkClass}>
-                  {data.phone}
-                </a>
-              ) : (
-                <Missing />
-              )}
-            </dd>
-            <dt>Website</dt>
-            <dd>
-              {data.website ? (
-                <a
-                  href={data.website}
-                  target="_blank"
-                  rel="noreferrer"
-                  className={linkClass}
-                >
-                  {data.website.replace(/^https?:\/\//, "")}
-                  <span className="sr-only"> (opens in a new tab)</span>
-                </a>
-              ) : (
-                <Missing />
-              )}
-            </dd>
-            <dt>Source</dt>
-            <dd>{data.source}</dd>
-            <dt>Budget</dt>
-            <dd>{data.budget ?? <Missing />}</dd>
-            <dt>Next call</dt>
-            <dd>
-              {nextCall ? (
-                <>
-                  {BOOKING_KIND_LABEL[nextCall.kind]},{" "}
-                  <LocalTime value={nextCall.time} /> (
-                  {BOOKING_STATE_LABEL[nextCall.state]})
-                </>
-              ) : (
-                "No call booked"
-              )}
-            </dd>
-            <dt>Deck</dt>
-            <dd>{data.deck ? data.deck.templateName : "Not generated yet"}</dd>
-            <dt>Proposal</dt>
-            <dd>{proposal.label}</dd>
-            <dt>Invoice</dt>
-            <dd className="first-letter:uppercase">
-              {data.invoice?.status ?? "No invoice yet"}
-            </dd>
-          </dl>
-          {data.bookings.length > 0 && (
-            <>
-              <h3 className="mt-1 font-sans text-sm font-semibold tracking-normal">
-                Calls
-              </h3>
-              <ul className="flex flex-col gap-1.5">
-                {data.bookings.map((booking) => (
-                  <li key={`${booking.kind}-${booking.time}`}>
-                    {BOOKING_KIND_LABEL[booking.kind]},{" "}
-                    <LocalTime value={booking.time} />{" "}
-                    <span className="text-muted-foreground">
-                      ({BOOKING_STATE_LABEL[booking.state]})
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </PanelSection>
-
-        <PanelSection title="Form answers" className="nav:[grid-area:answers]">
-          {data.formAnswers.length === 0 ? (
-            <p className="text-muted-foreground">
-              No form answers on this lead.
-            </p>
-          ) : (
-            <dl className="flex flex-col gap-3">
-              {data.formAnswers.map(({ question, answer }) => (
-                <div key={question} className="flex flex-col gap-0.5">
-                  <dt className="text-muted-foreground">{question}</dt>
-                  <dd className="max-w-[70ch] text-pretty wrap-break-word">
-                    {answer}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          )}
-        </PanelSection>
-
-        <div className="flex flex-col gap-4 nav:[grid-area:aside]">
-          {record ? (
-            <VerdictBox
-              tone={verdict.tone === "ok" ? "ok" : "crit"}
-              word={verdict.label}
-              summary={record.summary}
-              reasons={record.reasons}
-            >
-              {!record.summary && record.reasons.length === 0 && (
-                <p>The AI gave no reasons.</p>
-              )}
-              {record.reviewOutcome && record.reviewedAt && (
-                <p className="border-t border-current/15 pt-3">
-                  The AI was unsure about this lead.{" "}
-                  <strong className="font-semibold">{record.reviewedBy}</strong>{" "}
-                  {record.reviewOutcome === "cleared"
-                    ? "cleared it as valid"
-                    : "marked it as spam"}{" "}
-                  on <LocalTime value={record.reviewedAt} />.
-                </p>
-              )}
-            </VerdictBox>
-          ) : (
-            <VerdictBox
-              tone="warn"
-              word={verdict.label}
-              summary="The AI is still checking this lead."
-            />
-          )}
-
-          <PanelSection title="Deck">
-            {data.deck ? (
-              <>
-                <p>{data.deck.templateName} template</p>
-                {!data.exit && (
-                  <LinkButton href={deckHref(data.id)} className="self-start">
-                    Open deck
-                  </LinkButton>
-                )}
-              </>
-            ) : (
-              <p className="text-muted-foreground">Not generated yet</p>
-            )}
-          </PanelSection>
-          <PanelSection title="Proposal">
-            <p>
-              <Badge variant={proposal.tone}>{proposal.label}</Badge>
-            </p>
-            {data.proposal ? (
-              <LinkButton href={proposalHref(data.id)} className="self-start">
-                Open proposal
-              </LinkButton>
-            ) : canHaveProposal(data) ? (
-              <LinkButton href={proposalHref(data.id)} className="self-start">
-                Start proposal
-              </LinkButton>
-            ) : (
-              !data.exit && (
-                <p className="text-muted-foreground">
-                  A proposal can be started once the lead is Qualified.
-                </p>
+          <NextStepPanel lead={data} />
+          <PanelSection
+            title="Writes to the CRM"
+            actions={
+              isAdmin &&
+              isLive("sync-log") && (
+                <Link href={SYNC_LOG_HREF} className={linkClass}>
+                  Sync log
+                </Link>
               )
-            )}
+            }
+          >
+            <SeamList entries={data.syncLog} />
           </PanelSection>
-          <InvoicePanel leadId={data.id} expected={Boolean(data.invoice)} />
-        </div>
-
-        <PanelSection
-          title="Activity"
-          className="nav:self-start nav:[grid-area:timeline]"
-        >
-          {data.activities.length === 0 ? (
-            <p className="text-muted-foreground">
-              Nothing has happened on this lead yet.
-            </p>
-          ) : (
-            <ol className="flex flex-col divide-y divide-border">
-              {activities.map((activity) => (
-                <li
-                  key={activity.id}
-                  className="flex flex-col gap-0.5 py-2.5 first:pt-0 last:pb-0"
-                >
-                  <span className="flex flex-wrap items-baseline justify-between gap-x-3">
-                    <span className="font-semibold">{activity.type}</span>
-                    <LocalTime
-                      value={activity.time}
-                      className="text-muted-foreground"
-                    />
-                  </span>
-                  <span className="text-pretty wrap-break-word">
-                    {activity.detail}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {activity.actor.name}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          )}
-          {!showAll && data.activities.length > TIMELINE_FIRST && (
-            <Button className="self-start" onClick={() => setShowAll(true)}>
-              Show earlier ({data.activities.length - TIMELINE_FIRST})
-            </Button>
-          )}
-        </PanelSection>
+        </aside>
+        <LeadTabs lead={data} />
       </div>
     </>
   );
 }
 
+function LeadHeader({ lead }: { lead: LeadDetail }) {
+  const verdict = VERDICT_META[lead.verdict];
+  const status = statusMeta(lead.status);
+  return (
+    <header className="flex flex-col gap-2">
+      <h1
+        tabIndex={-1}
+        className="text-[24px] leading-tight wrap-break-word outline-none"
+      >
+        {lead.exit ? (
+          <>
+            <s className="text-muted-foreground">{lead.name}</s>
+            <span className="sr-only"> (left the pipeline)</span>
+          </>
+        ) : (
+          lead.name
+        )}
+      </h1>
+      {lead.company && (
+        <p className="wrap-break-word text-muted-foreground">{lead.company}</p>
+      )}
+      <ul aria-label="Where this lead stands" className="flex flex-wrap gap-2">
+        <li>
+          <Badge variant={verdict.tone}>Verdict: {verdict.label}</Badge>
+        </li>
+        <li>
+          {lead.exit ? (
+            <Badge variant="crit">Left: {EXIT_LABEL[lead.exit]}</Badge>
+          ) : (
+            <Badge>
+              Stage: {lead.stage ? STAGE_LABEL[lead.stage] : "Not synced yet"}
+            </Badge>
+          )}
+        </li>
+        <li>
+          <Badge variant={status.tone}>Lead Status: {status.label}</Badge>
+        </li>
+        <li>
+          <Badge>Rep: {lead.owner?.name ?? "Unassigned"}</Badge>
+        </li>
+        {lead.archivedAt && (
+          <li>
+            <Badge variant="warn">Archived</Badge>
+          </li>
+        )}
+      </ul>
+    </header>
+  );
+}
+
 /**
- * The lead's invoice draft (spec 15, which defines no screen of its own). The
- * draft is created when the proposal is signed; the rep finishes it in the
- * invoice service (question 3, assumed).
+ * The actions this lead allows (nextStep, the rule the server also applies),
+ * and the two admin-only ones. While one is in flight, none can be pressed.
  */
-function InvoicePanel({
-  leadId,
-  expected,
-}: {
-  leadId: string;
-  /** The lead says it has an invoice, so there is one to ask for. */
-  expected: boolean;
-}) {
-  const invoice = useInvoice(leadId, expected);
-  const data = expected ? invoice.data : null;
-  const status = data && INVOICE_STATUS_META[data.status];
+function Actions({ lead, isAdmin }: { lead: LeadDetail; isAdmin: boolean }) {
+  const qualification = useSetQualification();
+  const spam = useMarkSpam();
+  const status = useChangeStatus();
+  const assign = useAssignRep();
+  const busy =
+    qualification.isPending ||
+    spam.isPending ||
+    status.isPending ||
+    assign.isPending;
+  const step = nextStep(lead);
+  const live = !lead.exit && !lead.archivedAt;
+
+  const qualify = (decision: "qualified" | "not_qualified") =>
+    qualification.mutate(
+      { leadId: lead.id, input: { decision } },
+      {
+        onSuccess: (updated) => {
+          const outcome = writeOutcome(
+            latestWrite(updated, "w3_qualification"),
+          );
+          toast.add({
+            title:
+              decision === "qualified"
+                ? `Marked ${lead.name} qualified`
+                : `Marked ${lead.name} not qualified`,
+            description: outcome.description,
+            type: outcome.failed ? "error" : "success",
+          });
+        },
+        onError: failed,
+      },
+    );
+
+  const qualifyPreview = (decision: "qualified" | "not_qualified") => (
+    <WritePreview>
+      <span>
+        In the CRM: sets Qualification Decision to{" "}
+        <strong className="font-semibold text-ink">
+          {decision === "qualified" ? "Qualified" : "Not qualified"}
+        </strong>{" "}
+        on the opportunity, and moves it to the{" "}
+        <strong className="font-semibold text-ink">
+          {decision === "qualified" ? "Qualified" : "Lead Lost"}
+        </strong>{" "}
+        stage.
+      </span>
+      <span>The CRM then sends the follow-up email.</span>
+    </WritePreview>
+  );
+
+  const canAct = live && (step.canQualify || step.canMarkSpam || isAdmin);
+  if (!canAct) return null;
 
   return (
-    <PanelSection
-      title="Invoice"
-      id={INVOICE_ANCHOR}
-      // Clears the top bar when "Check invoice draft" jumps here.
-      className="scroll-mt-16"
-    >
-      {expected && invoice.isPending ? (
-        <output aria-label="Loading invoice" className="flex flex-col gap-2">
-          <Skeleton className="h-5 w-16 rounded-full" />
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-2/3" />
-        </output>
-      ) : expected && invoice.isError ? (
-        <p role="alert" className="flex flex-wrap items-center gap-2">
-          The invoice could not be loaded.
-          <Button
-            size="sm"
-            loading={invoice.isFetching}
-            onClick={() => invoice.refetch()}
-          >
-            Try again
-          </Button>
-        </p>
-      ) : data && status ? (
+    <section aria-label="Actions" className="flex flex-wrap items-center gap-3">
+      {step.canQualify && (
         <>
-          <p className="flex flex-wrap items-center gap-2">
-            <Badge variant={status.tone}>{status.label}</Badge>
-            <span className="text-muted-foreground">
-              Drafted <LocalTime value={data.createdAt} />
-            </span>
-          </p>
-          <ul aria-label="Invoice lines" className="flex flex-col gap-1.5">
-            {data.lines.map((line, index) => (
-              <li
-                // biome-ignore lint/suspicious/noArrayIndexKey: a read-only list in the order given; two lines may be identical
-                key={index}
-                className="flex items-baseline justify-between gap-3"
+          <ConfirmDialog
+            tone="neutral"
+            trigger={
+              <Button
+                variant="primary"
+                loading={qualification.isPending}
+                disabled={busy}
               >
-                <span className="min-w-0 wrap-break-word">
-                  {line.description}
-                </span>
-                <span className="tabular-nums">{formatUsd(line.amount)}</span>
-              </li>
-            ))}
-          </ul>
-          <p className="flex items-baseline justify-between gap-3 border-t border-border pt-2 font-semibold">
-            Total
-            <span className="tabular-nums">{formatUsd(data.total)}</span>
-          </p>
-          <p className="text-pretty text-muted-foreground">
-            {data.status === "draft"
-              ? "Finish and send it in the invoice service."
-              : "It was sent from the invoice service."}{" "}
-            Sample data: there is nothing to open.
-          </p>
+                {ACTION_LABEL.qualify}
+              </Button>
+            }
+            title={`Mark ${lead.name} qualified?`}
+            description="Records the discovery call's outcome."
+            confirmLabel="Mark qualified"
+            onConfirm={() => qualify("qualified")}
+          >
+            {qualifyPreview("qualified")}
+          </ConfirmDialog>
+          <ConfirmDialog
+            trigger={
+              <Button disabled={busy}>{ACTION_LABEL.not_qualify}</Button>
+            }
+            title={`Mark ${lead.name} not qualified?`}
+            description="The lead leaves the pipeline as Lead Lost. This cannot be undone here."
+            confirmLabel="Mark not qualified"
+            onConfirm={() => qualify("not_qualified")}
+          >
+            {qualifyPreview("not_qualified")}
+          </ConfirmDialog>
         </>
+      )}
+
+      <div className="flex flex-wrap gap-3 nav:ml-auto">
+        {isAdmin && (
+          <>
+            <StatusDialog
+              key={lead.status?.value}
+              lead={lead}
+              mutation={status}
+              busy={busy}
+            />
+            <AssignDialog
+              key={lead.owner?.id}
+              lead={lead}
+              mutation={assign}
+              busy={busy}
+            />
+          </>
+        )}
+        {step.canMarkSpam && (
+          <ConfirmDialog
+            trigger={
+              <Button variant="danger" loading={spam.isPending} disabled={busy}>
+                Mark as spam
+              </Button>
+            }
+            title={`Mark ${lead.name} as spam?`}
+            description="The lead leaves the pipeline as Spam. This cannot be undone here."
+            confirmLabel="Mark as spam"
+            onConfirm={() =>
+              spam.mutate(
+                { leadId: lead.id, input: {} },
+                {
+                  onSuccess: (updated) => {
+                    const outcome = writeOutcome(
+                      latestWrite(updated, "w4_mark_spam"),
+                    );
+                    toast.add({
+                      title: `Marked ${lead.name} as spam`,
+                      description: outcome.description,
+                      type: outcome.failed ? "error" : "success",
+                    });
+                  },
+                  onError: failed,
+                },
+              )
+            }
+          >
+            <WritePreview>
+              <span>
+                In the CRM: sets Validation Status to{" "}
+                <strong className="font-semibold text-ink">Spam</strong> on the
+                contact.
+              </span>
+              <span>
+                The CRM then cancels any booking, sends its note and removes the
+                record.
+              </span>
+            </WritePreview>
+          </ConfirmDialog>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** Change status (admin, spec 07 question 2): app only; the next sync may overwrite it. */
+function StatusDialog({
+  lead,
+  mutation,
+  busy,
+}: {
+  lead: LeadDetail;
+  mutation: ReturnType<typeof useChangeStatus>;
+  busy: boolean;
+}) {
+  const [value, setValue] = useState(lead.status?.value ?? "");
+  const id = useId();
+  return (
+    <ConfirmDialog
+      tone="neutral"
+      trigger={
+        <Button loading={mutation.isPending} disabled={busy}>
+          Change status
+        </Button>
+      }
+      title={`Change ${lead.name}'s Lead Status?`}
+      description="Sets the Lead Status shown in this app."
+      confirmLabel="Change status"
+      onConfirm={() => {
+        if (!value || value === lead.status?.value) return;
+        mutation.mutate(
+          { leadId: lead.id, input: { status: value } },
+          {
+            onSuccess: () =>
+              toast.add({
+                title: `Lead Status is now ${value}`,
+                description:
+                  "Changed in this app only. Nothing was written to the CRM.",
+                type: "success",
+              }),
+            onError: failed,
+          },
+        );
+      }}
+    >
+      <Field>
+        <FieldLabel htmlFor={id}>Lead Status</FieldLabel>
+        <NativeSelect
+          id={id}
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          className="w-full"
+        >
+          {!lead.status && (
+            <NativeSelectOption value="" disabled>
+              Choose a status
+            </NativeSelectOption>
+          )}
+          {LEAD_STATUS_OPTIONS.map(([group, values]) => (
+            <NativeSelectOptGroup key={group} label={group}>
+              {values.map((status) => (
+                <NativeSelectOption key={status} value={status}>
+                  {status}
+                </NativeSelectOption>
+              ))}
+            </NativeSelectOptGroup>
+          ))}
+        </NativeSelect>
+      </Field>
+      <WritePreview>
+        <span>
+          Nothing in the CRM. The status changes in this app only, and the CRM's
+          own workflows may set it again at the next sync.
+        </span>
+      </WritePreview>
+    </ConfirmDialog>
+  );
+}
+
+/** Assign rep (admin): app only, until assignment rules exist. */
+function AssignDialog({
+  lead,
+  mutation,
+  busy,
+}: {
+  lead: LeadDetail;
+  mutation: ReturnType<typeof useAssignRep>;
+  busy: boolean;
+}) {
+  const owners = usePipelineSummary().data?.owners ?? [];
+  const [value, setValue] = useState(lead.owner?.id ?? "");
+  const id = useId();
+  return (
+    <ConfirmDialog
+      tone="neutral"
+      trigger={
+        <Button loading={mutation.isPending} disabled={busy}>
+          Assign rep
+        </Button>
+      }
+      title={`Assign ${lead.name}?`}
+      description="Chooses the rep who works this lead. They see it in their list."
+      confirmLabel="Assign"
+      onConfirm={() => {
+        if (value === (lead.owner?.id ?? "")) return;
+        const name =
+          owners.find((owner) => owner.id === value)?.name ?? "nobody";
+        mutation.mutate(
+          { leadId: lead.id, input: { profileId: value || null } },
+          {
+            onSuccess: () =>
+              toast.add({
+                title: value
+                  ? `Assigned ${lead.name} to ${name}`
+                  : `${lead.name} is unassigned`,
+                description:
+                  "Changed in this app only. Nothing was written to the CRM.",
+                type: "success",
+              }),
+            onError: failed,
+          },
+        );
+      }}
+    >
+      <Field>
+        <FieldLabel htmlFor={id}>Rep</FieldLabel>
+        <NativeSelect
+          id={id}
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          className="w-full"
+        >
+          <NativeSelectOption value="">Unassigned</NativeSelectOption>
+          {owners.map((owner) => (
+            <NativeSelectOption key={owner.id} value={owner.id}>
+              {owner.name}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </Field>
+      <WritePreview>
+        <span>
+          Nothing in the CRM. Assignment happens in this app only until
+          assignment rules exist.
+        </span>
+      </WritePreview>
+    </ConfirmDialog>
+  );
+}
+
+function NextStepPanel({ lead }: { lead: LeadDetail }) {
+  const step = nextStep(lead);
+  const destination = step.main ? DESTINATION[step.main] : undefined;
+  return (
+    <PanelSection title="Next step">
+      <p className="text-pretty">
+        {lead.archivedAt
+          ? "This lead is archived. It stays in the app, out of the lead list."
+          : step.hint}
+      </p>
+      {step.main &&
+        destination &&
+        isLive(destination.screen) &&
+        !lead.archivedAt && (
+          <LinkButton
+            variant="primary"
+            href={destination.href(lead.id)}
+            className="self-start"
+          >
+            {ACTION_LABEL[step.main]}
+          </LinkButton>
+        )}
+    </PanelSection>
+  );
+}
+
+function LeadTabs({ lead }: { lead: LeadDetail }) {
+  const [tab, setTab] = useState<(typeof TABS)[number]>("overview");
+  return (
+    <Tabs
+      value={tab}
+      onValueChange={(value) => setTab(value as typeof tab)}
+      className="min-w-0 gap-4"
+    >
+      {/* Scrolls sideways on narrow screens; the page itself never does. */}
+      <div className="-mx-4 overflow-x-auto px-4 pb-1.5 nav:mx-0 nav:px-0">
+        <TabsList variant="line" aria-label="About this lead" className="h-8">
+          {TABS.map((value) => (
+            <TabsTrigger key={value} value={value} className="flex-none px-2">
+              {TAB_LABEL[value]}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </div>
+      <TabsContent value="overview" className="flex flex-col gap-4">
+        <Overview lead={lead} />
+      </TabsContent>
+      <TabsContent value="research" className="flex flex-col gap-4">
+        <ResearchTab leadId={lead.id} />
+      </TabsContent>
+      <TabsContent value="decks">
+        <DecksTab lead={lead} />
+      </TabsContent>
+      <TabsContent value="proposals">
+        <ProposalsTab lead={lead} />
+      </TabsContent>
+      <TabsContent value="meetings">
+        <MeetingsTab lead={lead} />
+      </TabsContent>
+      <TabsContent value="timeline">
+        <TimelineTab lead={lead} />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+function Overview({ lead }: { lead: LeadDetail }) {
+  const record = lead.verdictRecord;
+  const verdict = VERDICT_META[lead.verdict];
+  const next = lead.nextBooking;
+  return (
+    <>
+      {record ? (
+        <VerdictBox
+          tone={verdict.tone === "ok" ? "ok" : "crit"}
+          word={verdict.label}
+          summary={record.summary}
+          reasons={record.reasons}
+        >
+          {record.reviewOutcome && record.reviewedAt && (
+            <p className="border-t border-current/15 pt-3">
+              The AI was unsure about this lead.{" "}
+              <strong className="font-semibold">{record.reviewedBy}</strong>{" "}
+              {record.reviewOutcome === "cleared"
+                ? "cleared it as valid"
+                : "marked it as spam"}{" "}
+              on <LocalTime value={record.reviewedAt} />.
+            </p>
+          )}
+        </VerdictBox>
       ) : (
-        <p className="text-pretty text-muted-foreground">
-          No invoice yet. A draft is created when the proposal is signed.
-        </p>
+        <VerdictBox
+          tone="warn"
+          word={verdict.label}
+          summary="The AI is still checking this lead."
+        />
+      )}
+
+      <PanelSection title="Details">
+        <dl className="grid grid-cols-[96px_minmax(0,1fr)] gap-x-3 gap-y-2 [&_dt]:text-muted-foreground">
+          <dt>Email</dt>
+          <dd>
+            {lead.email ? (
+              <a href={`mailto:${lead.email}`} className={linkClass}>
+                {lead.email}
+              </a>
+            ) : (
+              <Missing />
+            )}
+          </dd>
+          <dt>Phone</dt>
+          <dd>
+            {lead.phone ? (
+              <a href={`tel:${lead.phone}`} className={linkClass}>
+                {lead.phone}
+              </a>
+            ) : (
+              <Missing />
+            )}
+          </dd>
+          <dt>Website</dt>
+          <dd>
+            {lead.website ? (
+              <a
+                href={lead.website}
+                target="_blank"
+                rel="noreferrer"
+                className={linkClass}
+              >
+                {lead.website.replace(/^https?:\/\//, "")}
+                <span className="sr-only"> (opens in a new tab)</span>
+              </a>
+            ) : (
+              <Missing />
+            )}
+          </dd>
+          <dt>Source</dt>
+          <dd>{lead.source ?? <Missing />}</dd>
+          <dt>Next call</dt>
+          <dd>
+            {next ? (
+              <>
+                {BOOKING_KIND_LABEL[next.kind]}, <LocalTime value={next.time} />
+              </>
+            ) : (
+              "None booked"
+            )}
+          </dd>
+          <dt>Created</dt>
+          <dd>
+            <LocalTime value={lead.createdAt} format="date" />
+          </dd>
+          {lead.archivedAt && (
+            <>
+              <dt>Archived</dt>
+              <dd>
+                <LocalTime value={lead.archivedAt} format="date" />
+                {lead.archivedReason && `: ${lead.archivedReason}`}
+              </dd>
+            </>
+          )}
+        </dl>
+      </PanelSection>
+
+      <PanelSection title="Form answers">
+        {lead.formAnswers.length === 0 ? (
+          <p className="text-muted-foreground">No form answers on this lead.</p>
+        ) : (
+          <dl className="flex flex-col gap-3">
+            {lead.formAnswers.map(({ question, answer }) => (
+              <div key={question} className="flex flex-col gap-0.5">
+                <dt className="text-muted-foreground">{question}</dt>
+                <dd className="max-w-[680px] text-pretty wrap-break-word">
+                  {answer}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </PanelSection>
+    </>
+  );
+}
+
+function DecksTab({ lead }: { lead: LeadDetail }) {
+  if (!lead.deck) {
+    return (
+      <EmptyState
+        variant="empty"
+        title="No decks yet"
+        body="The discovery deck for this lead appears here once it is generated."
+      />
+    );
+  }
+  return (
+    <PanelSection title="Deck">
+      <p>{lead.deck.templateName} template</p>
+      {isLive("deck-detail") && (
+        <LinkButton href={deckHref(lead.id)} className="self-start">
+          Open deck
+        </LinkButton>
+      )}
+    </PanelSection>
+  );
+}
+
+function ProposalsTab({ lead }: { lead: LeadDetail }) {
+  if (!lead.proposal) {
+    return (
+      <EmptyState
+        variant="empty"
+        title="No proposals yet"
+        body="A proposal for this lead appears here once it is started."
+      />
+    );
+  }
+  return (
+    <PanelSection title="Proposal">
+      <p>{PROPOSAL_LABEL[lead.proposal.status]}</p>
+      {isLive("proposal-detail") && (
+        <LinkButton href={proposalHref(lead.id)} className="self-start">
+          Open proposal
+        </LinkButton>
+      )}
+    </PanelSection>
+  );
+}
+
+/** The calls booked in the CRM. Recordings and transcripts come with spec 11. */
+function MeetingsTab({ lead }: { lead: LeadDetail }) {
+  if (lead.bookings.length === 0) {
+    return (
+      <EmptyState
+        variant="empty"
+        title="No meetings yet"
+        body="Discovery and proposal review calls appear here when they are booked."
+      />
+    );
+  }
+  return (
+    <PanelSection title="Calls">
+      <ul className="flex flex-col gap-2">
+        {lead.bookings.map((booking) => (
+          <li
+            key={`${booking.kind}-${booking.time}`}
+            className="flex flex-wrap items-baseline justify-between gap-x-3"
+          >
+            <span className="font-semibold">
+              {BOOKING_KIND_LABEL[booking.kind]}
+            </span>
+            <span className="text-muted-foreground">
+              <LocalTime value={booking.time} />,{" "}
+              {BOOKING_STATE_LABEL[booking.state]}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </PanelSection>
+  );
+}
+
+function TimelineTab({ lead }: { lead: LeadDetail }) {
+  const [showAll, setShowAll] = useState(false);
+  if (lead.activities.length === 0) {
+    return (
+      <EmptyState
+        variant="empty"
+        title="Nothing has happened yet"
+        body="Stage, status and decision changes on this lead appear here."
+      />
+    );
+  }
+  const shown = showAll
+    ? lead.activities
+    : lead.activities.slice(0, TIMELINE_FIRST);
+  return (
+    <PanelSection title="Timeline">
+      <ol className="flex flex-col divide-y divide-border">
+        {shown.map((activity) => (
+          <li
+            key={activity.id}
+            className="flex flex-col gap-0.5 py-2.5 first:pt-0 last:pb-0"
+          >
+            <span className="flex flex-wrap items-baseline justify-between gap-x-3">
+              <span className="font-semibold">{activity.type}</span>
+              <LocalTime
+                value={activity.time}
+                className="text-muted-foreground"
+              />
+            </span>
+            {activity.detail && (
+              <span className="text-pretty wrap-break-word">
+                {activity.detail}
+              </span>
+            )}
+            <span className="text-muted-foreground">{activity.actor.name}</span>
+          </li>
+        ))}
+      </ol>
+      {!showAll && lead.activities.length > TIMELINE_FIRST && (
+        <Button className="self-start" onClick={() => setShowAll(true)}>
+          Show earlier ({lead.activities.length - TIMELINE_FIRST})
+        </Button>
       )}
     </PanelSection>
   );
@@ -652,14 +883,9 @@ function LeadSkeleton() {
           <Skeleton className="h-5 w-20 rounded-full" />
         </div>
       </div>
-      <div className="flex gap-3">
-        <Skeleton className="h-8 w-28" />
-        <Skeleton className="h-8 w-24" />
-      </div>
-      <div className="grid gap-4 nav:grid-cols-[minmax(0,1fr)_300px] wide:grid-cols-[270px_minmax(0,1fr)_300px]">
+      <div className="grid gap-4 nav:grid-cols-[minmax(0,1fr)_300px]">
         <Skeleton className="h-64 rounded-panel" />
-        <Skeleton className="h-64 rounded-panel" />
-        <Skeleton className="h-40 rounded-box" />
+        <Skeleton className="h-40 rounded-panel" />
       </div>
     </output>
   );
