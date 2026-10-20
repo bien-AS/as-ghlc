@@ -37,6 +37,13 @@ test("private, loopback, link-local and mapped addresses are refused; public one
     "fe80::1",
     "::ffff:127.0.0.1",
     "::ffff:7f00:1",
+    // IPv6 forms that carry an IPv4 address: compatible, NAT64, 6to4, SIIT; and site-local.
+    "::7f00:1",
+    "64:ff9b::a9fe:a9fe",
+    "64:ff9b:1::a00:1",
+    "2002:a9fe:a9fe::1",
+    "::ffff:0:7f00:1",
+    "fec0::1",
     "not-an-ip",
   ]) {
     expect(isPrivateAddress(address), address).toBe(true);
