@@ -118,6 +118,8 @@ export const leadListItemSchema = z.object({
   owner: ownerSchema.nullable(),
   /** The earliest booked call, if any. */
   nextBooking: bookingSchema.nullable(),
+  /** Every call, held or not: what `nextStep` reads, so the list and lead detail agree. */
+  bookings: z.array(bookingSchema),
   createdAt: isoTime,
   /** GHL's last activity. Age is now minus this; null is "Not measured", never 0. */
   lastActivityAt: isoTime.nullable(),
@@ -161,7 +163,6 @@ export const leadDetailSchema = leadListItemSchema.extend({
   updatedAt: isoTime,
   /** Absent while the lead is awaiting a verdict. */
   verdictRecord: verdictRecordSchema.nullable(),
-  bookings: z.array(bookingSchema),
   /** Null until decks (spec 09) are read from their table. */
   deck: z
     .object({

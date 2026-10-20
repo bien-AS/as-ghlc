@@ -15,7 +15,7 @@ import {
   stopDashboard,
   viewAs,
 } from "@/test/dashboard";
-import { research, resetLeadStore } from "@/test/lead-store";
+import { research, resetLeadStore, updateLead } from "@/test/lead-store";
 
 import { LeadScreen } from "./lead-screen";
 
@@ -104,6 +104,22 @@ test("the header, the six tabs, the next step and the seam", async () => {
   expect(within(seam()).getByText("Validation verdict")).toBeDefined();
   expect(within(seam()).getByText("Written")).toBeDefined();
   expect(document.body.textContent).not.toMatch(FORBIDDEN);
+});
+
+test("a website stored without a scheme links to the site, and one that is not http(s) is not a link", async () => {
+  updateLead("lead-imogen", { website: "vasquezdental.com" });
+  await open();
+  expect(
+    screen
+      .getByRole("link", { name: /^vasquezdental\.com/ })
+      .getAttribute("href"),
+  ).toBe("https://vasquezdental.com/");
+  cleanup();
+
+  updateLead("lead-imogen", { website: "javascript:alert(1)" });
+  await open();
+  expect(screen.getByText("javascript:alert(1)")).toBeDefined();
+  expect(screen.queryByRole("link", { name: /javascript/ })).toBeNull();
 });
 
 test("Qualified names its CRM write before confirming, calls the write once, and says it was skipped with writes off (check 3)", async () => {

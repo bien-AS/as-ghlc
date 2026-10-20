@@ -26,6 +26,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast";
 import { VerdictBox } from "@/components/ui/verdict-box";
+import { WebsiteLink } from "@/components/ui/website-link";
 import {
   useAssignRep,
   useChangeStatus,
@@ -696,15 +697,7 @@ function Overview({ lead }: { lead: LeadDetail }) {
           <dt>Website</dt>
           <dd>
             {lead.website ? (
-              <a
-                href={lead.website}
-                target="_blank"
-                rel="noreferrer"
-                className={linkClass}
-              >
-                {lead.website.replace(/^https?:\/\//, "")}
-                <span className="sr-only"> (opens in a new tab)</span>
-              </a>
+              <WebsiteLink website={lead.website} className={linkClass} />
             ) : (
               <Missing />
             )}
