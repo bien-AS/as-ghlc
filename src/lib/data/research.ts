@@ -23,6 +23,18 @@ import {
 /** Recent priced runs the estimate averages over. */
 const ESTIMATE_SAMPLE = 20;
 
+/**
+ * A run still 'generating' after this is reported as failed, so the page stops
+ * waiting even when the job died without onFailure (a cancelled run). Three
+ * attempts of at most ~5 minutes each (route maxDuration) fit inside it.
+ *
+ * ponytail: read-time only, the row stays 'generating'; sweep stale rows in a
+ * cron if anything else ever reads lead_research.status.
+ */
+const STALE_RUN_MS = 20 * 60_000;
+const STALE_RUN_ERROR =
+  "The research run did not finish. Refresh the research to try again.";
+
 const toBrief = (row: typeof leadResearch.$inferSelect): ResearchBrief => ({
   id: row.id,
   briefMd: row.briefMd ?? "",
@@ -78,13 +90,16 @@ export async function getLatestResearch(leadId: string): Promise<LeadResearch> {
     ),
     estimateResearchCost(),
   ]);
+  const stale =
+    newest?.status === "generating" &&
+    Date.now() - newest.createdAt.getTime() > STALE_RUN_MS;
   return {
     brief: ready ? toBrief(ready) : null,
     run:
       newest && newest.status !== "ready"
         ? {
-            status: newest.status,
-            error: newest.error,
+            status: stale ? "failed" : newest.status,
+            error: stale ? STALE_RUN_ERROR : newest.error,
             createdAt: newest.createdAt.toISOString(),
           }
         : null,
