@@ -12,6 +12,8 @@ import { leadStage, type leads } from "@/db/schema";
 
 const BASE_URL = "https://services.leadconnectorhq.com";
 const MAX_ATTEMPTS = 5;
+/** The longest 429 backoff slept; GHL asking for more fails the call instead. */
+const MAX_BACKOFF_MS = 60_000;
 /** GHL's largest page for opportunity search. */
 export const PAGE_SIZE = 100;
 
@@ -102,7 +104,8 @@ function backoffMs(res: Response, attempt: number): number {
 /**
  * Every GHL call goes through here: the auth, version and user-agent headers
  * (Cloudflare answers 403 "Error 1010" to a runtime's default user agent), and
- * retry on 429 with exponential backoff. Returns the parsed JSON body.
+ * retry on 429 with exponential backoff (capped at 60s). Any method but GET is
+ * refused unless GHL_WRITES_ENABLED is exactly "true". Returns the parsed JSON body.
  */
 export async function ghlRequest(
   path: string,
@@ -111,6 +114,15 @@ export async function ghlRequest(
   const token = process.env.GHL_PRIVATE_TOKEN;
   if (!token) throw new Error("GHL_PRIVATE_TOKEN is not set");
   const method = init.method ?? "GET";
+  // Defence in depth: the write runner already gates on this before calling.
+  if (
+    method.toUpperCase() !== "GET" &&
+    process.env.GHL_WRITES_ENABLED !== "true"
+  ) {
+    throw new Error(
+      `GHL_WRITES_ENABLED is not "true": refused ${method} ${path}`,
+    );
+  }
 
   for (let attempt = 0; ; attempt++) {
     const res = await fetch(`${BASE_URL}${path}`, {
@@ -124,8 +136,13 @@ export async function ghlRequest(
         ...init.headers,
       },
     });
-    if (res.status === 429 && attempt < MAX_ATTEMPTS - 1) {
-      await sleep(backoffMs(res, attempt));
+    // A wait past the cap is not slept: it falls through to a GhlError 429.
+    const wait =
+      res.status === 429 && attempt < MAX_ATTEMPTS - 1
+        ? backoffMs(res, attempt)
+        : Infinity;
+    if (wait <= MAX_BACKOFF_MS) {
+      await sleep(wait);
       continue;
     }
     if (!res.ok) {

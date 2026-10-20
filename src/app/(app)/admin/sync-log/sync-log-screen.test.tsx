@@ -9,6 +9,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { GET as getWebhooks } from "@/app/api/admin/sync-log/webhooks/route";
 import { retryWrite } from "@/lib/data/sync-log";
+import { AccessError } from "@/lib/data/users";
 import type {
   ListSyncLogQuery,
   SyncLogEntry,
@@ -94,7 +95,7 @@ const write = (over: Partial<SyncLogEntry>): SyncLogEntry => ({
   leadId: LEAD,
   writeType: "w1_verdict",
   idempotencyKey: "key",
-  payload: { method: "POST", path: "/contacts/upsert", body: {} },
+  payload: { method: "PUT", path: "/contacts/c-1", body: {} },
   result: "succeeded",
   response: null,
   attempts: 1,
@@ -269,6 +270,14 @@ test("Retry names the write it will cause, and only then retries", async () => {
   ).toBeDefined();
   expect(dialog.getByText("PUT /opportunities/opp-1")).toBeDefined();
   expect(dialog.getByText(FAILED.idempotencyKey)).toBeDefined();
+  // The key never reaches GHL: a failed write may already have landed there.
+  const warning = dialog.getByText(/may already have reached GHL/);
+  expect(warning.textContent).toMatch(/timeout after GHL made the change/);
+  expect(warning.textContent).toMatch(/Check the contact in GHL first/);
+  expect(warning.textContent).toMatch(
+    /can send the follow-up email from Lee's workflow a second time/,
+  );
+  expect(dialog.queryByText(/however many times/)).toBeNull();
   expect(retryWrite).not.toHaveBeenCalled();
 
   fireEvent.click(dialog.getByRole("button", { name: "Retry write" }));
@@ -276,6 +285,26 @@ test("Retry names the write it will cause, and only then retries", async () => {
   expect(api.calls()).toContain(`POST /api/admin/sync-log/${FAILED.id}/retry`);
   expect(
     await screen.findByText("W3 Qualification failed again"),
+  ).toBeDefined();
+});
+
+test("a retry the server refuses says why: replaced by a newer write, or no longer failed", async () => {
+  vi.mocked(retryWrite).mockImplementationOnce(async () => {
+    throw new AccessError("conflict");
+  });
+  await open();
+  fireEvent.click(
+    rowWith(FAILED.idempotencyKey).getByRole("button", { name: /^Retry/ }),
+  );
+  const dialog = within(await screen.findByRole("alertdialog"));
+  fireEvent.click(dialog.getByRole("button", { name: "Retry write" }));
+  expect(
+    await screen.findByText("This write can no longer be retried"),
+  ).toBeDefined();
+  expect(
+    screen.getByText(
+      "A newer write for this lead replaced it, or it is no longer failed. Nothing was sent.",
+    ),
   ).toBeDefined();
 });
 

@@ -56,10 +56,13 @@ import { DASHBOARD_HREF, leadHref } from "../../navigation";
 type WriteType = SyncLogEntry["writeType"];
 type WriteResult = SyncLogEntry["result"];
 
-/** Each write in words (spec 06, "Writes out"): what it changes in GHL, and what GHL then does. */
+/**
+ * Each write in words (spec 06, "Writes out"): what it changes in GHL, what GHL
+ * then does, and what sending it twice can do.
+ */
 const WRITES: Record<
   WriteType,
-  { label: string; sets: string; after?: string }
+  { label: string; sets: string; after?: string; twice?: string }
 > = {
   w1_verdict: {
     label: "W1 Validation verdict",
@@ -75,6 +78,8 @@ const WRITES: Record<
     label: "W3 Qualification",
     sets: "Qualification Decision on the opportunity, and its stage (Qualified or Lead Lost)",
     after: "GHL then sends the follow-up email.",
+    twice:
+      "If it did, retrying can send the follow-up email from Lee's workflow a second time.",
   },
   w4_mark_spam: {
     label: "W4 Mark spam",
@@ -152,7 +157,7 @@ const skipReason = (entry: SyncLogEntry) =>
 
 const shortId = (id: string) => id.slice(0, 8);
 
-/** The request a write sends, as "POST /contacts/upsert". */
+/** The request a write sends, as "PUT /contacts/{id}". */
 function requestLine(payload: unknown) {
   const plan = payload as { method?: unknown; path?: unknown } | null;
   return typeof plan?.method === "string" && typeof plan?.path === "string"
@@ -513,12 +518,21 @@ function RetryButton({ entry }: { entry: SyncLogEntry }) {
                       type: "error",
                     },
             ),
-          onError: () =>
-            toast.add({
-              title: "The retry did not go through",
-              description: "Nothing was sent. Try again.",
-              type: "error",
-            }),
+          onError: (error) =>
+            toast.add(
+              error instanceof ApiError && error.code === "conflict"
+                ? {
+                    title: "This write can no longer be retried",
+                    description:
+                      "A newer write for this lead replaced it, or it is no longer failed. Nothing was sent.",
+                    type: "error",
+                  }
+                : {
+                    title: "The retry did not go through",
+                    description: "Nothing was sent. Try again.",
+                    type: "error",
+                  },
+            ),
         })
       }
     >
@@ -535,8 +549,7 @@ function RetryButton({ entry }: { entry: SyncLogEntry }) {
         </dd>
       </dl>
       <p className="text-meta text-pretty text-ink-3">
-        The same key is sent again, so GHL makes this change once however many
-        times it is retried.
+        {`This change may already have reached GHL: a failed write can be a timeout after GHL made the change. Check the contact in GHL first. ${write.twice ?? ""}`.trim()}
       </p>
     </ConfirmDialog>
   );

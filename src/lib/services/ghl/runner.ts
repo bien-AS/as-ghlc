@@ -4,7 +4,7 @@ import type { PgUpdateSetSource } from "drizzle-orm/pg-core";
 import { db } from "@/db/client";
 import { ghlSyncLog, type writeType } from "@/db/schema";
 
-import { GhlError, getOpportunity, ghlRequest } from "./index";
+import { GhlError, getContact, getOpportunity, ghlRequest } from "./index";
 
 /*
  * THE write path to GHL (spec 06, "Writes out"). Every write W1 to W6 is one
@@ -25,12 +25,13 @@ export type WritePlan = {
   path: string;
   body: Record<string, unknown>;
   /**
-   * What must be true afterwards, or the write is recorded failed (check 9:
-   * never a silent success). A stage: the opportunity is read back. An
-   * existing contact: the upsert must not answer `"new": true`.
+   * What GHL must hold afterwards, read back after the request, or the write
+   * is recorded failed (check 9: never a silent success): the opportunity's
+   * stage, or the contact's custom field values (field id to value).
    */
-  expect?:
-    { opportunityId: string; pipelineStageId: string } | "existing_contact";
+  expect:
+    | { opportunityId: string; pipelineStageId: string }
+    | { contactId: string; customFields: Record<string, string> };
 };
 
 export type Write = {
@@ -48,23 +49,33 @@ function redact<T>(value: T): T {
 }
 
 async function send(plan: WritePlan): Promise<unknown> {
+  const check = plan.expect as unknown;
+  // A payload logged before every plan had a read-back is never re-sent.
+  if (!check || typeof check !== "object") {
+    throw new Error("The logged request has no read-back, so it is not sent");
+  }
   const response = await ghlRequest(plan.path, {
     method: plan.method,
     body: JSON.stringify(plan.body),
   });
-  if (
-    plan.expect === "existing_contact" &&
-    (response as { new?: unknown } | null)?.new === true
-  ) {
-    throw new Error("GHL created a new contact instead of updating the lead's");
-  }
-  if (typeof plan.expect === "object") {
+  if ("opportunityId" in plan.expect) {
     const { opportunityId, pipelineStageId } = plan.expect;
     const { pipelineStageId: actual } = await getOpportunity(opportunityId);
     if (actual !== pipelineStageId) {
       throw new Error(
         `Read-back: opportunity ${opportunityId} is in stage ${actual}, not ${pipelineStageId}`,
       );
+    }
+  } else {
+    const { contactId, customFields: expected } = plan.expect;
+    const { customFields } = await getContact(contactId);
+    for (const [id, value] of Object.entries(expected)) {
+      const actual = customFields.find((field) => field.id === id)?.value;
+      if (actual !== value) {
+        throw new Error(
+          `Read-back: contact ${contactId} field ${id} is ${JSON.stringify(actual)}, not ${JSON.stringify(value)}`,
+        );
+      }
     }
   }
   return response;
