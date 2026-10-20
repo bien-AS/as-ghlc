@@ -14,7 +14,8 @@
       "!dist",
       "!build",
       "!src/components/ui",
-      "!.claude/skills"
+      "!.claude/skills",
+      "!!.claude/worktrees"
     ]
   },
   "formatter": {

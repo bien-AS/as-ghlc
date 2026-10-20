@@ -4,7 +4,6 @@ import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
-import pg from "pg";
 import {
   afterAll,
   beforeAll,
@@ -39,6 +38,7 @@ import {
   updateSlide,
 } from "@/lib/data/decks";
 import { SAMPLE_REPS } from "@/lib/data/fixtures/leads";
+import { requestGhlImport } from "@/lib/data/ghl";
 import { createInvoiceDraft, getInvoice } from "@/lib/data/invoices";
 import {
   getLead,
@@ -76,12 +76,16 @@ import {
   sendProposal,
   simulateProposalEvent,
 } from "@/lib/data/proposals";
+import { listSyncLog, retryWrite } from "@/lib/data/sync-log";
 import { getMe, updateProfile } from "@/lib/data/users";
 import { getViewerSummary } from "@/lib/data/viewer";
+import { listWebhookEvents } from "@/lib/data/webhook-events";
 import { listLeadsQuerySchema } from "@/lib/leads/schemas";
 import { listNotificationsQuerySchema } from "@/lib/notifications/schemas";
 import type { ProposalDraftInput } from "@/lib/proposals/schemas";
 import { resetFakes, signIn } from "@/test/server-fakes";
+
+import { SETUP_TIMEOUT, testTransaction } from "./test-transaction";
 
 /*
  * The data-access isolation suite (spec 01 section 4, acceptance check 4).
@@ -212,7 +216,7 @@ const leadCalls = (
   markNotificationRead: () => markNotificationRead(notificationId),
 });
 
-/** The admin cluster: reps and integrations. */
+/** The admin cluster: reps, integrations and the GHL sync log. */
 const adminCalls = (): Calls => ({
   listMembers,
   inviteMember: () =>
@@ -228,6 +232,10 @@ const adminCalls = (): Calls => ({
   importLeads,
   getStageMapping,
   saveStageMapping: () => saveStageMapping({} as never),
+  requestGhlImport,
+  listSyncLog: () => listSyncLog({}),
+  retryWrite: () => retryWrite(randomUUID()),
+  listWebhookEvents: () => listWebhookEvents({}),
 });
 
 /** A person's own things. */
@@ -242,7 +250,7 @@ const ownCalls = (): Calls => ({
 });
 
 describe.skipIf(!DIRECT_URL)(SUITE, () => {
-  let client: pg.Client | undefined;
+  let transaction: ReturnType<typeof testTransaction> | undefined;
   let db: NodePgDatabase<typeof schema>;
   /** Rep B's lead, with a deck, still in the pipeline, and one of its notifications. */
   let bLead: string;
@@ -254,9 +262,12 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
   let aSlide: string;
 
   beforeAll(async () => {
-    client = new pg.Client({ connectionString: DIRECT_URL });
-    await client.connect();
-    await client.query("begin");
+    transaction = testTransaction(
+      DIRECT_URL as string,
+      "isolation:data-access",
+    );
+    const { client } = transaction;
+    await transaction.ready;
     db = drizzle({ client, schema });
     tx.db = db;
     for (const { id, email } of [ADMIN, REP_A, REP_B]) {
@@ -267,12 +278,9 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
       );
     }
     await db.insert(schema.profiles).values([ADMIN, REP_A, REP_B]);
-  });
+  }, SETUP_TIMEOUT);
 
-  afterAll(async () => {
-    await client?.query("rollback");
-    await client?.end();
-  });
+  afterAll(() => transaction?.rollback());
 
   beforeEach(async () => {
     resetFakes();
@@ -350,6 +358,7 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
     await expect(getLead(bLead)).resolves.toMatchObject({ id: bLead });
     await expect(listMembers()).resolves.toBeInstanceOf(Array);
     await expect(listConnections()).resolves.toBeInstanceOf(Array);
+    await expect(listWebhookEvents({})).resolves.toHaveProperty("items");
   });
 
   test("a rep cannot act on invoices, and reads only their own lead's", async () => {

@@ -1,4 +1,4 @@
-// The seventeen tables of spec 01 section 4, as approved in docs/agents/schema-draft-01.md.
+// The seventeen tables of spec 01 section 4 (docs/agents/schema-draft-01.md), plus webhook_events (spec 06).
 // Every table calls .enableRLS() with no policies: default-deny for the Supabase anon and authenticated roles
 // (ADR-0007). The app connects on a privileged role that bypasses RLS; access is checked by the data-access guards.
 import { sql } from "drizzle-orm";
@@ -481,6 +481,23 @@ export const integrationConnections = pgTable("integration_connections", {
   lastError: text("last_error"),
   ...timestamps,
 }).enableRLS();
+
+// Every inbound webhook as received (spec 06; schema draft open question 1). A duplicate is the same
+// (provider, event_id) and is acknowledged without being applied again. Null outcome = not yet handled.
+export const webhookEvents = pgTable(
+  "webhook_events",
+  {
+    id: id(),
+    provider: provider("provider").notNull(),
+    eventId: text("event_id").notNull(),
+    type: text("type").notNull(),
+    verified: boolean("verified").notNull(),
+    payload: jsonb("payload").notNull(),
+    outcome: text("outcome"),
+    ...timestamps,
+  },
+  (t) => [unique().on(t.provider, t.eventId)],
+).enableRLS();
 
 export const appSettings = pgTable("app_settings", {
   key: text("key").primaryKey(),

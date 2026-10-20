@@ -24,6 +24,7 @@ import {
 import { HintLine } from "@/components/ui/hint-line";
 import { InView } from "@/components/ui/in-view";
 import { Input } from "@/components/ui/input";
+import { JsonBlock } from "@/components/ui/json-block";
 import { LinkButton } from "@/components/ui/link-button";
 import { ListRow, ListRowName } from "@/components/ui/list-row";
 import { Marquee } from "@/components/ui/marquee";
@@ -380,6 +381,18 @@ export default function DevUiPage() {
             </p>
           </PanelSection>
           <ForbiddenState />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <JsonBlock
+            value={{
+              method: "POST",
+              path: "/contacts/upsert",
+              body: {
+                customFields: [{ id: "validation_status", value: "Spam" }],
+              },
+            }}
+          />
+          <JsonBlock value={null} />
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <SlideFrame

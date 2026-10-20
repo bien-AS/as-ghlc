@@ -4,9 +4,9 @@ import { expect, it } from "vitest";
 
 import * as schema from "./schema";
 
-it("enables RLS on every one of the seventeen tables", () => {
+it("enables RLS on every one of the eighteen tables", () => {
   const tables = Object.values(schema).filter((value) => is(value, PgTable));
-  expect(tables).toHaveLength(17);
+  expect(tables).toHaveLength(18);
   const withoutRls = tables
     .map((t) => getTableConfig(t))
     .filter((c) => !c.enableRLS);

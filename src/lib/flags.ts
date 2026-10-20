@@ -9,6 +9,8 @@
 const SCREENS: Record<string, "live" | "mockup"> = {
   // A placeholder until spec 07 builds it; where sign-in lands.
   dashboard: "live",
+  // Reads the real ghl_sync_log and webhook_events rows (spec 06).
+  "sync-log": "live",
   // Mockups on sample data until each screen's own session replaces them.
   "lead-list": "mockup",
   "lead-detail": "mockup",
@@ -20,6 +22,9 @@ const SCREENS: Record<string, "live" | "mockup"> = {
   "team-reps": "mockup",
   "admin-integrations": "mockup",
 };
+
+/** W2, the deck link written to GHL (spec 06): built, off until Phase 4. */
+export const ghlDeckLinkWrite = false;
 
 /** Registry ids with an entry here, for the test that checks them against the registry. */
 export const FLAGGED_SCREENS = Object.keys(SCREENS);

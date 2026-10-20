@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { beforeEach, expect, test, vi } from "vitest";
 
+import { POST as postGhlImport } from "@/app/api/admin/ghl/import/route";
 import { GET as getLeads } from "@/app/api/leads/route";
 import { GET as getMe } from "@/app/api/me/route";
 import { fake, resetFakes, signIn } from "@/test/server-fakes";
@@ -43,6 +44,13 @@ const apiRoutes = {
   "GET /api/me": () => getMe(),
   "GET /api/leads": () =>
     getLeads(new Request("http://localhost:3000/api/leads")),
+  "POST /api/admin/ghl/import": () =>
+    postGhlImport(
+      new Request("http://localhost:3000/api/admin/ghl/import", {
+        method: "POST",
+        body: "{}",
+      }),
+    ),
 };
 
 test.each(Object.entries(apiRoutes))(
