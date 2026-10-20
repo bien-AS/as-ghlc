@@ -3,12 +3,8 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { getLead } from "@/lib/data/leads";
 import { getQueryClient } from "@/lib/query-client";
-import {
-  leadIdOf,
-  startDashboard,
-  stopDashboard,
-  viewAs,
-} from "@/test/dashboard";
+import { startDashboard, stopDashboard, viewAs } from "@/test/dashboard";
+import { resetStandIns, standIns } from "@/test/mockup-stand-ins";
 
 import DeckPage from "./page";
 
@@ -24,9 +20,32 @@ vi.mock(
   "next/navigation",
   async () => (await import("@/test/navigation")).navigationModule,
 );
+// Leads live in Postgres; the page reaches them only through these.
+vi.mock("@/lib/data/leads", async (original) => ({
+  ...(await original<typeof import("@/lib/data/leads")>()),
+  ...(await import("@/test/mockup-stand-ins")).mockupLeadsModule,
+}));
+
+/*
+ * A real lead has no deck yet (spec 09). The sample rep's Stand-in 1 and
+ * another rep's Stand-in 3 are given one; Stand-in 5 has none.
+ */
+const WITH_DECK = "stand-in-1";
+const THEIRS = "stand-in-3";
+const NO_DECK = "stand-in-5";
 
 beforeEach(() => {
-  startDashboard("/decks/lead-01");
+  startDashboard("/decks/stand-in-1");
+  resetStandIns();
+  for (const id of [WITH_DECK, THEIRS]) {
+    standIns.patch.set(id, {
+      deck: {
+        templateName: "Discovery",
+        viewUrl: "https://decks.example/view",
+        pdfUrl: "https://decks.example/pdf",
+      },
+    });
+  }
   // In jsdom the page's query client is the browser's one, kept between renders.
   getQueryClient().clear();
 });
@@ -46,7 +65,7 @@ async function page(id: string, search: Record<string, string> = {}) {
 }
 
 test("with a lead, prefetches the lead, its deck and the call slots, and changes nothing", async () => {
-  const leadId = await leadIdOf("Hannah Kowalczyk");
+  const leadId = WITH_DECK;
   const before = await getLead(leadId);
   expect(await page(leadId, { slide: "3" })).toEqual({
     missing: undefined,
@@ -64,16 +83,15 @@ test("with a lead, prefetches the lead, its deck and the call slots, and changes
 test("tells the screen which is missing: the lead, or only its deck", async () => {
   expect((await page("lead-nope")).missing).toBe("lead");
 
-  const noDeck = await leadIdOf("Imogen Vasquez");
-  expect(await page(noDeck)).toEqual({
+  // A lead without a deck, as every real lead is today.
+  expect(await page(NO_DECK)).toEqual({
     missing: "deck",
-    prefetched: [`leads/detail/${noDeck}`],
+    prefetched: [`leads/detail/${NO_DECK}`],
   });
 
   // Another rep's lead does not exist for a rep.
-  const theirs = await leadIdOf("Reuben Castellanos");
   viewAs("rep");
-  expect((await page(theirs)).missing).toBe("lead");
+  expect((await page(THEIRS)).missing).toBe("lead");
 });
 
 test("signed out, the page sends the visitor to sign in", async () => {

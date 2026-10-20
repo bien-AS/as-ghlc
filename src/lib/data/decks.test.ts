@@ -14,17 +14,17 @@ import {
   updateSlide,
 } from "@/lib/data/decks";
 import { buildSampleDecks, seedDeck } from "@/lib/data/fixtures/decks";
-import { getLead, listVisibleLeads, resetSampleLeads } from "@/lib/data/leads";
-import { DECK_TEMPLATE_LABEL } from "@/lib/decks/rules";
+import { getLead, listVisibleLeads } from "@/lib/data/leads";
+import { resetSampleData } from "@/lib/data/sample";
 import {
   bookingSlotSchema,
-  DECK_TEMPLATES,
   type Deck,
   deckListItemSchema,
   deckSchema,
   parseDeckAddress,
   slideFormSchema,
 } from "@/lib/decks/schemas";
+import { resetStandIns, standIns } from "@/test/mockup-stand-ins";
 import { fake, resetFakes, signIn, viewAs } from "@/test/server-fakes";
 
 vi.mock(
@@ -35,6 +35,11 @@ vi.mock(
   "@/db/client",
   async () => (await import("@/test/server-fakes")).dbModule,
 );
+// Leads live in Postgres; the deck module reaches them only through these.
+vi.mock("@/lib/data/leads", async (original) => ({
+  ...(await original<typeof import("@/lib/data/leads")>()),
+  ...(await import("@/test/mockup-stand-ins")).mockupLeadsModule,
+}));
 
 const ORIGIN = "http://localhost:3000";
 const NOW = new Date("2026-10-07T12:00:00.000Z");
@@ -45,10 +50,37 @@ const ada = {
   lastName: "Lovelace",
 };
 
+/*
+ * A real lead has no deck until decks are read from their table (spec 09), so
+ * the deck module's own sample decks are reached through stand-ins given one:
+ * the sample rep's Stand-in 1 and another rep's Stand-in 3. Stand-in 5 has none.
+ */
+const MAYAS = "stand-in-1";
+const DANIELS = "stand-in-3";
+const NO_DECK = "stand-in-5";
+const ANSWERS = [
+  { question: "What do you want to achieve?", answer: "More bookings" },
+  { question: "What is in the way?", answer: "No-shows" },
+];
+function giveDecks() {
+  for (const id of [MAYAS, DANIELS]) {
+    standIns.patch.set(id, {
+      deck: {
+        templateName: "Discovery",
+        viewUrl: "https://decks.example/view",
+        pdfUrl: "https://decks.example/pdf",
+      },
+      formAnswers: ANSWERS,
+    });
+  }
+}
+
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"], now: NOW });
   resetFakes();
-  resetSampleLeads();
+  resetSampleData();
+  resetStandIns();
+  giveDecks();
   signIn();
   fake.users.set(ada.id, ada);
   vi.stubGlobal(
@@ -64,20 +96,6 @@ afterEach(() => {
 });
 
 const refusedWith = (code: string) => expect.objectContaining({ code });
-
-/** The id of the sample lead with this name. Asked as an admin, who sees every lead. */
-async function idOf(name: string) {
-  const claims = fake.claims;
-  viewAs("admin");
-  const lead = (await listVisibleLeads()).find((item) => item.name === name);
-  fake.claims = claims;
-  if (!lead) throw new Error(`no sample lead called ${name}`);
-  return lead.id;
-}
-/** Maya's lead with a deck, Daniel's lead with a deck, and a lead with none. */
-const MAYAS = "Hannah Kowalczyk";
-const DANIELS = "Reuben Castellanos";
-const NO_DECK = "Imogen Vasquez";
 
 const context = <P>(params: P) => ({ params: Promise.resolve(params) });
 const json = (method: string, path: string, body: unknown) =>
@@ -128,9 +146,8 @@ const everyRoute = (leadId: string): [string, () => Promise<Response>][] => [
 // --- refusals ----------------------------------------------------------------
 
 test("signed out, every route answers 401, including the PDF", async () => {
-  const leadId = await idOf(MAYAS);
   fake.claims = null;
-  for (const [name, call] of everyRoute(leadId)) {
+  for (const [name, call] of everyRoute(MAYAS)) {
     const response = await call();
     expect(response.status, name).toBe(401);
     expect(await response.json()).toEqual({
@@ -140,9 +157,8 @@ test("signed out, every route answers 401, including the PDF", async () => {
 });
 
 test("signed in without a profile, every route answers 403 profile_required", async () => {
-  const leadId = await idOf(MAYAS);
   fake.users.clear();
-  for (const [name, call] of everyRoute(leadId)) {
+  for (const [name, call] of everyRoute(MAYAS)) {
     const response = await call();
     expect(response.status, name).toBe(403);
     expect(await response.json()).toEqual({
@@ -152,16 +168,13 @@ test("signed in without a profile, every route answers 403 profile_required", as
 });
 
 test("signed out, invalid input still answers 401: the guard comes before the input", async () => {
-  const leadId = await idOf(MAYAS);
   fake.claims = null;
-  expect((await routes.template(leadId, { template: "nope" })).status).toBe(
-    401,
-  );
-  expect((await routes.slide(leadId, "goals", "not json")).status).toBe(401);
+  expect((await routes.template(MAYAS, { template: "nope" })).status).toBe(401);
+  expect((await routes.slide(MAYAS, "goals", "not json")).status).toBe(401);
 });
 
 test("invalid input answers 400 and names the field", async () => {
-  const leadId = await idOf(MAYAS);
+  const leadId = MAYAS;
   const cases: [string, Promise<Response>, string | null][] = [
     [
       "unknown template",
@@ -208,18 +221,25 @@ test("invalid input answers 400 and names the field", async () => {
 });
 
 test("an unknown lead, a lead with no deck and an unknown slide answer 404", async () => {
-  const withDeck = await idOf(MAYAS);
-  const without = await idOf(NO_DECK);
-  for (const leadId of ["lead-nope", without]) {
+  for (const leadId of ["lead-nope", NO_DECK]) {
     for (const [name, call] of everyRoute(leadId).slice(1)) {
       const response = await call();
       expect(response.status, `${name} ${leadId}`).toBe(404);
       expect(await response.json()).toEqual({ error: { code: "not_found" } });
     }
   }
-  expect((await routes.slide(withDeck, "no-such-slide")).status).toBe(404);
+  expect((await routes.slide(MAYAS, "no-such-slide")).status).toBe(404);
   // A slide of the other template is not in this deck.
-  expect((await routes.slide(withDeck, "investment")).status).toBe(404);
+  expect((await routes.slide(MAYAS, "investment")).status).toBe(404);
+});
+
+test("with real leads, none of which has a deck yet, the picker is empty and every deck answers 404", async () => {
+  resetStandIns();
+  expect(await listDecks()).toEqual([]);
+  expect(await (await routes.list()).json()).toEqual([]);
+  for (const [name, call] of everyRoute(MAYAS).slice(1)) {
+    expect((await call()).status, name).toBe(404);
+  }
 });
 
 // --- reads -------------------------------------------------------------------
@@ -233,49 +253,47 @@ test("the picker lists exactly the visible leads that have a deck, by name", asy
       .map((lead) => lead.id)
       .sort(),
   );
-  expect(decks.length).toBeGreaterThan(5);
   const names = decks.map((deck) => deck.lead.name);
-  expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
-  expect(names).not.toContain(NO_DECK);
+  expect(names).toEqual(["Stand-in 1", "Stand-in 3"]);
   expect(await (await routes.list()).json()).toEqual(decks);
 });
 
-test("every sample deck parses against the contract, in both templates", async () => {
+test("every sample deck parses against the contract", async () => {
   expect(buildSampleDecks().size).toBe(0);
   expect(seedDeck("Discovery")).toEqual({ template: "discovery", edits: {} });
   expect(seedDeck("Something else").template).toBe("discovery");
 
   for (const item of await listDecks()) {
     expect(() => deckListItemSchema.parse(item)).not.toThrow();
-    for (const template of DECK_TEMPLATES) {
-      const deck = await switchTemplate(item.lead.id, { template });
-      expect(() => deckSchema.parse(deck)).not.toThrow();
-      expect(deck.template).toBe(template);
-      expect(deck.pdfUrl).toBe(`/api/decks/${item.lead.id}/pdf`);
-      // The first slide is the title; the booking calendar is on the last.
-      expect(deck.slides[0].kind).toBe("title");
-      expect(deck.slides.at(-1)?.kind).toBe("booking");
-      expect(
-        deck.slides.filter((slide) => slide.kind === "booking"),
-      ).toHaveLength(1);
-      expect(new Set(deck.slides.map((slide) => slide.id)).size).toBe(
-        deck.slides.length,
-      );
-    }
+    const deck = await getDeck(item.lead.id);
+    expect(() => deckSchema.parse(deck)).not.toThrow();
+    expect(deck.pdfUrl).toBe(`/api/decks/${item.lead.id}/pdf`);
+    // The first slide is the title; the booking calendar is on the last.
+    expect(deck.slides[0].kind).toBe("title");
+    expect(deck.slides.at(-1)?.kind).toBe("booking");
+    expect(
+      deck.slides.filter((slide) => slide.kind === "booking"),
+    ).toHaveLength(1);
+    expect(new Set(deck.slides.map((slide) => slide.id)).size).toBe(
+      deck.slides.length,
+    );
   }
 });
 
 test("a deck is built from its lead, and never carries the deck service's id", async () => {
-  const leadId = await idOf(MAYAS);
-  const lead = await getLead(leadId);
-  const deck = await getDeck(leadId);
+  const lead = await getLead(MAYAS);
+  const deck = await getDeck(MAYAS);
 
-  expect(deck.lead).toEqual({ id: leadId, name: MAYAS, company: lead.company });
+  expect(deck.lead).toEqual({
+    id: MAYAS,
+    name: "Stand-in 1",
+    company: lead.company,
+  });
   expect(deck.template).toBe("discovery");
   expect(deck.slides[0].heading).toBe(lead.company);
-  expect(deck.slides[0].body).toContain(MAYAS);
+  expect(deck.slides[0].body).toContain("Stand-in 1");
   expect(deck.slides[1].bullets).toEqual(
-    lead.formAnswers.map((answer) => answer.answer),
+    ANSWERS.map((answer) => answer.answer),
   );
   expect(JSON.stringify(deck)).not.toMatch(/presentation/i);
   expect(Object.keys(deck).sort()).toEqual([
@@ -284,14 +302,13 @@ test("a deck is built from its lead, and never carries the deck service's id", a
     "slides",
     "template",
   ]);
-  expect(await (await routes.deck(leadId)).json()).toEqual(deck);
+  expect(await (await routes.deck(MAYAS)).json()).toEqual(deck);
   expect(fetch).not.toHaveBeenCalled();
 });
 
 test("call slots are sample times after now, on working days, and book nothing", async () => {
-  const leadId = await idOf(MAYAS);
-  const before = await getLead(leadId);
-  const slots = await getBookingSlots(leadId);
+  const before = await getLead(MAYAS);
+  const slots = await getBookingSlots(MAYAS);
 
   expect(slots.length).toBeGreaterThan(2);
   for (const slot of slots) {
@@ -301,104 +318,78 @@ test("call slots are sample times after now, on working days, and book nothing",
   }
   // 7 October 2026 is a Wednesday: the first sample day is the Thursday.
   expect(slots[0].time).toBe("2026-10-08T15:00:00.000Z");
-  expect(await (await routes.slots(leadId)).json()).toEqual(slots);
-  expect(await getLead(leadId)).toEqual(before);
+  expect(await (await routes.slots(MAYAS)).json()).toEqual(slots);
+  expect(await getLead(MAYAS)).toEqual(before);
 });
 
 // --- writes ------------------------------------------------------------------
 
 test("an edit to a slide's text shows in a later read and changes nothing else", async () => {
-  const leadId = await idOf(MAYAS);
-  const before = await getDeck(leadId);
+  const before = await getDeck(MAYAS);
 
-  const response = await routes.slide(leadId, "goals", {
-    heading: "  What Hannah wants  ",
-    body: "In her words.",
+  const response = await routes.slide(MAYAS, "goals", {
+    heading: "  What they want  ",
+    body: "In their words.",
     bullets: ["More bookings", "  Fewer no-shows "],
   });
   expect(response.status).toBe(200);
   const after = (await response.json()) as Deck;
-  expect(after).toEqual(await getDeck(leadId));
+  expect(after).toEqual(await getDeck(MAYAS));
 
   const edited = after.slides.find((slide) => slide.id === "goals");
   expect(edited).toEqual({
     id: "goals",
     kind: "content",
-    heading: "What Hannah wants",
-    body: "In her words.",
+    heading: "What they want",
+    body: "In their words.",
     bullets: ["More bookings", "Fewer no-shows"],
   });
   expect(after.slides.filter((slide) => slide.id !== "goals")).toEqual(
     before.slides.filter((slide) => slide.id !== "goals"),
   );
   // Another lead's deck is untouched.
-  const other = await getDeck(await idOf(DANIELS));
+  const other = await getDeck(DANIELS);
   expect(other.slides.find((slide) => slide.id === "goals")?.heading).toBe(
     "What you want to achieve",
   );
 });
 
-test("switching template redraws the deck, keeps edits to shared slides, and the lead follows", async () => {
-  const leadId = await idOf(MAYAS);
-  const discovery = await getDeck(leadId);
-  await updateSlide(leadId, "goals", { ...TEXT, heading: "Shared edit" });
-  await updateSlide(leadId, "budget", { ...TEXT, heading: "Discovery edit" });
+test("switching template is refused until decks have their own table, and the deck is unchanged", async () => {
+  await updateSlide(MAYAS, "goals", { ...TEXT, heading: "Shared edit" });
+  const before = await getDeck(MAYAS);
 
-  const response = await routes.template(leadId, { template: "review" });
-  expect(response.status).toBe(200);
-  const review = (await response.json()) as Deck;
-
-  expect(review.template).toBe("review");
-  expect(review.slides.map((slide) => slide.id)).not.toEqual(
-    discovery.slides.map((slide) => slide.id),
+  // The lead's record cannot follow yet (recordDeckTemplate), so nothing moves.
+  const response = await routes.template(MAYAS, { template: "review" });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({ error: { code: "conflict" } });
+  await expect(switchTemplate(MAYAS, { template: "review" })).rejects.toEqual(
+    refusedWith("conflict"),
   );
-  expect(review.slides.find((slide) => slide.id === "goals")?.heading).toBe(
-    "Shared edit",
-  );
-  expect(review.slides.some((slide) => slide.id === "budget")).toBe(false);
-
-  // Lead detail and the timeline follow.
-  const lead = await getLead(leadId);
-  expect(lead.deck?.templateName).toBe(DECK_TEMPLATE_LABEL.review);
-  expect(lead.activities[0]).toMatchObject({
-    type: "Deck template changed",
-    actor: { kind: "user", name: "Ada Lovelace" },
-  });
-  expect((await listDecks()).find((deck) => deck.lead.id === leadId)).toEqual(
-    expect.objectContaining({ template: "review" }),
-  );
-
-  // Back again: the edit to the Discovery-only slide is still there.
-  const back = await switchTemplate(leadId, { template: "discovery" });
-  expect(back.slides.find((slide) => slide.id === "budget")?.heading).toBe(
-    "Discovery edit",
-  );
+  expect(await getDeck(MAYAS)).toEqual(before);
 });
 
 test("choosing the template a deck already has changes nothing", async () => {
-  const leadId = await idOf(MAYAS);
-  const before = await getLead(leadId);
-  const deck = await switchTemplate(leadId, { template: "discovery" });
-  expect(deck).toEqual(await getDeck(leadId));
-  expect(await getLead(leadId)).toEqual(before);
+  const before = await getLead(MAYAS);
+  const deck = await switchTemplate(MAYAS, { template: "discovery" });
+  expect(deck).toEqual(await getDeck(MAYAS));
+  expect(await getLead(MAYAS)).toEqual(before);
 });
 
 // --- the PDF -----------------------------------------------------------------
 
 test("the PDF route answers a PDF download named after the lead, one page per slide", async () => {
-  const leadId = await idOf(MAYAS);
-  await updateSlide(leadId, "goals", {
+  await updateSlide(MAYAS, "goals", {
     heading: "Goals (so far) \\ café",
     body: "",
     bullets: [],
   });
-  const deck = await getDeck(leadId);
-  const response = await routes.pdf(leadId);
+  const deck = await getDeck(MAYAS);
+  const response = await routes.pdf(MAYAS);
 
   expect(response.status).toBe(200);
   expect(response.headers.get("Content-Type")).toBe("application/pdf");
   expect(response.headers.get("Content-Disposition")).toBe(
-    'attachment; filename="hannah-kowalczyk-deck.pdf"',
+    'attachment; filename="stand-in-1-deck.pdf"',
   );
   const bytes = new Uint8Array(await response.arrayBuffer());
   expect(response.headers.get("Content-Length")).toBe(String(bytes.length));
@@ -409,7 +400,7 @@ test("the PDF route answers a PDF download named after the lead, one page per sl
   expect(text.match(/\/Type \/Page /g)).toHaveLength(deck.slides.length);
   expect(text).toContain(`/Count ${deck.slides.length}`);
   expect(text).toContain("Sample deck.");
-  expect(text).toContain("(Kowalczyk Eye Care)");
+  expect(text).toContain("(Company 1)");
   // The edit is in the file, with the characters PDF text needs escaped.
   expect(text).toContain("(Goals \\(so far\\) \\\\ caf?)");
   // The cross-reference table points at the objects.
@@ -425,28 +416,22 @@ test("the PDF route answers a PDF download named after the lead, one page per sl
 // --- roles -------------------------------------------------------------------
 
 test("a rep reaches only their own leads' decks; another rep's deck answers not found", async () => {
-  const mine = await idOf(MAYAS);
-  const theirs = await idOf(DANIELS);
   viewAs("rep");
 
   const decks = await listDecks();
-  expect(decks.length).toBeGreaterThan(0);
-  const visible = (await listVisibleLeads()).map((lead) => lead.id);
-  expect(decks.every((deck) => visible.includes(deck.lead.id))).toBe(true);
-  expect(decks.map((deck) => deck.lead.id)).toContain(mine);
-  expect(decks.map((deck) => deck.lead.id)).not.toContain(theirs);
+  expect(decks.map((deck) => deck.lead.id)).toEqual([MAYAS]);
 
-  expect((await getDeck(mine)).lead.name).toBe(MAYAS);
-  expect((await routes.pdf(mine)).status).toBe(200);
+  expect((await getDeck(MAYAS)).lead.name).toBe("Stand-in 1");
+  expect((await routes.pdf(MAYAS)).status).toBe(200);
 
-  await expect(getDeck(theirs)).rejects.toEqual(refusedWith("not_found"));
-  for (const [name, call] of everyRoute(theirs).slice(1)) {
+  await expect(getDeck(DANIELS)).rejects.toEqual(refusedWith("not_found"));
+  for (const [name, call] of everyRoute(DANIELS).slice(1)) {
     expect((await call()).status, name).toBe(404);
   }
 
   // The refused writes changed nothing.
   viewAs("admin");
-  const deck = await getDeck(theirs);
+  const deck = await getDeck(DANIELS);
   expect(deck.template).toBe("discovery");
   expect(deck.slides.find((slide) => slide.id === "goals")?.heading).toBe(
     "What you want to achieve",
@@ -454,9 +439,8 @@ test("a rep reaches only their own leads' decks; another rep's deck answers not 
 });
 
 test("an admin reaches every deck", async () => {
-  const theirs = await idOf(DANIELS);
   viewAs("admin");
-  expect((await getDeck(theirs)).lead.name).toBe(DANIELS);
+  expect((await getDeck(DANIELS)).lead.name).toBe("Stand-in 3");
 });
 
 // --- the contract's two readers ----------------------------------------------
