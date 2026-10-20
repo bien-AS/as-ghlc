@@ -77,6 +77,7 @@ import {
   sendProposal,
   simulateProposalEvent,
 } from "@/lib/data/proposals";
+import { listSyncLog, retryWrite } from "@/lib/data/sync-log";
 import { getMe, updateProfile } from "@/lib/data/users";
 import { getViewerSummary } from "@/lib/data/viewer";
 import { listLeadsQuerySchema } from "@/lib/leads/schemas";
@@ -213,7 +214,7 @@ const leadCalls = (
   markNotificationRead: () => markNotificationRead(notificationId),
 });
 
-/** The admin cluster: reps and integrations. */
+/** The admin cluster: reps, integrations and the GHL sync log. */
 const adminCalls = (): Calls => ({
   listMembers,
   inviteMember: () =>
@@ -230,6 +231,8 @@ const adminCalls = (): Calls => ({
   getStageMapping,
   saveStageMapping: () => saveStageMapping({} as never),
   requestGhlImport,
+  listSyncLog: () => listSyncLog({}),
+  retryWrite: () => retryWrite(randomUUID()),
 });
 
 /** A person's own things. */
