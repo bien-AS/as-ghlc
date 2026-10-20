@@ -198,12 +198,13 @@ function Filters({
     archived: useId(),
   };
   const count = (n: number | undefined) => (n === undefined ? "" : ` (${n})`);
-  const field = "w-[200px] max-w-full max-nav:w-full";
+  // Two to a row on a phone, so the list starts on the first screen.
+  const field = "min-w-0 nav:w-[200px]";
 
   return (
     <search
       aria-label="Filter leads"
-      className="flex flex-wrap items-end gap-3"
+      className="grid grid-cols-2 items-end gap-3 nav:flex nav:flex-wrap"
     >
       <Field className={field}>
         <FieldLabel htmlFor={ids.stage}>Stage</FieldLabel>
@@ -398,7 +399,15 @@ function LeadTable({
       value: (lead) => lead.status?.value ?? null,
       cell: (lead) => {
         const status = statusMeta(lead.status);
-        return <Badge variant={status.tone}>{status.label}</Badge>;
+        // A long status wraps inside its cell rather than running into the next one.
+        return (
+          <Badge
+            variant={status.tone}
+            className="h-auto max-w-full text-left whitespace-normal"
+          >
+            {status.label}
+          </Badge>
+        );
       },
     },
     ...(isAdmin

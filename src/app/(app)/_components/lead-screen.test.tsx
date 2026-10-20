@@ -262,6 +262,15 @@ test("a lead with no research yet says so", async () => {
   expect(
     screen.getByText("Research runs automatically after intake."),
   ).toBeDefined();
+
+  // The first run says so, and that its cost has not been measured yet.
+  const text = await confirm("Research now", "Research now");
+  expect(text).toContain("Research this lead?");
+  expect(text).toContain("Not measured");
+  await screen.findByText(
+    "Researching this lead. The brief updates here when it is ready.",
+  );
+  expect(posts()).toEqual(["POST /api/leads/lead-sofia/research"]);
 });
 
 test("nothing links to a screen that is not live: unshipped tabs show their empty state and no button (check 5)", async () => {

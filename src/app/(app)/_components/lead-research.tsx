@@ -58,9 +58,13 @@ export function ResearchTab({ leadId }: { leadId: string }) {
           {label}
         </Button>
       }
-      title="Refresh the research brief?"
-      description="Researches this lead again. The current brief stays until the new one is ready."
-      confirmLabel="Refresh research"
+      title={brief ? "Refresh the research brief?" : "Research this lead?"}
+      description={
+        brief
+          ? "Researches this lead again. The current brief stays until the new one is ready."
+          : "Writes the first research brief for this lead. It shows here when it is ready."
+      }
+      confirmLabel={brief ? "Refresh research" : "Research now"}
       onConfirm={() =>
         refresh.mutate(undefined, {
           onError: () =>

@@ -244,8 +244,14 @@ function LeadHeader({ lead }: { lead: LeadDetail }) {
             </Badge>
           )}
         </li>
-        <li>
-          <Badge variant={status.tone}>Lead Status: {status.label}</Badge>
+        <li className="max-w-full">
+          {/* The longest statuses wrap on a phone instead of leaving the screen. */}
+          <Badge
+            variant={status.tone}
+            className="h-auto max-w-full text-left whitespace-normal"
+          >
+            Lead Status: {status.label}
+          </Badge>
         </li>
         <li>
           <Badge>Rep: {lead.owner?.name ?? "Unassigned"}</Badge>
