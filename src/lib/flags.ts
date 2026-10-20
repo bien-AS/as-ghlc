@@ -9,6 +9,8 @@
 const SCREENS: Record<string, "live" | "mockup"> = {
   // A placeholder until spec 07 builds it; where sign-in lands.
   dashboard: "live",
+  // Reads the real ghl_sync_log and webhook_events rows (spec 06).
+  "sync-log": "live",
   // Mockups on sample data until each screen's own session replaces them.
   "lead-list": "mockup",
   "lead-detail": "mockup",

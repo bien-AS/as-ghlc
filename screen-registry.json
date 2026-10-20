@@ -2148,7 +2148,7 @@
       "dimension": "Compliance & Security",
       "tier": 2,
       "phase": 2,
-      "status": "planned",
+      "status": "built",
       "rbac": {
         "admin": "full",
         "operator": "hidden"

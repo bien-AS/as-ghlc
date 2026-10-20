@@ -113,6 +113,7 @@ test("the sidebar lists every live screen in order: a rep's work, a divider, the
     "/notifications",
     "/admin/reps",
     "/admin/integrations",
+    "/admin/sync-log",
   ]);
   // Every screen is built: nothing is marked Soon.
   expect(mainNav().textContent).not.toContain("Soon");
@@ -149,6 +150,7 @@ test.each([
   ["/review-queue?lead=lead-03", "Review Queue"],
   ["/admin/reps", "Reps"],
   ["/admin/integrations", "Integrations"],
+  ["/admin/sync-log", "Logs"],
 ])(
   "at %s the current screen is %s, and only it is marked current",
   async (at, label) => {
@@ -479,7 +481,7 @@ test("as an admin, the Admin group follows a divider, with its live screens", as
     navLinks()
       .slice(4)
       .map((link) => link.getAttribute("href")),
-  ).toEqual(["/admin/reps", "/admin/integrations"]);
+  ).toEqual(["/admin/reps", "/admin/integrations", "/admin/sync-log"]);
 });
 
 test("the nav table is the registry's matrix: its entries, in order, at the registered routes", () => {
@@ -509,22 +511,26 @@ test("the nav table is the registry's matrix: its entries, in order, at the regi
   // A planned screen is never listed, whatever the role.
   const listed = navItemsFor("admin").map((item) => item.screen);
   expect(listed).not.toContain("pipeline-board");
-  expect(listed).not.toContain("sync-log");
+  expect(listed).not.toContain("admin-templates");
   expect(listed.every(isLive)).toBe(true);
 });
 
 // --- phase flags (spec 01, section 3) ----------------------------------------------
 
-test("in production no link to a mockup is rendered: the sidebar is the Dashboard alone, with no search, bell or Settings", async () => {
+test("in production no link to a mockup is rendered: the sidebar is the Dashboard and the sync log, with no search, bell or Settings", async () => {
   vi.stubEnv("NODE_ENV", "production");
   try {
+    // The sync log reads real rows, so it is live in production too.
     expect(navItemsFor("admin").map((item) => item.href)).toEqual([
       "/dashboard",
+      "/admin/sync-log",
     ]);
+    expect(navItemsFor("rep").map((item) => item.href)).toEqual(["/dashboard"]);
     open("/leads/lead-09");
     await screen.findByText("Ada Lovelace");
     expect(navLinks().map((link) => link.getAttribute("href"))).toEqual([
       "/dashboard",
+      "/admin/sync-log",
     ]);
     expect(screen.queryByRole("search")).toBeNull();
     expect(
