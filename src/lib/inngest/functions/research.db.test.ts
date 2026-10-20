@@ -3,6 +3,7 @@ import "dotenv/config";
 
 import { desc, eq, sql, TransactionRollbackError } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
+import { NonRetriableError } from "inngest";
 import pg from "pg";
 import {
   afterAll,
@@ -13,9 +14,9 @@ import {
   test,
   vi,
 } from "vitest";
-
 import * as schema from "@/db/schema";
 import { estimateResearchCost, getLatestResearch } from "@/lib/data/research";
+
 import type { Completion } from "@/lib/services/llm";
 
 import { researchHandler } from "./research";
@@ -61,7 +62,15 @@ vi.mock("@/lib/data/users", () => ({ requireProfile: async () => ({}) }));
 type Db = NodePgDatabase<typeof schema>;
 
 /** A step that runs each body once, as Inngest would after its retries. */
-const step = { run: <T>(_name: string, fn: () => Promise<T>) => fn() };
+/** What each failed step body threw: a NonRetriableError is one Inngest does not retry. */
+const stepErrors: unknown[] = [];
+const step = {
+  run: <T>(_name: string, fn: () => Promise<T>) =>
+    fn().catch((error) => {
+      stepErrors.push(error);
+      throw error;
+    }),
+};
 const run = (leadId: string) =>
   researchHandler({ event: { data: { leadId } }, step });
 
@@ -130,6 +139,7 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
   });
 
   beforeEach(() => {
+    stepErrors.length = 0;
     stubs.complete.mockReset().mockResolvedValue(completion());
     stubs.fetchSite
       .mockReset()
@@ -219,6 +229,31 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
         error: "https://acme.example/ answered 503",
       });
       expect(stubs.complete).not.toHaveBeenCalled();
+      // A fetch failure may be passing, so Inngest retries it.
+      expect(stepErrors).toHaveLength(1);
+      expect(stepErrors[0]).not.toBeInstanceOf(NonRetriableError);
+    }));
+
+  test("a model answer that fails validation ends the run without retrying the model, and keeps its usage", () =>
+    inRollback(async (db, leadId) => {
+      stubs.complete.mockResolvedValue(
+        completion({
+          text: JSON.stringify({ summary: "No claims or markdown" }),
+        }),
+      );
+      expect(await run(leadId)).toMatchObject({ status: "failed" });
+      expect(stubs.complete).toHaveBeenCalledTimes(1);
+      expect(stepErrors).toHaveLength(1);
+      expect(stepErrors[0]).toBeInstanceOf(NonRetriableError);
+      const [row] = await rows(db, leadId);
+      expect(row).toMatchObject({
+        status: "failed",
+        briefMd: null,
+        model: "test/model-2026",
+        inputTokens: 1200,
+        costUsd: "0.021300",
+      });
+      expect(row.error).toMatch(/not the brief asked for/);
     }));
 
   test("a lead with no website gets a ready brief that says so, with no fetch and no model call", () =>

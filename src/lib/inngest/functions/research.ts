@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { NonRetriableError } from "inngest";
 import { z } from "zod";
 
 import { db } from "@/db/client";
@@ -73,19 +74,29 @@ async function writeBrief(runId: string, leadId: string): Promise<void> {
   const completion = await complete({
     messages: briefMessages({ companyName: lead.companyName, website }, pages),
   });
-  const { markdown, ...facts } = parseBrief(completion.text);
+  const usage = {
+    model: completion.model,
+    inputTokens: completion.promptTokens,
+    outputTokens: completion.completionTokens,
+    // null when OpenRouter does not report it: not measured, never 0.
+    costUsd: completion.cost === null ? null : String(completion.cost),
+  };
+  let brief: ReturnType<typeof parseBrief>;
+  try {
+    brief = parseBrief(completion.text);
+  } catch (error) {
+    // The call was paid for, so its usage is kept; asking again is another paid
+    // call that is unlikely to differ, so this ends the run instead of retrying.
+    await db.update(leadResearch).set(usage).where(eq(leadResearch.id, runId));
+    throw new NonRetriableError(
+      `The model's answer was not the brief asked for: ${(error as Error).message}`,
+      { cause: error },
+    );
+  }
+  const { markdown, ...facts } = brief;
   await db
     .update(leadResearch)
-    .set({
-      status: "ready",
-      briefMd: markdown,
-      facts,
-      model: completion.model,
-      inputTokens: completion.promptTokens,
-      outputTokens: completion.completionTokens,
-      // null when OpenRouter does not report it: not measured, never 0.
-      costUsd: completion.cost === null ? null : String(completion.cost),
-    })
+    .set({ status: "ready", briefMd: markdown, facts, ...usage })
     .where(eq(leadResearch.id, runId));
 }
 
@@ -124,6 +135,8 @@ export const leadResearchJob = inngest.createFunction(
     id: "lead-research",
     // One run per lead at a time; a refresh during a run waits for it.
     concurrency: { limit: 1, key: "event.data.leadId" },
+    // Each retry of the brief step is another fetch and paid model call: at most 3 attempts.
+    retries: 2,
     triggers: [
       { event: LEAD_RESEARCH_REQUESTED },
       { event: LEAD_VALIDATION_REQUESTED },
