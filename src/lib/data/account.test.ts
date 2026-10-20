@@ -12,7 +12,7 @@ import {
   mutedNotificationTypes,
   updateAccountPreferences,
 } from "@/lib/data/account";
-import { resetSampleLeads } from "@/lib/data/leads";
+import { resetSampleData } from "@/lib/data/sample";
 import { updateProfile } from "@/lib/data/users";
 import { fake, resetFakes, signIn, viewAs } from "@/test/server-fakes";
 
@@ -55,7 +55,7 @@ beforeEach(() => {
     now: new Date("2026-10-07T12:00:00.000Z"),
   });
   resetFakes();
-  resetSampleLeads();
+  resetSampleData();
   signIn();
   fake.users.set(ada.id, ada);
   fake.users.set(grace.id, grace);

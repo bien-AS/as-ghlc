@@ -9,22 +9,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { HintLine } from "@/components/ui/hint-line";
-import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
 import { LocalTime } from "@/components/ui/local-time";
 import { PanelSection } from "@/components/ui/panel-section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/state-panel";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { VerdictBox } from "@/components/ui/verdict-box";
 import { useInvoice } from "@/hooks/use-invoices";
-import {
-  useLead,
-  useMarkLost,
-  useMarkSpam,
-  useSetQualification,
-} from "@/hooks/use-leads";
+import { useLead, useMarkSpam, useSetQualification } from "@/hooks/use-leads";
 import { usePipelineHref } from "@/hooks/use-pipeline-href";
 import { ApiError } from "@/lib/api/client";
 import { INVOICE_STATUS_META } from "@/lib/invoices/rules";
@@ -36,7 +29,7 @@ import {
   type LeadAction,
   nextStep,
   STAGE_LABEL,
-  STATUS_META,
+  statusMeta,
   VERDICT_META,
 } from "@/lib/leads/rules";
 import {
@@ -66,12 +59,11 @@ const DESTINATION: Partial<Record<LeadAction, (leadId: string) => string>> = {
   check_invoice: invoiceHref,
 };
 
-type Write = "qualify" | "not_qualify" | "lost" | "spam";
+type Write = "qualify" | "not_qualify" | "spam";
 type Handlers = { onSuccess: () => void; onError: (error: Error) => void };
 const DONE: Record<Write, string> = {
   qualify: "Marked qualified",
   not_qualify: "Marked not qualified",
-  lost: "Marked lost",
   spam: "Marked as spam",
 };
 
@@ -101,9 +93,7 @@ export function LeadScreen({
   const pipelineHref = usePipelineHref();
   const lead = useLead(missing ? undefined : leadId);
   const qualification = useSetQualification();
-  const lost = useMarkLost();
   const spam = useMarkSpam();
-  const [reason, setReason] = useState("");
   // The last write, kept so a failed one can be retried as it was.
   const [last, setLast] = useState<{ write: Write; run: () => void }>();
   const [failure, setFailure] = useState<"failed" | "changed">();
@@ -150,9 +140,7 @@ export function LeadScreen({
   const data = lead.data;
   const step = nextStep(data);
   const pending =
-    qualification.isPending || lost.isPending || spam.isPending
-      ? last?.write
-      : undefined;
+    qualification.isPending || spam.isPending ? last?.write : undefined;
   const busy = pending !== undefined;
 
   /** Runs a write and reports how it went. Nothing is assumed before the server answers. */
@@ -248,19 +236,19 @@ export function LeadScreen({
             {data.exit ? (
               <Badge variant="crit">Exit: {EXIT_LABEL[data.exit]}</Badge>
             ) : (
-              <Badge>Stage: {STAGE_LABEL[data.stage]}</Badge>
+              data.stage && <Badge>Stage: {STAGE_LABEL[data.stage]}</Badge>
             )}
           </li>
           <li>
-            <Badge variant={STATUS_META[data.status].tone}>
-              {STATUS_META[data.status].label}
+            <Badge variant={statusMeta(data.status).tone}>
+              {statusMeta(data.status).label}
             </Badge>
           </li>
           <li>
             <Badge variant={verdict.tone}>Verdict: {verdict.label}</Badge>
           </li>
           <li>
-            <Badge>Owner: {data.owner.name}</Badge>
+            <Badge>Owner: {data.owner?.name ?? "Unassigned"}</Badge>
           </li>
           {data.proposal && (
             <li>
@@ -271,7 +259,7 @@ export function LeadScreen({
       </header>
 
       <section aria-label="Actions" className="flex flex-col gap-3">
-        {(step.main || step.canMarkLost || step.canMarkSpam) && (
+        {(step.main || step.canMarkSpam) && (
           <div className="flex flex-wrap items-center gap-3">
             {mainButton()}
             {step.secondary === "not_qualify" && (
@@ -297,39 +285,6 @@ export function LeadScreen({
             )}
             {/* The two standing actions sit apart from the main one. */}
             <div className="flex flex-wrap gap-3 nav:ml-auto">
-              {step.canMarkLost && (
-                <ConfirmDialog
-                  trigger={
-                    <Button
-                      variant="danger"
-                      loading={pending === "lost"}
-                      disabled={busy}
-                    >
-                      Mark lost
-                    </Button>
-                  }
-                  title={`Mark ${data.name} lost?`}
-                  description="The lead leaves the pipeline as Lead Lost. This cannot be undone."
-                  confirmLabel="Mark lost"
-                  onConfirm={() => {
-                    const input = { reason: reason.trim() || undefined };
-                    setReason("");
-                    run("lost", (handlers) =>
-                      lost.mutate({ leadId, input }, handlers),
-                    );
-                  }}
-                >
-                  <div className="flex flex-col gap-2">
-                    <Label htmlFor="lost-reason">Reason (optional)</Label>
-                    <Textarea
-                      id="lost-reason"
-                      value={reason}
-                      maxLength={500}
-                      onChange={(event) => setReason(event.target.value)}
-                    />
-                  </div>
-                </ConfirmDialog>
-              )}
               {step.canMarkSpam && (
                 <ConfirmDialog
                   trigger={

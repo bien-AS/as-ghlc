@@ -27,7 +27,7 @@ import {
   BOOKING_KIND_LABEL,
   EXIT_LABEL,
   STAGE_LABEL,
-  STATUS_META,
+  statusMeta,
   tabLabel,
   VERDICT_META,
 } from "@/lib/leads/rules";
@@ -536,7 +536,7 @@ function LeadRow({
   lead: LeadListItem;
   showStage: boolean;
 }) {
-  const status = STATUS_META[lead.status];
+  const status = statusMeta(lead.status);
   const verdict = VERDICT_META[lead.verdict];
   return (
     <ListRow
@@ -560,7 +560,8 @@ function LeadRow({
             Left the pipeline: {EXIT_LABEL[lead.exit]}
           </span>
         ) : (
-          showStage && (
+          showStage &&
+          lead.stage && (
             <span className="block truncate text-muted-foreground">
               {STAGE_LABEL[lead.stage]}
             </span>
@@ -588,10 +589,10 @@ function LeadRow({
       </span>
 
       <span
-        title={lead.owner.name}
+        title={lead.owner?.name ?? "Unassigned"}
         className="hidden truncate text-muted-foreground nav:block"
       >
-        {lead.owner.name}
+        {lead.owner?.name ?? "Unassigned"}
       </span>
     </ListRow>
   );

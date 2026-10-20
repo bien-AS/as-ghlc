@@ -1,5 +1,4 @@
 import { vi } from "vitest";
-import { POST as postLost } from "@/app/api/leads/[leadId]/lost/route";
 import { POST as postQualification } from "@/app/api/leads/[leadId]/qualification/route";
 import { POST as postReview } from "@/app/api/leads/[leadId]/review/route";
 import { GET as getLead } from "@/app/api/leads/[leadId]/route";
@@ -8,7 +7,8 @@ import { GET as getLeads } from "@/app/api/leads/route";
 import { GET as getMe } from "@/app/api/me/route";
 import { GET as getSummary } from "@/app/api/pipeline/summary/route";
 import { Toaster } from "@/components/ui/toast";
-import { listLeads, resetSampleLeads } from "@/lib/data/leads";
+import { listLeads } from "@/lib/data/leads";
+import { resetSampleData } from "@/lib/data/sample";
 import { listLeadsQuerySchema } from "@/lib/leads/schemas";
 import { resetNavigation } from "@/test/navigation";
 import { renderPage } from "@/test/render";
@@ -53,7 +53,6 @@ const ROUTES: TestRoute[] = [
     /^\/api\/leads\/(?<leadId>[^/]+)\/qualification$/,
     postQualification,
   ],
-  ["POST", /^\/api\/leads\/(?<leadId>[^/]+)\/lost$/, postLost],
   ["POST", /^\/api\/leads\/(?<leadId>[^/]+)\/spam$/, postSpam],
   // Each other resource lists its own routes in src/test/routes/<resource>.ts,
   // as `export const routes: TestRoute[]`.
@@ -162,7 +161,7 @@ export { viewAs } from "@/test/server-fakes";
 export function startDashboard(at = "/dashboard") {
   vi.useFakeTimers({ toFake: ["Date"], now: NOW });
   resetFakes();
-  resetSampleLeads();
+  resetSampleData();
   signIn();
   fake.users.set(ada.id, ada);
   overrides = [];

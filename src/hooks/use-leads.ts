@@ -12,13 +12,16 @@ import { useEffect } from "react";
 import { useTimeZone } from "@/hooks/use-time-zone";
 import { apiFetch } from "@/lib/api/client";
 import type {
+  ArchiveInput,
+  AssignInput,
   LeadDetail,
   LeadFilters,
-  LostInput,
   QualificationInput,
   ReviewInput,
+  StatusInput,
 } from "@/lib/leads/schemas";
 import {
+  dashboardOptions,
   leadKeys,
   leadListOptions,
   leadOptions,
@@ -93,12 +96,28 @@ function useLeadWrite<TInput>(segment: string) {
       }
       void queryClient.invalidateQueries({ queryKey: leadKeys.lists });
       void queryClient.invalidateQueries({ queryKey: leadKeys.summaries });
+      void queryClient.invalidateQueries({ queryKey: leadKeys.dashboards });
     },
   });
 }
 
 export const useReviewSuspect = () => useLeadWrite<ReviewInput>("review");
+/** Qualify / Not qualified: W3 (spec 06). */
 export const useSetQualification = () =>
   useLeadWrite<QualificationInput>("qualification");
-export const useMarkLost = () => useLeadWrite<LostInput>("lost");
+/** Mark as spam: W4 (spec 06). */
 export const useMarkSpam = () => useLeadWrite<Record<string, never>>("spam");
+/** Change status: app only; admins until spec 07 question 2 is answered. */
+export const useChangeStatus = () => useLeadWrite<StatusInput>("status");
+/** Assign rep (admin): app only. */
+export const useAssignRep = () => useLeadWrite<AssignInput>("assign");
+/** Archive: a soft delete in the app only. */
+export const useArchiveLead = () => useLeadWrite<ArchiveInput>("archive");
+
+/** The dashboard (spec 07), for the viewer's week. */
+export function useDashboard() {
+  return useQuery({
+    ...dashboardOptions(useTimeZone()),
+    placeholderData: keepPreviousData,
+  });
+}

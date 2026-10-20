@@ -1,9 +1,9 @@
-import { eq } from "drizzle-orm";
+import { eq, type SQL } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 
 import { db } from "@/db/client";
-import { profiles } from "@/db/schema";
+import { leads, profiles } from "@/db/schema";
 
 import { type AuthStatus, decideRedirect } from "@/lib/auth/routing";
 import type { CurrentUser, ProfileInput } from "@/lib/auth/schemas";
@@ -148,15 +148,12 @@ export async function requireAdmin(): Promise<Profile> {
 }
 
 /**
- * The leads a profile may reach: an admin every lead, a rep only those
- * assigned to them. ponytail: a predicate over the sample leads (ADR-0006);
- * it becomes `eq(leads.assignedTo, profile.id)` (or nothing, for an admin)
- * when leads are read from the table (spec 06).
+ * The leads a profile may reach, as a where condition on `leads`: an admin
+ * every lead (no condition), a rep only those assigned to them. Every lead
+ * query includes it, and everything that belongs to a lead is read through it.
  */
-export const leadScope =
-  (profile: Profile) =>
-  (lead: { owner: { id: string } }): boolean =>
-    profile.role === "admin" || lead.owner.id === profile.id;
+export const leadScope = (profile: Profile): SQL | undefined =>
+  profile.role === "admin" ? undefined : eq(leads.assignedTo, profile.id);
 
 /**
  * What /auth/callback checks after the code exchange (ADR-0008): whether the

@@ -12,12 +12,38 @@ export function testTransaction(connectionString: string, lock: string) {
   const client = new pg.Client({ connectionString });
   const send = client.query.bind(client);
   let open = true;
-  client.query = ((...args: Parameters<typeof send>) =>
-    open
-      ? send(...args)
-      : Promise.reject(
-          new Error("the test transaction is already rolled back"),
-        )) as typeof send;
+  // The code under test may open its own transaction (`db.transaction`). Inside
+  // this one, its begin, commit and rollback become a savepoint, its release
+  // and a rollback to it: otherwise its rollback would end the test's
+  // transaction, and every statement after it would commit.
+  let depth = 0;
+  const nested = (text: unknown) => {
+    switch (typeof text === "string" && text.trim().toLowerCase()) {
+      case "begin":
+        depth += 1;
+        return `savepoint nested_${depth}`;
+      case "commit":
+        depth -= 1;
+        return `release savepoint nested_${depth + 1}`;
+      case "rollback":
+        depth -= 1;
+        return `rollback to savepoint nested_${depth + 1}`;
+      default:
+        return undefined;
+    }
+  };
+  client.query = ((...args: Parameters<typeof send>) => {
+    if (!open) {
+      return Promise.reject(
+        new Error("the test transaction is already rolled back"),
+      );
+    }
+    const [query] = args as unknown[];
+    const savepoint = nested(
+      typeof query === "object" && query ? Reflect.get(query, "text") : query,
+    );
+    return savepoint ? send(savepoint) : send(...args);
+  }) as typeof send;
   const ready = client
     .connect()
     .then(() => send("begin"))

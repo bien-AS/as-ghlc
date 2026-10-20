@@ -1,13 +1,16 @@
 // @vitest-environment node
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { POST as postLost } from "@/app/api/leads/[leadId]/lost/route";
+import { GET as getDashboard } from "@/app/api/dashboard/route";
+import { POST as postArchive } from "@/app/api/leads/[leadId]/archive/route";
+import { POST as postAssign } from "@/app/api/leads/[leadId]/assign/route";
 import { POST as postQualification } from "@/app/api/leads/[leadId]/qualification/route";
 import { POST as postReview } from "@/app/api/leads/[leadId]/review/route";
 import { GET as getLead } from "@/app/api/leads/[leadId]/route";
 import { POST as postSpam } from "@/app/api/leads/[leadId]/spam/route";
+import { POST as postStatus } from "@/app/api/leads/[leadId]/status/route";
 import { GET as getLeads } from "@/app/api/leads/route";
 import { GET as getSummary } from "@/app/api/pipeline/summary/route";
-import { resetSampleLeads } from "@/lib/data/leads";
+import { resetSampleData } from "@/lib/data/sample";
 import {
   type LeadDetail,
   type LeadPage,
@@ -40,7 +43,7 @@ beforeEach(() => {
     now: new Date("2026-10-07T12:00:00.000Z"),
   });
   resetFakes();
-  resetSampleLeads();
+  resetSampleData();
   signIn();
   fake.users.set(ada.id, ada);
 });
@@ -55,17 +58,24 @@ const lead = (leadId: string) =>
     params: Promise.resolve({ leadId }),
   });
 
+const dashboard = (search = "") =>
+  getDashboard(new Request(`${ORIGIN}/api/dashboard${search}`));
+
 const WRITES = {
   review: postReview,
   qualification: postQualification,
-  lost: postLost,
   spam: postSpam,
+  status: postStatus,
+  assign: postAssign,
+  archive: postArchive,
 };
 const VALID: Record<keyof typeof WRITES, unknown> = {
   review: { outcome: "cleared" },
   qualification: { decision: "qualified" },
-  lost: { reason: "Chose another agency" },
   spam: {},
+  status: { status: "New - Contacted" },
+  assign: { profileId: null },
+  archive: { reason: "Duplicate" },
 };
 const write = (
   route: keyof typeof WRITES,
@@ -85,6 +95,7 @@ const write = (
 const everyRoute = (): [string, () => Promise<Response>][] => [
   ["GET /api/leads", () => leads()],
   ["GET /api/pipeline/summary", () => summary()],
+  ["GET /api/dashboard", () => dashboard()],
   ["GET /api/leads/{id}", () => lead("lead-01")],
   ...(Object.keys(WRITES) as (keyof typeof WRITES)[]).map(
     (route): [string, () => Promise<Response>] => [
@@ -136,8 +147,18 @@ const everyRouteWithInvalidInput = (): [string, () => Promise<Response>][] => [
     "POST /api/leads/{id}/qualification",
     () => write("qualification", "lead-03", { decision: "maybe" }),
   ],
-  ["POST /api/leads/{id}/lost", () => write("lost", "lead-03", { reason: 7 })],
+  ["GET /api/leads (archived)", () => leads("?archived=maybe")],
+  ["GET /api/dashboard", () => dashboard("?tz=Mars/Olympus")],
   ["POST /api/leads/{id}/spam", () => write("spam", "lead-03", { extra: 1 })],
+  ["POST /api/leads/{id}/status", () => write("status", "lead-03", {})],
+  [
+    "POST /api/leads/{id}/assign",
+    () => write("assign", "lead-03", { profileId: "rep-1" }),
+  ],
+  [
+    "POST /api/leads/{id}/archive",
+    () => write("archive", "lead-03", { reason: 7 }),
+  ],
 ];
 
 test("the guard runs before validation: signed out with invalid input, every route answers 401, not 400", async () => {

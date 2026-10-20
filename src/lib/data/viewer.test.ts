@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { PgDialect } from "drizzle-orm/pg-core";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { GET as getViewerRoute } from "@/app/api/viewer/route";
 import {
@@ -10,8 +11,8 @@ import {
   recordDeckTemplate,
   recordInvoiceDraft,
   recordProposalStatus,
-  resetSampleLeads,
 } from "@/lib/data/leads";
+import { resetSampleData } from "@/lib/data/sample";
 import {
   leadScope,
   type Profile,
@@ -51,7 +52,7 @@ beforeEach(() => {
     now: new Date("2026-10-07T12:00:00.000Z"),
   });
   resetFakes();
-  resetSampleLeads();
+  resetSampleData();
   signIn();
   fake.users.set(ada.id, ada);
 });
@@ -91,23 +92,25 @@ test("requireAdmin: an admin passes, a rep is refused, and a deactivated admin i
   await expect(requireAdmin()).rejects.toEqual(refusedWith("forbidden"));
 });
 
-test("leadScope: an admin reaches every lead, a rep only the leads assigned to them", () => {
+test("leadScope: an admin reaches every lead (no condition), a rep only the leads assigned to them", () => {
   const profile = (role: Profile["role"]): Profile => ({
     ...ada,
     role,
     active: true,
   });
-  const theirs = { owner: { id: ada.id } };
-  const someoneElses = { owner: { id: "other" } };
-  expect(leadScope(profile("admin"))(someoneElses)).toBe(true);
-  expect(leadScope(profile("rep"))(theirs)).toBe(true);
-  expect(leadScope(profile("rep"))(someoneElses)).toBe(false);
+  expect(leadScope(profile("admin"))).toBeUndefined();
+  const scope = leadScope(profile("rep"));
+  expect(scope && new PgDialect().sqlToQuery(scope)).toMatchObject({
+    sql: '"leads"."assigned_to" = $1',
+    params: [ada.id],
+  });
 });
 
 test("the viewer summary carries the profile's own role, admin or rep", async () => {
-  expect(await getViewerSummary()).toEqual({ role: "admin", preview: true });
+  // Leads are real (spec 07): the sample-only controls are off.
+  expect(await getViewerSummary()).toEqual({ role: "admin", preview: false });
   viewAs("rep");
-  expect(await getViewerSummary()).toEqual({ role: "rep", preview: true });
+  expect(await getViewerSummary()).toEqual({ role: "rep", preview: false });
 });
 
 // --- what a role sees of the leads ---------------------------------------------

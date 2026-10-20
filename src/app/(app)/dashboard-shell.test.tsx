@@ -42,6 +42,10 @@ vi.mock(
   "@/db/client",
   async () => (await import("@/test/server-fakes")).dbModule,
 );
+vi.mock("@/lib/data/leads", async (original) => ({
+  ...(await original<typeof import("@/lib/data/leads")>()),
+  ...(await import("@/test/lead-stand-ins")).leadsModule,
+}));
 vi.mock(
   "@/lib/supabase/client",
   async () => (await import("@/test/render")).supabaseClientModule,

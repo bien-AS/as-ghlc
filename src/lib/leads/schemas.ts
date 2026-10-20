@@ -1,10 +1,11 @@
 import { z } from "zod";
 
 /*
- * The lead contract (spec 04, "The contract"), shaped after the data model
- * sketch in spec 09, whose field lists are assumed. Shared by Route Handlers,
- * hooks, pages and the data-access layer (ADR-0003). No server-only imports
- * and no fixtures here. Going live does not change this file (ADR-0006).
+ * The lead contract (spec 07), read from the synced `leads` table (spec 06).
+ * Shared by Route Handlers, hooks, pages and the data-access layer (ADR-0003).
+ * No server-only imports here. The parts of the mockup contract that real data
+ * answered differently (the status lines, a rep on every lead, a stage on every
+ * lead) changed when the data went live; the rest kept its shape (ADR-0006).
  */
 
 export const STAGES = [
@@ -15,19 +16,10 @@ export const STAGES = [
   "proposal_sent",
   "won",
 ] as const;
+/** Spam is the verdict; lost and nurture are GHL's Lead Lost and Nurturing stages. */
 export const EXITS = ["spam", "nurture", "lost"] as const;
-/** Question 8: assumed to be the prototype's status lines. One list; change it here. */
-export const STATUSES = [
-  "awaiting_verdict",
-  "flagged_suspect",
-  "drip_chasing",
-  "deck_ready",
-  "needs_decision",
-  "qualified",
-  "proposal_ready",
-  "not_a_fit",
-  "removed",
-] as const;
+/** The tones a Lead Status takes (status_defs.tone, spec 03). */
+export const TONES = ["neutral", "brand", "ok", "warn", "crit"] as const;
 /** The AI's result, adjusted by a rep's review; "awaiting" when there is no verdict yet. */
 export const VERDICTS = ["valid", "suspect", "spam", "awaiting"] as const;
 export const NEEDS = [
@@ -50,16 +42,29 @@ export const PROPOSAL_STATUSES = [
   "signed",
   "lost",
 ] as const;
+/** ghl_sync_log's write types and results (spec 06). */
+export const WRITE_TYPES = [
+  "w1_verdict",
+  "w2_deck_link",
+  "w3_qualification",
+  "w4_mark_spam",
+  "w5_proposal_sent",
+  "w6_proposal_signed",
+] as const;
+export const WRITE_RESULTS = [
+  "pending",
+  "succeeded",
+  "failed",
+  "skipped",
+] as const;
 
 export const stageSchema = z.enum(STAGES);
 export const exitSchema = z.enum(EXITS);
-export const statusSchema = z.enum(STATUSES);
 export const verdictSchema = z.enum(VERDICTS);
 export const needSchema = z.enum(NEEDS);
 
 export type Stage = z.infer<typeof stageSchema>;
 export type Exit = z.infer<typeof exitSchema>;
-export type Status = z.infer<typeof statusSchema>;
 export type Verdict = z.infer<typeof verdictSchema>;
 export type Need = z.infer<typeof needSchema>;
 
@@ -74,20 +79,46 @@ export type Booking = z.infer<typeof bookingSchema>;
 
 const ownerSchema = z.object({ id: z.string(), name: z.string() });
 
-/** One row of the Pipeline and of the suspect queue. */
+/** The lead's Lead Status (GHL's picklist), with its group and tone from status_defs. */
+export const leadStatusSchema = z.object({
+  value: z.string(),
+  group: z.string(),
+  tone: z.enum(TONES),
+});
+export type LeadStatus = z.infer<typeof leadStatusSchema>;
+
+/** One write to GHL for this lead (ghl_sync_log): the seam (spec 06). */
+export const syncEntrySchema = z.object({
+  id: z.string(),
+  writeType: z.enum(WRITE_TYPES),
+  result: z.enum(WRITE_RESULTS),
+  time: isoTime,
+  lastError: z.string().nullable(),
+});
+export type SyncEntry = z.infer<typeof syncEntrySchema>;
+
+/** One row of the lead list and of the suspect queue. */
 export const leadListItemSchema = z.object({
   id: z.string(),
   name: z.string(),
   company: z.string().nullable(),
   email: z.string().nullable(),
-  stage: stageSchema,
+  /** Null when the lead left the pipeline (`exit` lost or nurture) or has no stage synced yet. */
+  stage: stageSchema.nullable(),
   exit: exitSchema.nullable(),
-  status: statusSchema,
+  status: leadStatusSchema.nullable(),
   verdict: verdictSchema,
-  owner: ownerSchema,
-  /** The next confirmed call, if any. */
+  /** Null while unassigned (spec 06 question 5). */
+  owner: ownerSchema.nullable(),
+  /** The earliest booked call, if any. */
   nextBooking: bookingSchema.nullable(),
   createdAt: isoTime,
+  /** GHL's last activity. Age is now minus this; null is "Not measured", never 0. */
+  lastActivityAt: isoTime.nullable(),
+  /** Set when archived (a soft delete in the app only). */
+  archivedAt: isoTime.nullable(),
+  /** The latest write to GHL, for the row's sync indicator. */
+  lastSync: syncEntrySchema.nullable(),
 });
 export type LeadListItem = z.infer<typeof leadListItemSchema>;
 
@@ -116,13 +147,16 @@ export type Activity = z.infer<typeof activitySchema>;
 export const leadDetailSchema = leadListItemSchema.extend({
   phone: z.string().nullable(),
   website: z.string().nullable(),
-  source: z.string(),
+  source: z.string().nullable(),
+  /** No column holds it yet: always null. */
   budget: z.string().nullable(),
+  archivedReason: z.string().nullable(),
   formAnswers: z.array(z.object({ question: z.string(), answer: z.string() })),
   updatedAt: isoTime,
   /** Absent while the lead is awaiting a verdict. */
   verdictRecord: verdictRecordSchema.nullable(),
   bookings: z.array(bookingSchema),
+  /** Null until decks (spec 09) are read from their table. */
   deck: z
     .object({
       templateName: z.string(),
@@ -130,10 +164,14 @@ export const leadDetailSchema = leadListItemSchema.extend({
       pdfUrl: z.string(),
     })
     .nullable(),
+  /** Null until proposals (spec 12) are read from their table. */
   proposal: z.object({ status: z.enum(PROPOSAL_STATUSES) }).nullable(),
+  /** Null until invoices (spec 13) are read from their table. */
   invoice: z.object({ status: z.string() }).nullable(),
-  /** Newest first. */
+  /** lead_status_events, newest first. */
   activities: z.array(activitySchema),
+  /** Every write to GHL for this lead, newest first: the seam rail. */
+  syncLog: z.array(syncEntrySchema),
 });
 export type LeadDetail = z.infer<typeof leadDetailSchema>;
 
@@ -153,12 +191,28 @@ export const LEADS_PAGE_SIZE = 25;
 export const pipelineTabSchema = z.enum(["open", ...STAGES, ...EXITS]);
 export type PipelineTab = z.infer<typeof pipelineTabSchema>;
 
+/** The orders the list offers. Age and next booking put nulls last in both directions. */
+export const LEAD_SORTS = ["recent", "age", "next_booking"] as const;
+export const leadSortSchema = z.enum(LEAD_SORTS);
+export const sortDirSchema = z.enum(["asc", "desc"]);
+export type LeadSort = z.infer<typeof leadSortSchema>;
+/** The owner filter's value for leads nobody is assigned to (admins only). */
+export const UNASSIGNED = "unassigned";
+
 /** Query of GET /api/leads. Every value arrives as text from the address. */
 export const listLeadsQuerySchema = z.strictObject({
   q: z.string().trim().max(200).optional(),
+  /** A stage, an exit, or "open". */
   tab: pipelineTabSchema.default("open"),
   verdict: verdictSchema.optional(),
+  /** A rep's profile id, or UNASSIGNED. Admins only: ignored for a rep. */
   owner: z.string().max(100).optional(),
+  /** A Lead Status group (status_defs.group_name). */
+  group: z.string().trim().max(100).optional(),
+  /** "true": archived leads only. Otherwise archived leads are left out. */
+  archived: z.stringbool().default(false),
+  sort: leadSortSchema.default("recent"),
+  dir: sortDirSchema.default("desc"),
   needs: needSchema.optional(),
   tz: timeZone.default("UTC"),
   cursor: z.string().max(200).optional(),
@@ -184,11 +238,12 @@ export const pipelineSummarySchema = z.object({
   stages: z.record(stageSchema, z.number().int()),
   exits: z.record(exitSchema, z.number().int()),
   needs: z.record(needSchema, z.number().int()),
+  /** The rep filter's choices: an admin gets every active profile, a rep only themselves. */
   owners: z.array(ownerSchema),
 });
 export type PipelineSummary = z.infer<typeof pipelineSummarySchema>;
 
-/** Bodies of the four write routes. Strict: an unknown field is rejected. */
+/** Bodies of the write routes. Strict: an unknown field is rejected. */
 export const reviewInputSchema = z.strictObject({
   outcome: z.enum(["cleared", "spam"]),
 });
@@ -199,15 +254,28 @@ export const qualificationInputSchema = z.strictObject({
 });
 export type QualificationInput = z.infer<typeof qualificationInputSchema>;
 
-export const lostInputSchema = z.strictObject({
-  reason: z.string().trim().max(500).optional(),
-});
-export type LostInput = z.infer<typeof lostInputSchema>;
-
 export const spamInputSchema = z.strictObject({});
 
+/** Change status: a Lead Status value (status_defs.value). */
+export const statusInputSchema = z.strictObject({
+  status: z.string().trim().min(1).max(100),
+});
+export type StatusInput = z.infer<typeof statusInputSchema>;
+
+/** Assign rep (admin): a profile id, or null to unassign. */
+export const assignInputSchema = z.strictObject({
+  profileId: z.uuid().nullable(),
+});
+export type AssignInput = z.infer<typeof assignInputSchema>;
+
+/** Archive: a soft delete in the app only, with an optional reason. */
+export const archiveInputSchema = z.strictObject({
+  reason: z.string().trim().max(500).optional(),
+});
+export type ArchiveInput = z.infer<typeof archiveInputSchema>;
+
 /**
- * The Pipeline's filters as they sit in the page address. Lenient where the
+ * The lead list's filters as they sit in the page address. Lenient where the
  * API is strict: an unknown value in a pasted link falls back to no filter
  * instead of an error page. The server page and the client screen both read
  * the address through this, so they build the same query key (ADR-0001).
@@ -226,6 +294,11 @@ export const leadFiltersSchema = z.object({
   tab: pipelineTabSchema.catch("open"),
   verdict: verdictSchema.optional().catch(undefined),
   owner: text(100),
+  group: text(100),
+  /** Kept as text, so the filters stay the address's own values. */
+  archived: z.literal("true").optional().catch(undefined),
+  sort: leadSortSchema.optional().catch(undefined),
+  dir: sortDirSchema.optional().catch(undefined),
   needs: needSchema.optional().catch(undefined),
   tz: timeZone.catch("UTC"),
 });
@@ -241,3 +314,36 @@ export function parseLeadFilters(
     Object.entries(filters).filter(([, value]) => value !== undefined),
   ) as LeadFilters;
 }
+
+// --- the dashboard (spec 07) --------------------------------------------------
+
+export const NEEDS_YOU_REASONS = [
+  "suspect",
+  "call_without_deck",
+  "past_threshold",
+] as const;
+
+const leadRefSchema = z.object({ id: z.string(), name: z.string() });
+
+export const dashboardQuerySchema = summaryQuerySchema;
+
+export const dashboardSchema = z.object({
+  /** Leads created since the start of the viewer's week (Monday, in their time zone). */
+  newThisWeek: z.number().int(),
+  /** Leads whose verdict is Suspect. */
+  suspects: z.number().int(),
+  /** Discovery and review calls booked in the next 48 hours. */
+  callsNext48h: z.number().int(),
+  /** Suspects waiting, calls in the next 48 hours without a deck, leads past their status's threshold. */
+  needsYou: z.array(
+    z.object({
+      lead: leadRefSchema,
+      reason: z.enum(NEEDS_YOU_REASONS),
+      /** The call's time, or since when the lead has waited. */
+      time: isoTime.nullable(),
+    }),
+  ),
+  /** The latest timeline entries across the viewer's leads, newest first. */
+  activity: z.array(activitySchema.extend({ lead: leadRefSchema })),
+});
+export type Dashboard = z.infer<typeof dashboardSchema>;
