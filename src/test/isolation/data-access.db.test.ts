@@ -79,6 +79,7 @@ import {
 import { listSyncLog, retryWrite } from "@/lib/data/sync-log";
 import { getMe, updateProfile } from "@/lib/data/users";
 import { getViewerSummary } from "@/lib/data/viewer";
+import { listWebhookEvents } from "@/lib/data/webhook-events";
 import { listLeadsQuerySchema } from "@/lib/leads/schemas";
 import { listNotificationsQuerySchema } from "@/lib/notifications/schemas";
 import type { ProposalDraftInput } from "@/lib/proposals/schemas";
@@ -234,6 +235,7 @@ const adminCalls = (): Calls => ({
   requestGhlImport,
   listSyncLog: () => listSyncLog({}),
   retryWrite: () => retryWrite(randomUUID()),
+  listWebhookEvents: () => listWebhookEvents({}),
 });
 
 /** A person's own things. */
@@ -356,6 +358,7 @@ describe.skipIf(!DIRECT_URL)(SUITE, () => {
     await expect(getLead(bLead)).resolves.toMatchObject({ id: bLead });
     await expect(listMembers()).resolves.toBeInstanceOf(Array);
     await expect(listConnections()).resolves.toBeInstanceOf(Array);
+    await expect(listWebhookEvents({})).resolves.toHaveProperty("items");
   });
 
   test("a rep cannot act on invoices, and reads only their own lead's", async () => {

@@ -47,3 +47,34 @@ export const syncLogPageSchema = z.object({
   nextCursor: z.string().nullable(),
 });
 export type SyncLogPage = z.infer<typeof syncLogPageSchema>;
+
+/** Query of GET /api/admin/sync-log/webhooks: the second tab, newest first. */
+export const listWebhookEventsQuerySchema = z.strictObject({
+  /** The id of the last event of the previous page. */
+  cursor: z.uuid().optional(),
+});
+export type ListWebhookEventsQuery = z.infer<
+  typeof listWebhookEventsQuerySchema
+>;
+
+export const webhookEventEntrySchema = z.object({
+  id: z.string(),
+  provider: z.string(),
+  eventId: z.string(),
+  /** The event's `event` parameter, or "unknown" when it had none. */
+  type: z.string(),
+  verified: z.boolean(),
+  /** As received, secrets redacted when it was recorded. */
+  payload: z.unknown(),
+  /** What was done with it; null while it waits to be applied. */
+  outcome: z.string().nullable(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+export type WebhookEventEntry = z.infer<typeof webhookEventEntrySchema>;
+
+export const webhookEventPageSchema = z.object({
+  items: z.array(webhookEventEntrySchema),
+  nextCursor: z.string().nullable(),
+});
+export type WebhookEventPage = z.infer<typeof webhookEventPageSchema>;

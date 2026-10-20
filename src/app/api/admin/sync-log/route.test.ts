@@ -5,6 +5,7 @@ import { fake, resetFakes, signIn, viewAs } from "@/test/server-fakes";
 
 import { POST } from "./[id]/retry/route";
 import { GET } from "./route";
+import { GET as GET_WEBHOOKS } from "./webhooks/route";
 
 vi.mock(
   "@/lib/supabase/server",
@@ -33,16 +34,23 @@ const retry = (id = ID, body = "{}") =>
     { params: Promise.resolve({ id }) },
   );
 
+const webhooks = (query = "") =>
+  GET_WEBHOOKS(
+    new Request(`http://localhost:3000/api/admin/sync-log/webhooks${query}`),
+  );
+
 beforeEach(resetFakes);
 
-test("signed out: 401 on both", async () => {
+test("signed out: 401 on every route", async () => {
   expect((await list()).status).toBe(401);
   expect((await retry()).status).toBe(401);
+  expect((await webhooks()).status).toBe(401);
 });
 
-test("a rep: 403 on both, before the input is read", async () => {
+test("a rep: 403 on every route, before the input is read", async () => {
   viewAs("rep");
   expect((await list("?result=nope")).status).toBe(403);
+  expect((await webhooks("?cursor=abc")).status).toBe(403);
   const response = await retry("not-a-uuid", "not json");
   expect(response.status).toBe(403);
   expect(await response.json()).toEqual({ error: { code: "forbidden" } });
@@ -61,6 +69,8 @@ test("an admin with bad input: 400 naming the field", async () => {
   expect((await response.json()).error.fields).toHaveProperty("result");
   expect((await list("?cursor=abc")).status).toBe(400);
   expect((await list("?extra=1")).status).toBe(400);
+  expect((await webhooks("?cursor=abc")).status).toBe(400);
+  expect((await webhooks("?result=failed")).status).toBe(400);
   expect((await retry("not-a-uuid")).status).toBe(400);
   expect((await retry(ID, '{"force":true}')).status).toBe(400);
 });
