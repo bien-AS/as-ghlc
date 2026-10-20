@@ -93,7 +93,11 @@ import { listNotificationsQuerySchema } from "@/lib/notifications/schemas";
 import type { ProposalDraftInput } from "@/lib/proposals/schemas";
 import { resetFakes, signIn } from "@/test/server-fakes";
 
-import { SETUP_TIMEOUT, testTransaction } from "./test-transaction";
+import {
+  SETUP_TIMEOUT,
+  TEST_TIMEOUT,
+  testTransaction,
+} from "./test-transaction";
 
 /*
  * The data-access isolation suite (spec 01 section 4, acceptance check 4;
@@ -267,7 +271,7 @@ const soon = () => ({
   discoveryBookingStatus: "booked" as const,
 });
 
-describe.skipIf(!DIRECT_URL)(SUITE, () => {
+describe.skipIf(!DIRECT_URL)(SUITE, { timeout: TEST_TIMEOUT }, () => {
   let transaction: ReturnType<typeof testTransaction> | undefined;
   let db: NodePgDatabase<typeof schema>;
   /** Rep A's and rep B's suspects, and a suspect nobody is assigned to. */

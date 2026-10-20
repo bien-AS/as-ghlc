@@ -63,3 +63,12 @@ export function testTransaction(connectionString: string, lock: string) {
 /** Long enough to wait out another run of the same suite holding the lock. */
 // ponytail: runs queue on one lock; raise this if many copies run at once.
 export const SETUP_TIMEOUT = 120_000;
+
+/**
+ * Vitest's 5 s default is too short for a test that checks every call in turn.
+ * Each statement is a round trip to the remote database (about 65 ms here), and
+ * the rep A versus rep B test makes about 70 of them: 4.3 to 4.9 s on an idle
+ * machine, past 5 s with another database file or the full run going. The time
+ * goes on network latency spread over every call, not on any one wait.
+ */
+export const TEST_TIMEOUT = 30_000;

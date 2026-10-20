@@ -40,6 +40,7 @@ import { writeQualification } from "@/lib/services/ghl/writes";
 import { TEST_IDS } from "@/test/ghl-ids";
 import {
   SETUP_TIMEOUT,
+  TEST_TIMEOUT,
   testTransaction,
 } from "@/test/isolation/test-transaction";
 import { resetFakes, signIn } from "@/test/server-fakes";
@@ -95,7 +96,7 @@ const ago = (hours: number) => new Date(Date.now() - hours * HOUR);
 
 type Db = NodePgDatabase<typeof schema>;
 
-describe.skipIf(!DIRECT_URL)(SUITE, () => {
+describe.skipIf(!DIRECT_URL)(SUITE, { timeout: TEST_TIMEOUT }, () => {
   let transaction: ReturnType<typeof testTransaction> | undefined;
   let db: Db;
 
